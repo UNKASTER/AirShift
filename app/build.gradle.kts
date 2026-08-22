@@ -38,6 +38,8 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    sourceSets["androidTest"].assets.directories.add(rootProject.file("testdata").absolutePath)
 }
 
 dependencies {
@@ -54,7 +56,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("com.google.android.gms:play-services-location:21.4.0")
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
+    implementation("org.opencv:opencv:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

@@ -3,6 +3,7 @@ package com.bradj.airshift.data
 import android.content.Context
 import androidx.core.content.edit
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.RosterSupplement
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
@@ -41,6 +42,15 @@ class RosterStore(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    fun saveSupplement(supplement: RosterSupplement) {
+        preferences.edit { putString(KEY_SUPPLEMENT, supplement.toJson().toString()) }
+    }
+
+    fun loadSupplement(): RosterSupplement {
+        val raw = preferences.getString(KEY_SUPPLEMENT, null) ?: return RosterSupplement()
+        return runCatching { JSONObject(raw).toSupplement() }.getOrDefault(RosterSupplement())
+    }
+
     private fun RosterAssignment.toJson() = JSONObject().apply {
         put("aircraftRegistration", aircraftRegistration)
         putNullable("aircraftType", aircraftType)
@@ -77,6 +87,33 @@ class RosterStore(context: Context) {
         arrivalBridge = nullableString("arrivalBridge"),
     )
 
+    private fun RosterSupplement.toJson() = JSONObject().apply {
+        put("vipInfo", vipInfo.toJsonArray())
+        put("earlyShift", earlyShift.toJsonArray())
+        put("middleShift", middleShift.toJsonArray())
+        put("lateShift", lateShift.toJsonArray())
+    }
+
+    private fun JSONObject.toSupplement() = RosterSupplement(
+        vipInfo = stringList("vipInfo"),
+        earlyShift = stringList("earlyShift"),
+        middleShift = stringList("middleShift"),
+        lateShift = stringList("lateShift"),
+    )
+
+    private fun List<String>.toJsonArray() = JSONArray().also { array ->
+        forEach(array::put)
+    }
+
+    private fun JSONObject.stringList(key: String): List<String> {
+        val array = optJSONArray(key) ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                array.optString(index).trim().takeIf(String::isNotBlank)?.let(::add)
+            }
+        }
+    }
+
     private fun JSONObject.putNullable(key: String, value: String?) {
         if (value == null) put(key, JSONObject.NULL) else put(key, value)
     }
@@ -92,5 +129,6 @@ class RosterStore(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_GATEWAY_URL = "gateway_url"
         private const val KEY_ASSIGNMENTS = "assignments"
+        private const val KEY_SUPPLEMENT = "roster_supplement"
     }
 }

@@ -65,6 +65,7 @@ import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.RosterSupplement
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ReminderReceiver
@@ -171,6 +172,7 @@ private fun AirShiftApp(
     }
 
     var assignments by remember { mutableStateOf(store.loadAssignments()) }
+    var supplement by remember { mutableStateOf(store.loadSupplement()) }
     var isWorking by rememberSaveable { mutableStateOf(false) }
     var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var warnings by remember { mutableStateOf(emptyList<String>()) }
@@ -240,8 +242,11 @@ private fun AirShiftApp(
         }
     }
 
-    fun finishImport(parsed: List<RosterAssignment>, parseWarnings: List<String>) {
-        warnings = parseWarnings
+    fun finishImport(result: RosterParseResult) {
+        val parsed = result.assignments
+        supplement = result.supplement
+        store.saveSupplement(result.supplement)
+        warnings = result.warnings
         val gateway = store.gatewayBaseUrl
         if (gateway == null) {
             isWorking = false
@@ -253,7 +258,7 @@ private fun AirShiftApp(
         statusMessage = "正在刷新实时航班信息…"
         refreshLive(parsed, gateway) { enriched, airports, apiErrors ->
             locationCandidates = airports
-            warnings = parseWarnings + apiErrors
+            warnings = result.warnings + apiErrors
             scheduleAndSave(enriched)
             isWorking = false
             requestPermissionsAndLocate()
@@ -287,7 +292,7 @@ private fun AirShiftApp(
         warnings = emptyList()
         statusMessage = "正在识别排班表…"
         readRoster(uri, userName.orEmpty()) { result ->
-            result.onSuccess { parsed -> finishImport(parsed.assignments, parsed.warnings) }
+            result.onSuccess(::finishImport)
                 .onFailure {
                     isWorking = false
                     statusMessage = "识别失败：${it.message ?: "无法读取图片"}"
@@ -338,6 +343,7 @@ private fun AirShiftApp(
                 }
             }
             if (warnings.isNotEmpty()) item { WarningCard(warnings) }
+            if (!supplement.isEmpty) item { RosterSupplementCard(supplement) }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -417,7 +423,7 @@ private fun ImportCard(
         Column(modifier = Modifier.padding(20.dp)) {
             Text("导入今日排班", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-            Text("选择固定模板的完整排班截图，系统会自动识别姓名、航班与保障时间。")
+            Text("选择固定模板的完整排班截图，系统会识别航班表、要客信息和早中晚班。")
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
@@ -485,6 +491,31 @@ private fun AssignmentCard(assignment: RosterAssignment) {
                 Text("机位类型：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+@Composable
+private fun RosterSupplementCard(supplement: RosterSupplement) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("当日附加信息", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            SupplementSection("要客信息", supplement.vipInfo)
+            SupplementSection("早班", supplement.earlyShift)
+            SupplementSection("中班", supplement.middleShift)
+            SupplementSection("晚班", supplement.lateShift)
+        }
+    }
+}
+
+@Composable
+private fun SupplementSection(title: String, lines: List<String>) {
+    if (lines.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        lines.forEach { line -> Text(line, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

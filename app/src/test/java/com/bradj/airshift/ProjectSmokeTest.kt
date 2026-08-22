@@ -61,6 +61,69 @@ class ProjectSmokeTest {
     }
 
     @Test
+    fun parserReadsHorizontalRightSideSectionsByHeaderAnchors() {
+        val tokens = baseRosterTokens() + listOf(
+            OcrToken("要客信息", 640, 20, 700, 40),
+            OcrToken("早班", 730, 20, 770, 40),
+            OcrToken("中班", 820, 20, 860, 40),
+            OcrToken("晚班", 910, 20, 950, 40),
+            OcrToken("VIP01 张先生", 630, 55, 705, 70),
+            OcrToken("测试甲 测试乙", 715, 55, 790, 70),
+            OcrToken("测试丙", 815, 55, 865, 70),
+            OcrToken("测试丁", 905, 55, 955, 70),
+        )
+
+        val result = RosterTableParser.parse(tokens, 1000, "测试甲")
+
+        assertEquals(listOf("VIP01 张先生"), result.supplement.vipInfo)
+        assertEquals(listOf("测试甲 测试乙"), result.supplement.earlyShift)
+        assertEquals(listOf("测试丙"), result.supplement.middleShift)
+        assertEquals(listOf("测试丁"), result.supplement.lateShift)
+    }
+
+    @Test
+    fun parserReadsVerticalRightSideSectionsByHeaderAnchors() {
+        val tokens = baseRosterTokens() + listOf(
+            OcrToken("要客信息", 700, 20, 770, 35),
+            OcrToken("VIP02 李女士", 700, 42, 790, 57),
+            OcrToken("早班", 700, 70, 750, 85),
+            OcrToken("测试甲", 700, 92, 760, 107),
+            OcrToken("中班", 700, 120, 750, 135),
+            OcrToken("测试乙", 700, 142, 760, 157),
+            OcrToken("晚班", 700, 170, 750, 185),
+            OcrToken("测试丙", 700, 192, 760, 207),
+        )
+
+        val result = RosterTableParser.parse(tokens, 1000, "测试甲")
+
+        assertEquals(listOf("VIP02 李女士"), result.supplement.vipInfo)
+        assertEquals(listOf("测试甲"), result.supplement.earlyShift)
+        assertEquals(listOf("测试乙"), result.supplement.middleShift)
+        assertEquals(listOf("测试丙"), result.supplement.lateShift)
+    }
+
+    @Test
+    fun parserReadsActualRightSideLabelsWithoutIncludingUnrelatedRows() {
+        val tokens = baseRosterTokens() + listOf(
+            OcrToken("要客：今日暂无要客", 700, 40, 880, 58),
+            OcrToken("候机室卫生：李江涛 万兆丹 周兴佳", 700, 110, 980, 128),
+            OcrToken("整理单据 对讲机充电 桌面、地面卫生", 700, 135, 1000, 153),
+            OcrToken("候机早班：早班甲 早班乙4", 700, 210, 900, 228),
+            OcrToken("候机中班：中班甲 中班乙5", 700, 235, 900, 253),
+            OcrToken("候机夜航：夜航甲 夜航乙4", 700, 260, 900, 278),
+            OcrToken("值班主任：主任甲 主任乙", 700, 350, 900, 368),
+            OcrToken("病假：病假甲", 700, 420, 820, 438),
+        )
+
+        val result = RosterTableParser.parse(tokens, 1000, "测试甲")
+
+        assertEquals(listOf("今日暂无要客"), result.supplement.vipInfo)
+        assertEquals(listOf("早班甲早班乙4"), result.supplement.earlyShift)
+        assertEquals(listOf("中班甲中班乙5"), result.supplement.middleShift)
+        assertEquals(listOf("夜航甲夜航乙4"), result.supplement.lateShift)
+    }
+
+    @Test
     fun turnaroundOnlyGetsArrivalReminder() {
         val assignment = assignment(
             inbound = "ZZ1001",
@@ -115,4 +178,17 @@ class ProjectSmokeTest {
         scheduledDeparture = departure,
         assignees = "测试甲",
     )
+
+    private fun baseRosterTokens(): List<OcrToken> {
+        val headers = listOf("机号", "机型", "进港航班", "前站", "预落", "出港航班", "到站", "计离", "接送机人员")
+        val templateCenters = listOf(0.045, 0.125, 0.2265, 0.3435, 0.4315, 0.5545, 0.6815, 0.7505, 0.889)
+        fun x(column: Int) = (20 + 600 * templateCenters[column]).toInt()
+        fun token(text: String, column: Int, y: Int) = OcrToken(text, x(column) - 10, y - 5, x(column) + 10, y + 5)
+        return buildList {
+            add(OcrToken("8.20", 800, 5, 840, 15))
+            headers.forEachIndexed { index, header -> add(token(header, index, 30)) }
+            listOf("B0001", "32N", "ZZ1001", "北京大兴", "1040", "ZZ1002", "台北", "1200", "测试甲")
+                .forEachIndexed { index, value -> add(token(value, index, 60)) }
+        }
+    }
 }

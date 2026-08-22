@@ -6,9 +6,10 @@
 
 - 首次启动询问姓名并永久保存在本机，设置中可修改。
 - Android 系统图片选择器导入排班截图，不申请整个相册权限。
-- ML Kit 离线中文 OCR；按固定模板的真实列边界拆表。
+- PP-OCRv6 tiny + ONNX Runtime 离线中文 OCR；按表头锚点分列、按 Y 坐标聚类还原数据行。
 - 自动清理航班号中的 `&`、`#` 等符号。
 - 姓名精确匹配、单字 OCR 容错，以及同组人员签名容错。
+- 识别截图右侧的要客信息、候机早班、候机中班和候机夜航人员。
 - 显示机号、机型、进出港航班、城市、计划/预计/实际时间和到达桥位/机位。
 - GPS 与当日航班两端机场坐标比对，15 km 内自动判断当前机场。
 - 提醒规则：
@@ -33,7 +34,13 @@
 ```powershell
 $env:JAVA_HOME = 'C:\Users\BradJ\AppData\Local\Programs\android-studio\jbr'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
-.\gradlew.bat test assembleDebug gateway:installDist
+.\gradlew.bat test lintDebug assembleDebug gateway:installDist
+```
+
+连接 Android 设备或启动模拟器后，可用项目内的真实排班图回归样本验证完整 OCR 链路：
+
+```powershell
+.\gradlew.bat connectedDebugAndroidTest
 ```
 
 Debug APK 输出到：
@@ -76,4 +83,4 @@ $env:VariFlight = [Environment]::GetEnvironmentVariable('VariFlight', 'User')
 
 ## 开源许可
 
-本项目代码采用 [Apache License 2.0](LICENSE) 许可。飞常准、ML Kit 及其他第三方服务、数据与依赖仍受其各自条款约束；本项目不提供或授权任何第三方 API 密钥。
+本项目代码采用 [Apache License 2.0](LICENSE) 许可。PP-OCRv6 模型、PaddleOCR Android SDK、ONNX Runtime、OpenCV、飞常准及其他第三方服务、数据与依赖仍受其各自条款约束，详见 [第三方声明](THIRD_PARTY_NOTICES.md)；本项目不提供或授权任何第三方 API 密钥。

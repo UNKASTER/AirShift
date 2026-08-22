@@ -1,0 +1,25 @@
+# 第三方声明
+
+AirShift 包含或依赖以下第三方项目。各项目仍由其权利人持有版权，并按各自许可证授权。
+
+## PaddleOCR Android SDK 与 PP-OCRv6 tiny ONNX 模型
+
+- 来源：[PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
+- Android SDK 源码位置：`app/src/main/java/com/paddle/ocr`
+- 模型位置：`app/src/main/assets/models`
+- Copyright (c) PaddlePaddle Authors
+- 许可证：[Apache License 2.0](https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE)
+
+SDK 源文件保留了上游版权与许可证头。模型使用 PaddleOCR 官方发布的 `PP-OCRv6_tiny_det_onnx_infer` 与 `PP-OCRv6_tiny_rec_onnx_infer`。
+
+## ONNX Runtime Android
+
+- 依赖：`com.microsoft.onnxruntime:onnxruntime-android:1.21.1`
+- 来源：[microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)
+- 许可证：[MIT License](https://github.com/microsoft/onnxruntime/blob/main/LICENSE)
+
+## OpenCV Android
+
+- 依赖：`org.opencv:opencv:4.12.0`
+- OpenCV 来源：[opencv/opencv](https://github.com/opencv/opencv)
+- 许可证：[Apache License 2.0](https://github.com/opencv/opencv/blob/4.12.0/LICENSE)

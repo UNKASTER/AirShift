@@ -1,6 +1,7 @@
 package com.bradj.airshift.parser
 
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.RosterSupplement
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -21,6 +22,7 @@ data class OcrToken(
 data class RosterParseResult(
     val assignments: List<RosterAssignment>,
     val rosterDate: LocalDate,
+    val supplement: RosterSupplement,
     val warnings: List<String>,
 )
 
@@ -67,13 +69,19 @@ object RosterTableParser {
         }
 
         val geometry = fitColumnGeometry(headerMatches, imageWidth)
+        val supplement = parseSupplement(tokens, geometry.edges.last(), imageWidth)
         val tableTokens = tokens.filter {
             it.centerY > headerY && it.centerX in geometry.edges.first()..geometry.edges.last()
         }
         val rows = clusterRows(tableTokens)
 
         if (rows.isEmpty()) {
-            return RosterParseResult(emptyList(), resolveRosterDate(tokens, clock, warnings), warnings + "未识别到排班数据行")
+            return RosterParseResult(
+                assignments = emptyList(),
+                rosterDate = resolveRosterDate(tokens, clock, warnings),
+                supplement = supplement,
+                warnings = warnings + "未识别到排班数据行",
+            )
         }
 
         val rosterDate = resolveRosterDate(tokens, clock, warnings)
@@ -124,7 +132,7 @@ object RosterTableParser {
         }.sortedWith(compareBy { it.scheduledArrival ?: it.scheduledDeparture })
 
         if (assignments.isEmpty()) warnings += "表中没有找到姓名“${userName.trim()}”对应的航班"
-        return RosterParseResult(assignments, rosterDate, warnings)
+        return RosterParseResult(assignments, rosterDate, supplement, warnings)
     }
 
     fun cleanFlightNumber(raw: String): String? {
@@ -179,9 +187,17 @@ object RosterTableParser {
         val denominator = points.sumOf { (template, _) -> (template - meanTemplate) * (template - meanTemplate) }
         val slope = points.sumOf { (template, x) -> (template - meanTemplate) * (x - meanX) } / denominator
         val intercept = meanX - slope * meanTemplate
+        val centers = DoubleArray(headers.size) { index -> intercept + slope * templateCenters[index] }
+        matches.forEach { (index, token) -> centers[index] = token.centerX }
+        val edges = DoubleArray(headers.size + 1)
+        edges[0] = intercept + slope * templateEdges.first()
+        for (index in 1 until edges.lastIndex) {
+            edges[index] = (centers[index - 1] + centers[index]) / 2.0
+        }
+        edges[edges.lastIndex] = intercept + slope * templateEdges.last()
         return ColumnGeometry(
-            centers = DoubleArray(headers.size) { index -> intercept + slope * templateCenters[index] },
-            edges = DoubleArray(templateEdges.size) { index -> intercept + slope * templateEdges[index] },
+            centers = centers,
+            edges = edges,
         )
     }
 
@@ -203,6 +219,122 @@ object RosterTableParser {
             }
         }
         return clusters
+    }
+
+    private fun parseSupplement(
+        tokens: List<OcrToken>,
+        tableRight: Double,
+        imageWidth: Int,
+    ): RosterSupplement {
+        val rightMargin = maxOf(12.0, imageWidth * 0.008)
+        val rightTokens = tokens.filter { it.centerX >= tableRight - rightMargin }
+        val anchors = rightTokens.mapNotNull { token ->
+            sectionFor(token.text)?.let { section -> SectionAnchor(section, token) }
+        }.distinctBy { it.section }
+        if (anchors.isEmpty()) return RosterSupplement()
+
+        val anchorHeight = anchors.map { (it.token.bottom - it.token.top).toDouble() }
+            .medianOrNull()
+            ?.coerceAtLeast(1.0)
+            ?: 12.0
+        val sameHeaderRow = anchors.size > 1 &&
+            anchors.maxOf { it.token.centerY } - anchors.minOf { it.token.centerY } <= anchorHeight * 1.5
+
+        val values = if (sameHeaderRow) {
+            collectHorizontalSections(rightTokens, anchors, imageWidth)
+        } else {
+            collectVerticalSections(rightTokens, anchors)
+        }
+        return RosterSupplement(
+            vipInfo = values[SupplementSection.VIP].orEmpty(),
+            earlyShift = values[SupplementSection.EARLY].orEmpty(),
+            middleShift = values[SupplementSection.MIDDLE].orEmpty(),
+            lateShift = values[SupplementSection.LATE].orEmpty(),
+        )
+    }
+
+    private fun collectHorizontalSections(
+        tokens: List<OcrToken>,
+        anchors: List<SectionAnchor>,
+        imageWidth: Int,
+    ): Map<SupplementSection, List<String>> {
+        val sortedAnchors = anchors.sortedBy { it.token.centerX }
+        val leftEdge = minOf(tokens.minOfOrNull { it.left.toDouble() } ?: 0.0, sortedAnchors.first().token.left.toDouble())
+        val edges = DoubleArray(sortedAnchors.size + 1)
+        edges[0] = leftEdge
+        for (index in 1 until sortedAnchors.size) {
+            edges[index] = (sortedAnchors[index - 1].token.centerX + sortedAnchors[index].token.centerX) / 2.0
+        }
+        edges[sortedAnchors.size] = imageWidth.toDouble()
+        val anchorTokens = anchors.map { it.token }.toSet()
+        val rows = clusterRows(tokens.filterNot(anchorTokens::contains))
+
+        return sortedAnchors.associate { anchor ->
+            val index = sortedAnchors.indexOf(anchor)
+            val residual = valueInsideAnchor(anchor)
+            val rowValues = rows.mapNotNull { row ->
+                row.filter {
+                    it.centerX >= edges[index] && it.centerX < edges[index + 1] &&
+                        it.centerY > anchor.token.bottom
+                }.toSectionLine()
+            }
+            anchor.section to (listOfNotNull(residual) + rowValues).distinct()
+        }
+    }
+
+    private fun collectVerticalSections(
+        tokens: List<OcrToken>,
+        anchors: List<SectionAnchor>,
+    ): Map<SupplementSection, List<String>> {
+        val sortedAnchors = anchors.sortedBy { it.token.centerY }
+        val anchorTokens = anchors.map { it.token }.toSet()
+        val rows = clusterRows(tokens.filterNot(anchorTokens::contains))
+        return sortedAnchors.associate { anchor ->
+            val index = sortedAnchors.indexOf(anchor)
+            val nextTop = sortedAnchors.getOrNull(index + 1)?.token?.top?.toDouble() ?: Double.POSITIVE_INFINITY
+            val residual = valueInsideAnchor(anchor)
+            val candidates = rows.mapNotNull { row ->
+                row.filter {
+                    it.centerY >= anchor.token.centerY && it.centerY < nextTop &&
+                        (it.centerY > anchor.token.bottom || it.left >= anchor.token.right)
+                }.takeIf { it.isNotEmpty() }?.let { filtered ->
+                    filtered.map { it.centerY }.average() to filtered.toSectionLine()
+                }
+            }.mapNotNull { (centerY, line) -> line?.let { centerY to it } }
+            val sameLine = candidates.filter { (centerY, _) ->
+                kotlin.math.abs(centerY - anchor.token.centerY) <= (anchor.token.bottom - anchor.token.top) * 0.75
+            }
+            val rowValues = when {
+                residual != null -> emptyList()
+                sameLine.isNotEmpty() -> sameLine.map { it.second }
+                else -> candidates.take(1).map { it.second }
+            }
+            anchor.section to (listOfNotNull(residual) + rowValues).distinct()
+        }
+    }
+
+    private fun List<OcrToken>.toSectionLine(): String? =
+        sortedBy { it.left }
+            .joinToString(" ") { it.text.trim() }
+            .trim()
+            .trimStart(':', '：', '-', '—')
+            .trim()
+            .takeIf { it.isNotBlank() && sectionFor(it) == null }
+
+    private fun valueInsideAnchor(anchor: SectionAnchor): String? {
+        val normalized = normalizeText(anchor.token.text)
+        val prefix = anchor.section.aliases.sortedByDescending { it.length }
+            .firstOrNull(normalized::startsWith)
+            ?: return null
+        val value = normalized.removePrefix(prefix)
+        return value.trimStart(':', '：', '-', '—').trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun sectionFor(raw: String): SupplementSection? {
+        val normalized = normalizeText(raw).trimStart(':', '：', '-', '—')
+        return SupplementSection.entries.firstOrNull { section ->
+            section.aliases.any(normalized::startsWith)
+        }
     }
 
     private fun cleanRegistration(raw: String): String =
@@ -240,4 +372,16 @@ object RosterTableParser {
         val centers: DoubleArray,
         val edges: DoubleArray,
     )
+
+    private data class SectionAnchor(
+        val section: SupplementSection,
+        val token: OcrToken,
+    )
+
+    private enum class SupplementSection(val aliases: List<String>) {
+        VIP(listOf("要客信息", "要客")),
+        EARLY(listOf("候机早班", "早班人员", "早班")),
+        MIDDLE(listOf("候机中班", "中班人员", "中班")),
+        LATE(listOf("候机夜航", "候机晚班", "晚班人员", "夜航", "晚班")),
+    }
 }
