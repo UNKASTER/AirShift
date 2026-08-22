@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">航勤智排</string>
+    <string name="notification_channel_name">航班保障提醒</string>
+    <string name="notification_channel_description">根据排班与实时航班动态发送保障提醒</string>
+</resources>
