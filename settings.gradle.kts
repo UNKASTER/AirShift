@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "AirShift"
 include(":app")
-include(":gateway")

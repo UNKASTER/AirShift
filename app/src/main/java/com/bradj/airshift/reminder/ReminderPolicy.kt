@@ -14,7 +14,7 @@ object ReminderPolicy {
         if (assignment.inboundFlight != null) {
             if (assignment.actualArrival != null) return null
             val arrival = assignment.estimatedArrival ?: assignment.scheduledArrival ?: return null
-            val gate = assignment.arrivalGate?.let { "，到达桥位/机位 $it" }.orEmpty()
+            val gate = assignment.arrivalStand?.let { "，到达机位 $it" }.orEmpty()
             return ReminderSpec(
                 triggerAt = arrival.minusMinutes(10),
                 title = "${assignment.inboundFlight} 即将进港",

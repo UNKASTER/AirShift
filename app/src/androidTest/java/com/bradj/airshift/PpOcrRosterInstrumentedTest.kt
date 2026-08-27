@@ -17,7 +17,7 @@ import java.time.ZoneId
 @RunWith(AndroidJUnit4::class)
 class PpOcrRosterInstrumentedTest {
     @Test
-    fun ppOcrV6ReadsSyntheticRosterAndRightSideSections() = runBlocking {
+    fun ppOcrV6ReadsSyntheticRosterWithoutLeakingSupplementDetails() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val bitmap = instrumentation.context.assets.open("synthetic_roster.png").use(BitmapFactory::decodeStream)
@@ -31,9 +31,6 @@ class PpOcrRosterInstrumentedTest {
 
         assertEquals(LocalDate.of(2026, 8, 22), result.rosterDate)
         assertTrue(result.assignments.toString(), result.assignments.any { it.outboundFlight == "ZZ1002" })
-        assertEquals(listOf("今日暂无要客"), result.supplement.vipInfo)
-        assertEquals(listOf("早班甲早班乙4"), result.supplement.earlyShift)
-        assertEquals(listOf("中班甲中班乙5"), result.supplement.middleShift)
-        assertEquals(listOf("夜航甲夜航乙4"), result.supplement.lateShift)
+        assertTrue(result.assignments.none { it.hasVip })
     }
 }

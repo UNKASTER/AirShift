@@ -3,13 +3,22 @@ package com.bradj.airshift.data
 import android.content.Context
 import androidx.core.content.edit
 import com.bradj.airshift.model.RosterAssignment
-import com.bradj.airshift.model.RosterSupplement
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
 
 class RosterStore(context: Context) {
     private val preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+    private val variFlightApiKeyStore = VariFlightApiKeyStore(context.applicationContext)
+
+    init {
+        if (preferences.contains(KEY_LEGACY_SUPPLEMENT) || preferences.contains(KEY_LEGACY_GATEWAY_URL)) {
+            preferences.edit {
+                remove(KEY_LEGACY_SUPPLEMENT)
+                remove(KEY_LEGACY_GATEWAY_URL)
+            }
+        }
+    }
 
     var userName: String?
         get() = preferences.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
@@ -17,11 +26,29 @@ class RosterStore(context: Context) {
             preferences.edit { putString(KEY_USER_NAME, value?.trim()) }
         }
 
-    var gatewayBaseUrl: String?
-        get() = preferences.getString(KEY_GATEWAY_URL, null)?.trim()?.trimEnd('/')
-            ?.takeIf { it.startsWith("https://") || it.startsWith("http://10.") }
+    var variFlightApiKey: String?
+        get() = variFlightApiKeyStore.value
         set(value) {
-            preferences.edit { putString(KEY_GATEWAY_URL, value?.trim()?.trimEnd('/')) }
+            variFlightApiKeyStore.value = value
+        }
+
+    val hasVariFlightApiKey: Boolean
+        get() = variFlightApiKey != null
+
+    fun clearVariFlightApiKey() {
+        variFlightApiKeyStore.clear()
+    }
+
+    var lastLiveRefreshEpochMillis: Long?
+        get() = if (preferences.contains(KEY_LAST_LIVE_REFRESH)) {
+            preferences.getLong(KEY_LAST_LIVE_REFRESH, 0L)
+        } else {
+            null
+        }
+        set(value) {
+            preferences.edit {
+                if (value == null) remove(KEY_LAST_LIVE_REFRESH) else putLong(KEY_LAST_LIVE_REFRESH, value)
+            }
         }
 
     fun saveAssignments(assignments: List<RosterAssignment>) {
@@ -42,15 +69,6 @@ class RosterStore(context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    fun saveSupplement(supplement: RosterSupplement) {
-        preferences.edit { putString(KEY_SUPPLEMENT, supplement.toJson().toString()) }
-    }
-
-    fun loadSupplement(): RosterSupplement {
-        val raw = preferences.getString(KEY_SUPPLEMENT, null) ?: return RosterSupplement()
-        return runCatching { JSONObject(raw).toSupplement() }.getOrDefault(RosterSupplement())
-    }
-
     private fun RosterAssignment.toJson() = JSONObject().apply {
         put("aircraftRegistration", aircraftRegistration)
         putNullable("aircraftType", aircraftType)
@@ -65,8 +83,21 @@ class RosterStore(context: Context) {
         putNullable("actualArrival", actualArrival?.toString())
         putNullable("estimatedDeparture", estimatedDeparture?.toString())
         putNullable("actualDeparture", actualDeparture?.toString())
-        putNullable("arrivalGate", arrivalGate)
+        putNullable("inboundBoardingGate", inboundBoardingGate)
+        putNullable("boardingGate", boardingGate)
+        putNullable("departureStand", departureStand)
+        putNullable("arrivalStand", arrivalStand)
+        putNullable("inboundGateClosedObservedAt", inboundGateClosedObservedAt?.toString())
+        putNullable("outboundGateClosedObservedAt", outboundGateClosedObservedAt?.toString())
+        putNullable("inboundActualOffBlock", inboundActualOffBlock?.toString())
+        putNullable("outboundActualOffBlock", outboundActualOffBlock?.toString())
         putNullable("arrivalBridge", arrivalBridge)
+        putNullable("originCode", originCode)
+        putNullable("destinationCode", destinationCode)
+        putNullable("localAirportCode", localAirportCode)
+        putNullable("localAirportName", localAirportName)
+        put("inboundHasVip", inboundHasVip)
+        put("outboundHasVip", outboundHasVip)
     }
 
     private fun JSONObject.toAssignment() = RosterAssignment(
@@ -83,36 +114,22 @@ class RosterStore(context: Context) {
         actualArrival = nullableDateTime("actualArrival"),
         estimatedDeparture = nullableDateTime("estimatedDeparture"),
         actualDeparture = nullableDateTime("actualDeparture"),
-        arrivalGate = nullableString("arrivalGate"),
+        inboundBoardingGate = nullableString("inboundBoardingGate"),
+        boardingGate = nullableString("boardingGate"),
+        departureStand = nullableString("departureStand"),
+        arrivalStand = nullableString("arrivalStand") ?: nullableString("arrivalGate"),
+        inboundGateClosedObservedAt = nullableDateTime("inboundGateClosedObservedAt"),
+        outboundGateClosedObservedAt = nullableDateTime("outboundGateClosedObservedAt"),
+        inboundActualOffBlock = nullableDateTime("inboundActualOffBlock"),
+        outboundActualOffBlock = nullableDateTime("outboundActualOffBlock"),
         arrivalBridge = nullableString("arrivalBridge"),
+        originCode = nullableString("originCode"),
+        destinationCode = nullableString("destinationCode"),
+        localAirportCode = nullableString("localAirportCode"),
+        localAirportName = nullableString("localAirportName"),
+        inboundHasVip = optBoolean("inboundHasVip", false),
+        outboundHasVip = optBoolean("outboundHasVip", false),
     )
-
-    private fun RosterSupplement.toJson() = JSONObject().apply {
-        put("vipInfo", vipInfo.toJsonArray())
-        put("earlyShift", earlyShift.toJsonArray())
-        put("middleShift", middleShift.toJsonArray())
-        put("lateShift", lateShift.toJsonArray())
-    }
-
-    private fun JSONObject.toSupplement() = RosterSupplement(
-        vipInfo = stringList("vipInfo"),
-        earlyShift = stringList("earlyShift"),
-        middleShift = stringList("middleShift"),
-        lateShift = stringList("lateShift"),
-    )
-
-    private fun List<String>.toJsonArray() = JSONArray().also { array ->
-        forEach(array::put)
-    }
-
-    private fun JSONObject.stringList(key: String): List<String> {
-        val array = optJSONArray(key) ?: return emptyList()
-        return buildList {
-            for (index in 0 until array.length()) {
-                array.optString(index).trim().takeIf(String::isNotBlank)?.let(::add)
-            }
-        }
-    }
 
     private fun JSONObject.putNullable(key: String, value: String?) {
         if (value == null) put(key, JSONObject.NULL) else put(key, value)
@@ -127,8 +144,9 @@ class RosterStore(context: Context) {
     companion object {
         private const val FILE_NAME = "air_shift"
         private const val KEY_USER_NAME = "user_name"
-        private const val KEY_GATEWAY_URL = "gateway_url"
+        private const val KEY_LAST_LIVE_REFRESH = "last_live_refresh"
         private const val KEY_ASSIGNMENTS = "assignments"
-        private const val KEY_SUPPLEMENT = "roster_supplement"
+        private const val KEY_LEGACY_SUPPLEMENT = "roster_supplement"
+        private const val KEY_LEGACY_GATEWAY_URL = "gateway_url"
     }
 }

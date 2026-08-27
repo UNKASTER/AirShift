@@ -1,7 +1,6 @@
 package com.bradj.airshift.parser
 
 import com.bradj.airshift.model.RosterAssignment
-import com.bradj.airshift.model.RosterSupplement
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -22,7 +21,6 @@ data class OcrToken(
 data class RosterParseResult(
     val assignments: List<RosterAssignment>,
     val rosterDate: LocalDate,
-    val supplement: RosterSupplement,
     val warnings: List<String>,
 )
 
@@ -43,7 +41,7 @@ object RosterTableParser {
         (templateEdges[index] + templateEdges[index + 1]) / 2
     }
     private val dateRegex = Regex("(?<!\\d)(\\d{1,2})[.。/月-](\\d{1,2})(?:日)?(?!\\d)")
-    private val registrationRegex = Regex("^B[A-Z0-9]{3,5}$")
+    private val registrationRegex = Regex("B[A-Z0-9]{4}")
     private val flightRegex = Regex("[A-Z]{2,3}\\d{3,4}")
 
     fun parse(
@@ -69,17 +67,16 @@ object RosterTableParser {
         }
 
         val geometry = fitColumnGeometry(headerMatches, imageWidth)
-        val supplement = parseSupplement(tokens, geometry.edges.last(), imageWidth)
+        val vipFlightNumbers = parseVipFlightNumbers(tokens, geometry.edges.last(), imageWidth)
         val tableTokens = tokens.filter {
             it.centerY > headerY && it.centerX in geometry.edges.first()..geometry.edges.last()
         }
-        val rows = clusterRows(tableTokens)
+        val rows = clusterTableRows(tableTokens, geometry.edges)
 
         if (rows.isEmpty()) {
             return RosterParseResult(
                 assignments = emptyList(),
                 rosterDate = resolveRosterDate(tokens, clock, warnings),
-                supplement = supplement,
                 warnings = warnings + "未识别到排班数据行",
             )
         }
@@ -96,23 +93,11 @@ object RosterTableParser {
                 cell.sortedBy { it.left }.joinToString("") { normalizeText(it.text) }
             }
         }
-        val teamSignatures = rowValues
-            .map { normalizeName(it[8]) }
-            .filter { it.contains(compactName) }
-            .flatMap { assignees ->
-                val start = assignees.indexOf(compactName)
-                listOf(
-                    assignees.substring(0, start),
-                    assignees.substring(start + compactName.length),
-                ).filter { it.length >= 3 }
-            }
-            .distinct()
-
         val assignments = rowValues.mapNotNull { values ->
             val assignees = normalizeName(values[8])
-            val assignedByName = assignees.contains(compactName) || containsNearName(assignees, compactName)
-            val assignedByTeam = teamSignatures.any { signature -> assignees.contains(signature) }
-            if (!assignedByName && !assignedByTeam) return@mapNotNull null
+            // 无字符置信度时，一字模糊匹配会把真实的其他员工误判为用户。
+            // 同组同事出现在后续航班中，也不代表用户在该行执勤。
+            if (!assignees.contains(compactName)) return@mapNotNull null
 
             val inbound = cleanFlightNumber(values[2])
             val outbound = cleanFlightNumber(values[5])
@@ -128,11 +113,13 @@ object RosterTableParser {
                 destination = cleanLocation(values[6]),
                 scheduledDeparture = parseRosterTime(recoverTime(values[6], values[7]), rosterDate),
                 assignees = values[8],
+                inboundHasVip = inbound != null && inbound in vipFlightNumbers,
+                outboundHasVip = outbound != null && outbound in vipFlightNumbers,
             )
         }.sortedWith(compareBy { it.scheduledArrival ?: it.scheduledDeparture })
 
         if (assignments.isEmpty()) warnings += "表中没有找到姓名“${userName.trim()}”对应的航班"
-        return RosterParseResult(assignments, rosterDate, supplement, warnings)
+        return RosterParseResult(assignments, rosterDate, warnings)
     }
 
     fun cleanFlightNumber(raw: String): String? {
@@ -204,6 +191,36 @@ object RosterTableParser {
     private fun columnFor(x: Double, edges: DoubleArray): Int =
         (0 until edges.lastIndex).firstOrNull { index -> x >= edges[index] && x < edges[index + 1] } ?: -1
 
+    private fun clusterTableRows(tokens: List<OcrToken>, edges: DoubleArray): List<List<OcrToken>> {
+        val registrationAnchors = clusterRows(
+            tokens.filter { token ->
+                columnFor(token.centerX, edges) == 0 && findRegistration(token.text) != null
+            },
+        ).map { row -> row.map { it.centerY }.average() }
+            .sorted()
+        if (registrationAnchors.size < 3) return clusterRows(tokens)
+
+        val medianGap = registrationAnchors.zipWithNext { first, second -> second - first }
+            .filter { it > 0.0 }
+            .medianOrNull()
+            ?: return clusterRows(tokens)
+        val medianTokenHeight = tokens.map { (it.bottom - it.top).toDouble() }
+            .medianOrNull()
+            ?: 12.0
+        val rowHalfHeight = maxOf(medianTokenHeight, medianGap * 0.48)
+        val rows = List(registrationAnchors.size) { mutableListOf<OcrToken>() }
+
+        tokens.forEach { token ->
+            val rowIndex = registrationAnchors.indices.minByOrNull { index ->
+                abs(token.centerY - registrationAnchors[index])
+            } ?: return@forEach
+            if (abs(token.centerY - registrationAnchors[rowIndex]) <= rowHalfHeight) {
+                rows[rowIndex] += token
+            }
+        }
+        return rows.filter { it.isNotEmpty() }
+    }
+
     private fun clusterRows(tokens: List<OcrToken>): List<List<OcrToken>> {
         if (tokens.isEmpty()) return emptyList()
         val medianHeight = tokens.map { (it.bottom - it.top).toDouble() }.medianOrNull() ?: 12.0
@@ -221,17 +238,17 @@ object RosterTableParser {
         return clusters
     }
 
-    private fun parseSupplement(
+    private fun parseVipFlightNumbers(
         tokens: List<OcrToken>,
         tableRight: Double,
         imageWidth: Int,
-    ): RosterSupplement {
+    ): Set<String> {
         val rightMargin = maxOf(12.0, imageWidth * 0.008)
         val rightTokens = tokens.filter { it.centerX >= tableRight - rightMargin }
         val anchors = rightTokens.mapNotNull { token ->
             sectionFor(token.text)?.let { section -> SectionAnchor(section, token) }
         }.distinctBy { it.section }
-        if (anchors.isEmpty()) return RosterSupplement()
+        if (anchors.none { it.section == SupplementSection.VIP }) return emptySet()
 
         val anchorHeight = anchors.map { (it.token.bottom - it.token.top).toDouble() }
             .medianOrNull()
@@ -245,12 +262,9 @@ object RosterTableParser {
         } else {
             collectVerticalSections(rightTokens, anchors)
         }
-        return RosterSupplement(
-            vipInfo = values[SupplementSection.VIP].orEmpty(),
-            earlyShift = values[SupplementSection.EARLY].orEmpty(),
-            middleShift = values[SupplementSection.MIDDLE].orEmpty(),
-            lateShift = values[SupplementSection.LATE].orEmpty(),
-        )
+        return values[SupplementSection.VIP].orEmpty()
+            .mapNotNull(::cleanFlightNumber)
+            .toSet()
     }
 
     private fun collectHorizontalSections(
@@ -305,6 +319,7 @@ object RosterTableParser {
                 kotlin.math.abs(centerY - anchor.token.centerY) <= (anchor.token.bottom - anchor.token.top) * 0.75
             }
             val rowValues = when {
+                anchor.section == SupplementSection.VIP -> candidates.map { it.second }
                 residual != null -> emptyList()
                 sameLine.isNotEmpty() -> sameLine.map { it.second }
                 else -> candidates.take(1).map { it.second }
@@ -337,8 +352,13 @@ object RosterTableParser {
         }
     }
 
-    private fun cleanRegistration(raw: String): String =
-        raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
+    private fun cleanRegistration(raw: String): String {
+        val normalized = raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        return findRegistration(normalized) ?: normalized
+    }
+
+    private fun findRegistration(raw: String): String? =
+        registrationRegex.find(raw.uppercase().replace(Regex("[^A-Z0-9]"), ""))?.value
 
     private fun normalizeName(raw: String): String =
         raw.replace(Regex("[\\s\\p{P}\\p{S}]"), "")
@@ -351,13 +371,6 @@ object RosterTableParser {
         if (timeDigits.length != 3) return timeCell
         val leakedLeadingDigit = precedingCell.takeLastWhile(Char::isDigit).takeLast(1)
         return leakedLeadingDigit + timeCell
-    }
-
-    private fun containsNearName(text: String, name: String): Boolean {
-        if (name.length < 3 || text.length < name.length) return false
-        return text.windowed(name.length).any { candidate ->
-            candidate.zip(name).count { (left, right) -> left != right } <= 1
-        }
     }
 
     private fun normalizeText(raw: String): String = raw.replace(" ", "").trim()
@@ -379,7 +392,7 @@ object RosterTableParser {
     )
 
     private enum class SupplementSection(val aliases: List<String>) {
-        VIP(listOf("要客信息", "要客")),
+        VIP(listOf("VIP信息", "要客信息", "VIP", "要客")),
         EARLY(listOf("候机早班", "早班人员", "早班")),
         MIDDLE(listOf("候机中班", "中班人员", "中班")),
         LATE(listOf("候机夜航", "候机晚班", "晚班人员", "夜航", "晚班")),

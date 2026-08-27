@@ -8,6 +8,9 @@ import com.bradj.airshift.model.RosterAssignment
 import java.time.ZoneId
 
 object ReminderScheduler {
+    fun canScheduleExactAlarms(context: Context): Boolean =
+        context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
     fun cancelAll(context: Context, assignments: List<RosterAssignment>) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         assignments.forEach { assignment ->
@@ -25,7 +28,7 @@ object ReminderScheduler {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         var scheduled = 0
         var skippedPast = 0
-        val exactAllowed = alarmManager.canScheduleExactAlarms()
+        val exactAllowed = canScheduleExactAlarms(context)
 
         assignments.forEach { assignment ->
             val pendingIntent = PendingIntent.getBroadcast(
