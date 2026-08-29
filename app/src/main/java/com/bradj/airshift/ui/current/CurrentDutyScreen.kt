@@ -1,8 +1,8 @@
 package com.bradj.airshift.ui.current
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,16 +35,26 @@ import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.StandChangeRecord
+import com.bradj.airshift.ui.components.AccentBar
 import com.bradj.airshift.ui.components.DetailEntry
 import com.bradj.airshift.ui.components.FlightRow
+import com.bradj.airshift.ui.components.QuietCard
 import com.bradj.airshift.ui.components.cancellationForFlight
 import com.bradj.airshift.ui.components.forFlight
 import com.bradj.airshift.ui.components.formatClock
 import com.bradj.airshift.ui.components.formatEpoch
 import com.bradj.airshift.ui.components.gateForFlight
 import com.bradj.airshift.ui.components.standForFlight
+import com.bradj.airshift.ui.theme.AirShiftSpacing
+import com.bradj.airshift.ui.theme.BorderSoft
+import com.bradj.airshift.ui.theme.CeaRed
+import com.bradj.airshift.ui.theme.NumericHero
+import com.bradj.airshift.ui.theme.NumericLarge
+import com.bradj.airshift.ui.theme.NumericUnit
 import com.bradj.airshift.ui.theme.OnVipAmberContainer
-import com.bradj.airshift.ui.theme.VipAmber
+import com.bradj.airshift.ui.theme.TextHint
+import com.bradj.airshift.ui.theme.TextPrimary
+import com.bradj.airshift.ui.theme.TextSecondary
 import com.bradj.airshift.ui.theme.VipAmberContainer
 import kotlinx.coroutines.delay
 import java.time.Duration
@@ -87,18 +97,27 @@ fun CurrentDutyScreen(
 @Composable
 private fun CurrentDutyEmpty(modifier: Modifier, onGoToAllDuty: () -> Unit) {
     Column(
-        modifier = modifier.fillMaxSize().padding(28.dp),
+        modifier = modifier.fillMaxSize().padding(AirShiftSpacing.L),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("还没有排班", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        Text(
+            "还没有排班",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary,
+        )
+        Spacer(Modifier.height(AirShiftSpacing.S))
         Text(
             "先到“全部执勤”导入排班图片或 Excel 文件，再开始今日执勤。",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = TextSecondary,
         )
-        Spacer(Modifier.height(20.dp))
-        Button(onClick = onGoToAllDuty, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        Spacer(Modifier.height(AirShiftSpacing.L))
+        Button(
+            onClick = onGoToAllDuty,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = CircleShape,
+        ) {
             Text("去导入排班")
         }
     }
@@ -107,15 +126,24 @@ private fun CurrentDutyEmpty(modifier: Modifier, onGoToAllDuty: () -> Unit) {
 @Composable
 private fun CurrentDutyFinished(modifier: Modifier, onGoToAllDuty: () -> Unit) {
     Column(
-        modifier = modifier.fillMaxSize().padding(28.dp),
+        modifier = modifier.fillMaxSize().padding(AirShiftSpacing.L),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("今日执勤全部完成", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("今天的保障任务已全部执行完毕，辛苦了。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(20.dp))
-        Button(onClick = onGoToAllDuty, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        Text(
+            "今日执勤全部完成",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary,
+        )
+        Spacer(Modifier.height(AirShiftSpacing.S))
+        Text("今天的保障任务已全部执行完毕，辛苦了。", color = TextSecondary)
+        Spacer(Modifier.height(AirShiftSpacing.L))
+        Button(
+            onClick = onGoToAllDuty,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = CircleShape,
+        ) {
             Text("返回全部执勤")
         }
     }
@@ -143,8 +171,8 @@ private fun CurrentDutyContent(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(all = AirShiftSpacing.M),
+        verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.M),
     ) {
         item {
             CountdownCard(
@@ -166,14 +194,19 @@ private fun CurrentDutyContent(
             Button(
                 onClick = onDutyComplete,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = CircleShape,
             ) {
                 Text("执勤完成", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
         }
-        item { Spacer(Modifier.height(20.dp)) }
+        item { Spacer(Modifier.height(AirShiftSpacing.L)) }
     }
 }
 
+/**
+ * 倒计时卡（最高优先级）：白卡 + 左侧 4dp 红竖条；
+ * "X 小时 X 分钟"超大红色等宽数字；"到位时间"单独突出；下一任务降为灰色小字。
+ */
 @Composable
 private fun CountdownCard(
     assignment: RosterAssignment,
@@ -181,68 +214,99 @@ private fun CountdownCard(
     now: LocalDateTime,
 ) {
     val gateArrival = DutyTimeline.gateArrivalTime(assignment)
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
-            Text(
-                "当前任务到位倒计时",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-            )
-            Spacer(Modifier.height(6.dp))
-            if (gateArrival == null) {
+    QuietCard(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            AccentBar(color = CeaRed)
+            Column(modifier = Modifier.fillMaxWidth().padding(AirShiftSpacing.M)) {
                 Text(
-                    "暂无到位时间信息",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
+                    "当前任务 · 到位倒计时",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
                 )
-            } else {
-                val remaining = Duration.between(now, gateArrival)
-                if (remaining.isNegative || remaining.isZero) {
+                Spacer(Modifier.height(AirShiftSpacing.S))
+                if (gateArrival == null) {
                     Text(
-                        "应立即到位",
+                        "暂无到位时间信息",
                         style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = TextHint,
                         fontWeight = FontWeight.Bold,
                     )
                 } else {
-                    Text(
-                        "须在 ${formatRemaining(remaining)} 后到达登机口",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-                Text(
-                    "到位时间：${gateArrival.formatClock()}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
-                )
-            }
-            nextAssignment?.let { next ->
-                Spacer(Modifier.height(10.dp))
-                val nextFlight = next.inboundFlight ?: next.outboundFlight.orEmpty()
-                val nextGateArrival = DutyTimeline.gateArrivalTime(next)
-                val nextText = if (nextGateArrival == null) {
-                    "下一任务 $nextFlight"
-                } else {
-                    val nextRemaining = Duration.between(now, nextGateArrival)
-                    if (nextRemaining.isNegative || nextRemaining.isZero) {
-                        "下一任务 $nextFlight：应立即到位"
+                    val remaining = Duration.between(now, gateArrival)
+                    if (remaining.isNegative || remaining.isZero) {
+                        Text(
+                            "应立即到位",
+                            style = NumericHero,
+                            color = CeaRed,
+                        )
                     } else {
-                        "下一任务 $nextFlight：${nextGateArrival.formatClock()} 前到位（还有 ${formatRemaining(nextRemaining)}）"
+                        CountdownNumbers(remaining)
+                    }
+                    Spacer(Modifier.height(AirShiftSpacing.S))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "到位时间",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                        )
+                        Spacer(Modifier.width(AirShiftSpacing.S))
+                        Text(
+                            gateArrival.formatClock(),
+                            style = NumericLarge,
+                            color = TextPrimary,
+                        )
                     }
                 }
-                Text(
-                    nextText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-                )
+                nextAssignment?.let { next ->
+                    Spacer(Modifier.height(AirShiftSpacing.M))
+                    HorizontalDivider(color = BorderSoft)
+                    Spacer(Modifier.height(AirShiftSpacing.S))
+                    val nextFlight = next.inboundFlight ?: next.outboundFlight.orEmpty()
+                    val nextGateArrival = DutyTimeline.gateArrivalTime(next)
+                    val nextText = if (nextGateArrival == null) {
+                        "下一任务 $nextFlight"
+                    } else {
+                        val nextRemaining = Duration.between(now, nextGateArrival)
+                        if (nextRemaining.isNegative || nextRemaining.isZero) {
+                            "下一任务 $nextFlight：应立即到位"
+                        } else {
+                            "下一任务 $nextFlight：${nextGateArrival.formatClock()} 前到位（还有 ${formatRemaining(nextRemaining)}）"
+                        }
+                    }
+                    Text(
+                        nextText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
             }
         }
+    }
+}
+
+/** 剩余时间大数字："X 小时 X 分钟"，数字用超大红色等宽粗体，单位缩小跟随。 */
+@Composable
+private fun CountdownNumbers(remaining: Duration) {
+    val totalMinutes = remaining.toMinutes()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    Row(verticalAlignment = Alignment.Bottom) {
+        if (hours > 0) {
+            Text("$hours", style = NumericHero, color = CeaRed)
+            Text(
+                "小时",
+                style = NumericUnit,
+                color = TextPrimary,
+                modifier = Modifier.padding(start = 4.dp, end = AirShiftSpacing.S, bottom = 4.dp),
+            )
+        }
+        Text("$minutes", style = NumericHero, color = CeaRed)
+        Text(
+            "分钟",
+            style = NumericUnit,
+            color = TextPrimary,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+        )
     }
 }
 
@@ -271,13 +335,8 @@ private fun CurrentAssignmentCard(
         assignment.outboundHasVip -> "出港 VIP"
         else -> null
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = if (assignment.hasVip) BorderStroke(2.dp, VipAmber) else null,
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+    QuietCard(modifier = Modifier.fillMaxWidth(), vip = assignment.hasVip) {
+        Column(modifier = Modifier.padding(AirShiftSpacing.M)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -289,19 +348,20 @@ private fun CurrentAssignmentCard(
                         AssignmentKind.DEPARTURE_ONLY -> "出港保障"
                         AssignmentKind.TURNAROUND -> "进港后接续出港"
                     },
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                 )
                 vipBadgeText?.let { label ->
                     Surface(
                         color = VipAmberContainer,
-                        shape = RoundedCornerShape(7.dp),
+                        shape = CircleShape,
                     ) {
                         Text(
                             label,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = AirShiftSpacing.S, vertical = 4.dp),
                             color = OnVipAmberContainer,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -310,12 +370,12 @@ private fun CurrentAssignmentCard(
             Text(
                 buildList {
                     add("机号：${assignment.aircraftRegistration}")
-                    assignment.aircraftType?.let { add("机型：$it") }
+                    add("机型：${assignment.aircraftType ?: "--"}")
                 }.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TextSecondary,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(AirShiftSpacing.M))
             assignment.inboundFlight?.let { flight ->
                 val operationDate = assignment.scheduledArrival?.toLocalDate()
                 val gateChange = gateChanges.gateForFlight(flight, operationDate)
@@ -335,25 +395,29 @@ private fun CurrentAssignmentCard(
                     details = buildList {
                         add(
                             DetailEntry(
-                                gateChange?.let {
-                                    "登机口：${assignment.inboundBoardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
-                                } ?: "登机口：${assignment.inboundBoardingGate ?: "--"}",
+                                label = "登机口",
+                                value = gateChange?.let {
+                                    "${assignment.inboundBoardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                } ?: (assignment.inboundBoardingGate ?: "--"),
                             ),
                         )
-                        add(DetailEntry("登机口关闭：${assignment.inboundGateClosedObservedAt.formatClock()}"))
-                        add(DetailEntry("实际离位：${assignment.inboundActualOffBlock.formatClock()}"))
+                        add(DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()))
+                        add(DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()))
                         add(
                             DetailEntry(
-                                standChange?.let {
-                                    "到达机位：${assignment.arrivalStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
-                                } ?: "到达机位：${assignment.arrivalStand ?: "--"}",
+                                label = "到达机位",
+                                value = standChange?.let {
+                                    "${assignment.arrivalStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                } ?: (assignment.arrivalStand ?: "--"),
                             ),
                         )
                     },
                 )
             }
             if (assignment.inboundFlight != null && assignment.outboundFlight != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(AirShiftSpacing.M))
+                HorizontalDivider(color = BorderSoft)
+                Spacer(Modifier.height(AirShiftSpacing.M))
             }
             assignment.outboundFlight?.let { flight ->
                 val operationDate = assignment.scheduledDeparture?.toLocalDate()
@@ -372,24 +436,26 @@ private fun CurrentAssignmentCard(
                     specialServices = specialServiceRecords.forFlight(flight, operationDate),
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
                     details = buildList {
-                        add(DetailEntry("预计登机开始：${DutyTimeline.boardingStartTime(assignment).formatClock()}"))
-                        add(DetailEntry("预计登机口关闭：${DutyTimeline.gateCloseTime(assignment).formatClock()}"))
+                        add(DetailEntry(label = "预计登机开始", value = DutyTimeline.boardingStartTime(assignment).formatClock()))
+                        add(DetailEntry(label = "预计登机口关闭", value = DutyTimeline.gateCloseTime(assignment).formatClock()))
                         add(
                             DetailEntry(
-                                gateChange?.let {
-                                    "登机口：${assignment.boardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
-                                } ?: "登机口：${assignment.boardingGate ?: "--"}",
+                                label = "登机口",
+                                value = gateChange?.let {
+                                    "${assignment.boardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                } ?: (assignment.boardingGate ?: "--"),
                             ),
                         )
                         add(
                             DetailEntry(
-                                standChange?.let {
-                                    "出发机位：${assignment.departureStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
-                                } ?: "出发机位：${assignment.departureStand ?: "--"}",
+                                label = "出发机位",
+                                value = standChange?.let {
+                                    "${assignment.departureStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                } ?: (assignment.departureStand ?: "--"),
                             ),
                         )
-                        add(DetailEntry("登机口关闭：${assignment.outboundGateClosedObservedAt.formatClock()}"))
-                        add(DetailEntry("实际离位：${assignment.outboundActualOffBlock.formatClock()}"))
+                        add(DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()))
+                        add(DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()))
                     },
                 )
             }

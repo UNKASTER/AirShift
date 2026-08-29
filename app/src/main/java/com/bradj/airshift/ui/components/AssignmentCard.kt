@@ -1,6 +1,5 @@
 package com.bradj.airshift.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,9 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,13 +23,16 @@ import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.StandChangeRecord
+import com.bradj.airshift.ui.theme.AirShiftSpacing
+import com.bradj.airshift.ui.theme.BorderSoft
 import com.bradj.airshift.ui.theme.OnVipAmberContainer
-import com.bradj.airshift.ui.theme.VipAmber
+import com.bradj.airshift.ui.theme.TextPrimary
+import com.bradj.airshift.ui.theme.TextSecondary
 import com.bradj.airshift.ui.theme.VipAmberContainer
 
 /**
  * 全部执勤页使用的精简任务卡片：
- * 特服仅显示小角标；登机口/机位变更仅显示最小提醒元素，不展示变更后的实际值。
+ * 白卡 + 方向小标签；特服仅显示小角标；登机口/机位变更仅显示最小提醒元素。
  */
 @Composable
 fun AssignmentCard(
@@ -55,13 +56,8 @@ fun AssignmentCard(
     }.orEmpty()
     val hasSpecialService = inboundServices.isNotEmpty() || outboundServices.isNotEmpty()
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = if (assignment.hasVip) BorderStroke(2.dp, VipAmber) else null,
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+    QuietCard(modifier = Modifier.fillMaxWidth(), vip = assignment.hasVip) {
+        Column(modifier = Modifier.padding(AirShiftSpacing.M)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -73,24 +69,25 @@ fun AssignmentCard(
                         AssignmentKind.DEPARTURE_ONLY -> "出港保障"
                         AssignmentKind.TURNAROUND -> "进港后接续出港"
                     },
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                 )
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (hasSpecialService) SpecialServiceBadge()
                     vipBadgeText?.let { label ->
                         Surface(
                             color = VipAmberContainer,
-                            shape = RoundedCornerShape(7.dp),
+                            shape = CircleShape,
                         ) {
                             Text(
                                 label,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = AirShiftSpacing.S, vertical = 4.dp),
                                 color = OnVipAmberContainer,
-                                style = MaterialTheme.typography.labelLarge,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
@@ -100,12 +97,12 @@ fun AssignmentCard(
             Text(
                 buildList {
                     add("机号：${assignment.aircraftRegistration}")
-                    assignment.aircraftType?.let { add("机型：$it") }
+                    add("机型：${assignment.aircraftType ?: "--"}")
                 }.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TextSecondary,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(AirShiftSpacing.M))
             assignment.inboundFlight?.let { flight ->
                 val operationDate = assignment.scheduledArrival?.toLocalDate()
                 val gateChange = gateChanges.gateForFlight(flight, operationDate)
@@ -124,20 +121,24 @@ fun AssignmentCard(
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
                     details = listOf(
                         DetailEntry(
-                            text = "登机口：${assignment.inboundBoardingGate ?: "--"}",
+                            label = "登机口",
+                            value = assignment.inboundBoardingGate ?: "--",
                             hasChange = gateChange != null,
                         ),
-                        DetailEntry("登机口关闭：${assignment.inboundGateClosedObservedAt.formatClock()}"),
-                        DetailEntry("实际离位：${assignment.inboundActualOffBlock.formatClock()}"),
+                        DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()),
+                        DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()),
                         DetailEntry(
-                            text = "到达机位：${assignment.arrivalStand ?: "--"}",
+                            label = "到达机位",
+                            value = assignment.arrivalStand ?: "--",
                             hasChange = standChange != null,
                         ),
                     ),
                 )
             }
             if (assignment.inboundFlight != null && assignment.outboundFlight != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(AirShiftSpacing.M))
+                HorizontalDivider(color = BorderSoft)
+                Spacer(Modifier.height(AirShiftSpacing.M))
             }
             assignment.outboundFlight?.let { flight ->
                 val operationDate = assignment.scheduledDeparture?.toLocalDate()
@@ -157,15 +158,17 @@ fun AssignmentCard(
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
                     details = listOf(
                         DetailEntry(
-                            text = "登机口：${assignment.boardingGate ?: "--"}",
+                            label = "登机口",
+                            value = assignment.boardingGate ?: "--",
                             hasChange = gateChange != null,
                         ),
                         DetailEntry(
-                            text = "出发机位：${assignment.departureStand ?: "--"}",
+                            label = "出发机位",
+                            value = assignment.departureStand ?: "--",
                             hasChange = standChange != null,
                         ),
-                        DetailEntry("登机口关闭：${assignment.outboundGateClosedObservedAt.formatClock()}"),
-                        DetailEntry("实际离位：${assignment.outboundActualOffBlock.formatClock()}"),
+                        DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()),
+                        DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()),
                     ),
                 )
             }

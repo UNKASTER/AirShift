@@ -14,8 +14,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** 航段详情行：text 为展示文本；hasChange 为 true 时附加“变更”最小提醒元素。 */
-data class DetailEntry(val text: String, val hasChange: Boolean = false)
+/** 航段详情行：label 灰字小标签 + value 深色值；hasChange 为 true 时附加"变更"提醒。 */
+data class DetailEntry(val label: String, val value: String, val hasChange: Boolean = false)
 
 internal fun LocalDateTime?.formatClock(): String =
     this?.format(DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)) ?: "--:--"
