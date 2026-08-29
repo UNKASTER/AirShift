@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -110,8 +111,6 @@ import java.util.Locale
 
 private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 5 * 60 * 1000L
 private const val BUSY_REFRESH_RETRY_MILLIS = 15 * 1000L
-private const val XLS_MIME_TYPE = "application/vnd.ms-excel"
-private const val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 private data class LiveRefreshResult(
     val assignments: List<RosterAssignment>,
@@ -127,14 +126,19 @@ private data class LiveFlightRequest(
 )
 
 class MainActivity : ComponentActivity() {
+    private val sharedExcelImportQueue: SharedExcelImportQueueViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) sharedExcelImportQueue.enqueue(intent)
+        setIntent(Intent(Intent.ACTION_MAIN))
         enableEdgeToEdge()
         ReminderReceiver.createChannel(this)
         val store = RosterStore(this)
         val specialServiceRepository = SpecialServiceRepository.get(this)
         FlightRefreshScheduler.configure(this, store.hasVariFlightApiKey)
         setContent {
+            val pendingSharedExcelImports by sharedExcelImportQueue.pending.collectAsStateWithLifecycle()
             AirShiftTheme {
                 AirShiftApp(
                     context = this,
@@ -146,9 +150,17 @@ class MainActivity : ComponentActivity() {
                     locateAirport = { candidates, callback -> AirportLocator.locate(this, candidates, callback) },
                     openExactAlarmSettings = ::openExactAlarmSettings,
                     openNotificationAccessSettings = { NotificationAccess.openSettings(this) },
+                    pendingSharedExcelImport = pendingSharedExcelImports.firstOrNull(),
+                    consumeSharedExcelImport = sharedExcelImportQueue::consume,
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedExcelImportQueue.enqueue(intent)
+        setIntent(Intent(Intent.ACTION_MAIN))
     }
 
     private fun refreshLive(
@@ -239,6 +251,8 @@ private fun AirShiftApp(
     locateAirport: (Collection<AirportPoint>, (Result<com.bradj.airshift.location.AirportMatch>) -> Unit) -> Unit,
     openExactAlarmSettings: () -> Unit,
     openNotificationAccessSettings: () -> Unit,
+    pendingSharedExcelImport: PendingSharedExcelImport?,
+    consumeSharedExcelImport: (Long) -> Unit,
 ) {
     var userName by remember { mutableStateOf(store.userName) }
     if (userName == null) {
@@ -360,6 +374,20 @@ private fun AirShiftApp(
         }
     }
 
+    fun importExcel(uri: Uri, progressMessage: String) {
+        if (isWorking) return
+        isWorking = true
+        warnings = emptyList()
+        statusMessage = progressMessage
+        readExcelRoster(uri, userName.orEmpty()) { result ->
+            result.onSuccess(::finishImport)
+                .onFailure {
+                    isWorking = false
+                    statusMessage = "Excel 识别失败：${it.message ?: "无法读取文件"}"
+                }
+        }
+    }
+
     fun refreshCurrentAssignments(automatic: Boolean = false) {
         if (isWorking) return
         val apiKey = store.variFlightApiKey
@@ -463,15 +491,21 @@ private fun AirShiftApp(
 
     val excelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        isWorking = true
-        warnings = emptyList()
-        statusMessage = "正在解析 Excel 排班…"
-        readExcelRoster(uri, userName.orEmpty()) { result ->
-            result.onSuccess(::finishImport)
-                .onFailure {
-                    isWorking = false
-                    statusMessage = "Excel 识别失败：${it.message ?: "无法读取文件"}"
-                }
+        importExcel(uri, "正在解析 Excel 排班…")
+    }
+
+    LaunchedEffect(pendingSharedExcelImport?.id, userName, isWorking) {
+        val pending = pendingSharedExcelImport ?: return@LaunchedEffect
+        if (isWorking) return@LaunchedEffect
+        consumeSharedExcelImport(pending.id)
+        when (pending) {
+            is PendingSharedExcelImport.File -> importExcel(
+                pending.uri,
+                "正在解析分享的 Excel 排班…",
+            )
+            is PendingSharedExcelImport.Error -> {
+                statusMessage = "Excel 分享导入失败：${pending.message}"
+            }
         }
     }
 
@@ -535,7 +569,7 @@ private fun AirShiftApp(
                         onImportImage = {
                             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         },
-                        onImportExcel = { excelPicker.launch(arrayOf(XLS_MIME_TYPE, XLSX_MIME_TYPE)) },
+                        onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
                     )
                 }
                 statusMessage?.let { message ->
