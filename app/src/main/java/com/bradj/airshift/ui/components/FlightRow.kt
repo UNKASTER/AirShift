@@ -55,6 +55,8 @@ fun FlightRow(
     specialServices: List<FlightServiceRecord>,
     flightCancellation: FlightCancellationRecord?,
     details: List<DetailEntry>,
+    originDetails: List<DetailEntry> = emptyList(),
+    destinationDetails: List<DetailEntry> = emptyList(),
 ) {
     val liveTime = actual ?: estimated
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -68,23 +70,11 @@ fun FlightRow(
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
             )
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    "实时",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextHint,
-                )
-                Text(
-                    liveTime.formatClock(),
-                    style = NumericMedium,
-                    color = if (liveTime == null) TextHint else TextPrimary,
-                )
-                Text(
-                    "计划 ${planned.formatClock()}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
-                )
-            }
+            TimeBlock(
+                label = "实时",
+                live = liveTime,
+                planned = planned,
+            )
         }
         Spacer(Modifier.height(AirShiftSpacing.M))
         // 航线：机场中文名与细线箭头同一行（箭头对齐中文名中轴线），三字码在下一行
@@ -118,6 +108,26 @@ fun FlightRow(
                 color = if (toCode == null) TextHint else CeaNavy,
                 textAlign = TextAlign.End,
             )
+        }
+        // 站点信息：始发站信息挂在左端点下方，到达站信息挂在右端点下方
+        if (originDetails.isNotEmpty() || destinationDetails.isNotEmpty()) {
+            Spacer(Modifier.height(AirShiftSpacing.S))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    originDetails.forEach { StationDetail(it, alignEnd = false) }
+                }
+                Spacer(Modifier.width(64.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    destinationDetails.forEach { StationDetail(it, alignEnd = true) }
+                }
+            }
         }
         flightCancellation?.let { cancellation ->
             Spacer(Modifier.height(AirShiftSpacing.S))
@@ -166,6 +176,51 @@ fun FlightRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 时间块：标签（起飞/到达）+ 实时等宽大数字 + 计划时间。 */
+@Composable
+private fun TimeBlock(label: String, live: LocalDateTime?, planned: LocalDateTime?) {
+    Column(horizontalAlignment = Alignment.End) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextHint,
+        )
+        Text(
+            live.formatClock(),
+            style = NumericMedium,
+            color = if (live == null) TextHint else TextPrimary,
+        )
+        Text(
+            "计划 ${planned.formatClock()}",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary,
+        )
+    }
+}
+
+/** 站点下方的小信息行：label 灰 + value 深色，跟随站点左右对齐。 */
+@Composable
+private fun StationDetail(entry: DetailEntry, alignEnd: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            entry.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextHint,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            entry.value,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextBody,
+            fontWeight = FontWeight.Medium,
+            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+        )
+        if (entry.hasChange) {
+            ChangeIndicator(modifier = Modifier.padding(start = 4.dp))
         }
     }
 }

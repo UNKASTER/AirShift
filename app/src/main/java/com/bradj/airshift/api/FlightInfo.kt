@@ -68,6 +68,7 @@ internal fun RosterAssignment.withLiveInfo(
         estimatedDeparture = outbound?.estimatedDeparture ?: estimatedDeparture,
         actualDeparture = outbound?.actualDeparture ?: actualDeparture,
         inboundBoardingGate = inbound?.boardingGate ?: inboundBoardingGate,
+        inboundDepartureStand = inbound?.departureStand ?: inboundDepartureStand,
         boardingGate = outbound?.boardingGate ?: boardingGate,
         departureStand = outbound?.departureStand ?: departureStand,
         arrivalStand = inbound?.arrivalStand ?: arrivalStand,
@@ -75,6 +76,7 @@ internal fun RosterAssignment.withLiveInfo(
         outboundGateClosedObservedAt = outbound?.gateClosedObservedAt ?: outboundGateClosedObservedAt,
         inboundActualOffBlock = inbound?.actualOffBlock ?: inboundActualOffBlock,
         outboundActualOffBlock = outbound?.actualOffBlock ?: outboundActualOffBlock,
+        outboundArrivalStand = outbound?.arrivalStand ?: outboundArrivalStand,
         arrivalBridge = inbound?.arrivalBridge ?: arrivalBridge,
     )
 }

@@ -107,6 +107,7 @@ class RosterStore(context: Context) {
         putNullable("estimatedDeparture", estimatedDeparture?.toString())
         putNullable("actualDeparture", actualDeparture?.toString())
         putNullable("inboundBoardingGate", inboundBoardingGate)
+        putNullable("inboundDepartureStand", inboundDepartureStand)
         putNullable("boardingGate", boardingGate)
         putNullable("departureStand", departureStand)
         putNullable("arrivalStand", arrivalStand)
@@ -114,6 +115,7 @@ class RosterStore(context: Context) {
         putNullable("outboundGateClosedObservedAt", outboundGateClosedObservedAt?.toString())
         putNullable("inboundActualOffBlock", inboundActualOffBlock?.toString())
         putNullable("outboundActualOffBlock", outboundActualOffBlock?.toString())
+        putNullable("outboundArrivalStand", outboundArrivalStand)
         putNullable("arrivalBridge", arrivalBridge)
         putNullable("originCode", originCode)
         putNullable("destinationCode", destinationCode)
@@ -138,6 +140,7 @@ class RosterStore(context: Context) {
         estimatedDeparture = nullableDateTime("estimatedDeparture"),
         actualDeparture = nullableDateTime("actualDeparture"),
         inboundBoardingGate = nullableString("inboundBoardingGate"),
+        inboundDepartureStand = nullableString("inboundDepartureStand"),
         boardingGate = nullableString("boardingGate"),
         departureStand = nullableString("departureStand"),
         arrivalStand = nullableString("arrivalStand") ?: nullableString("arrivalGate"),
@@ -145,6 +148,7 @@ class RosterStore(context: Context) {
         outboundGateClosedObservedAt = nullableDateTime("outboundGateClosedObservedAt"),
         inboundActualOffBlock = nullableDateTime("inboundActualOffBlock"),
         outboundActualOffBlock = nullableDateTime("outboundActualOffBlock"),
+        outboundArrivalStand = nullableString("outboundArrivalStand"),
         arrivalBridge = nullableString("arrivalBridge"),
         originCode = nullableString("originCode"),
         destinationCode = nullableString("destinationCode"),

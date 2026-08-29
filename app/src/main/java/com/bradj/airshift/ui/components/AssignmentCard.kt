@@ -119,19 +119,24 @@ fun AssignmentCard(
                     actual = assignment.actualArrival,
                     specialServices = emptyList(),
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = listOf(
+                    originDetails = listOf(
                         DetailEntry(
                             label = "登机口",
                             value = assignment.inboundBoardingGate ?: "--",
                             hasChange = gateChange != null,
                         ),
-                        DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()),
-                        DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()),
+                        DetailEntry(label = "出发机位", value = assignment.inboundDepartureStand ?: "--"),
+                    ),
+                    destinationDetails = listOf(
                         DetailEntry(
                             label = "到达机位",
                             value = assignment.arrivalStand ?: "--",
                             hasChange = standChange != null,
                         ),
+                    ),
+                    details = listOf(
+                        DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()),
+                        DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()),
                     ),
                 )
             }
@@ -156,7 +161,7 @@ fun AssignmentCard(
                     actual = assignment.actualDeparture,
                     specialServices = emptyList(),
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = listOf(
+                    originDetails = listOf(
                         DetailEntry(
                             label = "登机口",
                             value = assignment.boardingGate ?: "--",
@@ -167,6 +172,11 @@ fun AssignmentCard(
                             value = assignment.departureStand ?: "--",
                             hasChange = standChange != null,
                         ),
+                    ),
+                    destinationDetails = listOf(
+                        DetailEntry(label = "到达机位", value = assignment.outboundArrivalStand ?: "--"),
+                    ),
+                    details = listOf(
                         DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()),
                         DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()),
                     ),

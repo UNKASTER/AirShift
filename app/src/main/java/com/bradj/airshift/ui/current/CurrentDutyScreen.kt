@@ -392,25 +392,38 @@ private fun CurrentAssignmentCard(
                     actual = assignment.actualArrival,
                     specialServices = specialServiceRecords.forFlight(flight, operationDate),
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = buildList {
+                    originDetails = buildList {
                         add(
                             DetailEntry(
                                 label = "登机口",
                                 value = gateChange?.let {
-                                    "${assignment.inboundBoardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                    "${assignment.inboundBoardingGate ?: "--"} → ${it.boardingGate}"
                                 } ?: (assignment.inboundBoardingGate ?: "--"),
+                                hasChange = gateChange != null,
                             ),
                         )
-                        add(DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()))
-                        add(DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()))
+                        add(DetailEntry(label = "出发机位", value = assignment.inboundDepartureStand ?: "--"))
+                    },
+                    destinationDetails = buildList {
                         add(
                             DetailEntry(
                                 label = "到达机位",
                                 value = standChange?.let {
-                                    "${assignment.arrivalStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                    "${assignment.arrivalStand ?: "--"} → ${it.stand}"
                                 } ?: (assignment.arrivalStand ?: "--"),
+                                hasChange = standChange != null,
                             ),
                         )
+                    },
+                    details = buildList {
+                        gateChange?.let {
+                            add(DetailEntry(label = "登机口变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                        }
+                        standChange?.let {
+                            add(DetailEntry(label = "机位变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                        }
+                        add(DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()))
+                        add(DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()))
                     },
                 )
             }
@@ -435,25 +448,38 @@ private fun CurrentAssignmentCard(
                     actual = assignment.actualDeparture,
                     specialServices = specialServiceRecords.forFlight(flight, operationDate),
                     flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = buildList {
-                        add(DetailEntry(label = "预计登机开始", value = DutyTimeline.boardingStartTime(assignment).formatClock()))
-                        add(DetailEntry(label = "预计登机口关闭", value = DutyTimeline.gateCloseTime(assignment).formatClock()))
+                    originDetails = buildList {
                         add(
                             DetailEntry(
                                 label = "登机口",
                                 value = gateChange?.let {
-                                    "${assignment.boardingGate ?: "--"} → ${it.boardingGate}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                    "${assignment.boardingGate ?: "--"} → ${it.boardingGate}"
                                 } ?: (assignment.boardingGate ?: "--"),
+                                hasChange = gateChange != null,
                             ),
                         )
                         add(
                             DetailEntry(
                                 label = "出发机位",
                                 value = standChange?.let {
-                                    "${assignment.departureStand ?: "--"} → ${it.stand}（MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}）"
+                                    "${assignment.departureStand ?: "--"} → ${it.stand}"
                                 } ?: (assignment.departureStand ?: "--"),
+                                hasChange = standChange != null,
                             ),
                         )
+                    },
+                    destinationDetails = buildList {
+                        add(DetailEntry(label = "到达机位", value = assignment.outboundArrivalStand ?: "--"))
+                    },
+                    details = buildList {
+                        add(DetailEntry(label = "预计登机开始", value = DutyTimeline.boardingStartTime(assignment).formatClock()))
+                        add(DetailEntry(label = "预计登机口关闭", value = DutyTimeline.gateCloseTime(assignment).formatClock()))
+                        gateChange?.let {
+                            add(DetailEntry(label = "登机口变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                        }
+                        standChange?.let {
+                            add(DetailEntry(label = "机位变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                        }
                         add(DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()))
                         add(DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()))
                     },
