@@ -10,6 +10,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.reminder.ReminderScheduler
+import com.bradj.airshift.specialservice.SpecialServiceRepository
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
@@ -66,6 +67,7 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
         if (live.isNotEmpty()) {
             val enriched = assignments.map { it.withLiveInfo(live, now.toLocalDate()) }
             store.saveAssignments(enriched)
+            SpecialServiceRepository.get(applicationContext).onRosterChanged(enriched)
             store.lastLiveRefreshEpochMillis = System.currentTimeMillis()
             ReminderScheduler.scheduleAll(applicationContext, enriched)
         }

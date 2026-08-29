@@ -23,3 +23,11 @@ SDK 源文件保留了上游版权与许可证头。模型使用 PaddleOCR 官�
 - 依赖：`org.opencv:opencv:4.12.0`
 - OpenCV 来源：[opencv/opencv](https://github.com/opencv/opencv)
 - 许可证：[Apache License 2.0](https://github.com/opencv/opencv/blob/4.12.0/LICENSE)
+
+## Apache POI
+
+- 依赖：`org.apache.poi:poi:5.5.1`
+- 来源：[apache/poi](https://github.com/apache/poi)
+- 许可证：[Apache License 2.0](https://github.com/apache/poi/blob/trunk/LICENSE)
+
+应用使用 Apache POI 的 HSSF 事件模型读取旧版 BIFF `.xls` 工作簿，不解析或持久化其中的图片对象。

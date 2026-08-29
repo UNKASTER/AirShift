@@ -25,6 +25,16 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".specialservice.MucNotificationListenerService"
+            android:exported="false"
+            android:label="@string/muc_notification_listener_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".reminder.ReminderReceiver"
             android:exported="false" />

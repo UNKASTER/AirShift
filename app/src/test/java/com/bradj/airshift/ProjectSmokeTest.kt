@@ -17,7 +17,7 @@ import java.time.ZoneId
 
 class ProjectSmokeTest {
     @Test
-    fun parserFindsOnlyNamedEmployeesRowsAndRemovesSymbols() {
+    fun parserFindsOnlyNamedEmployeesRowsAndNormalizesFlights() {
         val headers = listOf("机号", "机型", "进港航班", "前站", "预落", "出港航班", "到站", "计离", "接送机人员")
         val templateCenters = listOf(0.045, 0.125, 0.2265, 0.3435, 0.4315, 0.5545, 0.6815, 0.7505, 0.889)
         fun x(column: Int) = (20 + 600 * templateCenters[column]).toInt()
@@ -26,7 +26,7 @@ class ProjectSmokeTest {
         val tokens = buildList {
             add(OcrToken("8.20", 800, 5, 840, 15))
             headers.forEachIndexed { index, header -> add(token(header, index, 30)) }
-            listOf("B0001", "32N", "ZZ1001&", "北京大兴", "1040", "ZZ1002#", "台北", "1200", "测试甲测试乙")
+            listOf("B0001", "32N", "CES1001&", "北京大兴", "1040", "CES1002#", "台北", "1200", "测试甲测试乙")
                 .forEachIndexed { index, value -> add(token(value, index, 60)) }
             add(token("B0002", 0, 90))
             add(token("73V", 1, 90))
@@ -47,8 +47,8 @@ class ProjectSmokeTest {
 
         assertEquals(LocalDate.of(2026, 8, 20), result.rosterDate)
         assertEquals(3, result.assignments.size)
-        assertEquals("ZZ1001", result.assignments[0].inboundFlight)
-        assertEquals("ZZ1002", result.assignments[0].outboundFlight)
+        assertEquals("MU1001", result.assignments[0].inboundFlight)
+        assertEquals("MU1002", result.assignments[0].outboundFlight)
         assertNull(result.assignments[1].inboundFlight)
         assertEquals("QZ4001", result.assignments[1].outboundFlight)
         assertTrue(result.assignments.none { it.aircraftRegistration == "B0004" })

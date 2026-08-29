@@ -58,6 +58,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.4.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
     implementation("org.opencv:opencv:4.12.0")
+    implementation("org.apache.poi:poi:5.5.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

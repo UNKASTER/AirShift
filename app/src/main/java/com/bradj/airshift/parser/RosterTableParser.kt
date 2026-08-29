@@ -124,7 +124,12 @@ object RosterTableParser {
 
     fun cleanFlightNumber(raw: String): String? {
         val cleaned = raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
-        return flightRegex.find(cleaned)?.value
+        val flightNumber = flightRegex.find(cleaned)?.value ?: return null
+        return if (flightNumber.startsWith("CES")) {
+            "MU${flightNumber.removePrefix("CES")}"
+        } else {
+            flightNumber
+        }
     }
 
     fun parseRosterTime(raw: String, date: LocalDate): LocalDateTime? {
