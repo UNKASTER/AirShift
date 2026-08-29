@@ -320,7 +320,7 @@ object MucMessageReducer {
             val match = RosterFlightMatcher.match(candidate, flights)
             val flight = match.matched
             if (candidate.confidence == Confidence.LOW) {
-                pendingReviews = pendingReviews.filterNot { it.id == candidate.id } + candidate.toPendingReview(match.suggestions)
+                // 低置信结果直接忽视，不再进入人工确认流程。
                 manualReviews++
                 return@forEach
             }

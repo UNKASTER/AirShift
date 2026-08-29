@@ -105,7 +105,7 @@ class SpecialServiceRepository private constructor(context: Context) {
                     append("，机位更新 ${reduction.standChangesApplied} 条")
                     append("，取消 ${reduction.cancellationsApplied} 条")
                     if (reduction.awaitingRoster > 0) append("，等待排班 ${reduction.awaitingRoster} 条")
-                    if (reduction.manualReviews > 0) append("，低置信待确认 ${reduction.manualReviews} 条")
+                    if (reduction.manualReviews > 0) append("，低置信已忽略 ${reduction.manualReviews} 条")
                 },
             )
             publish(SpecialServiceExpiry.prune(current, now))
@@ -127,80 +127,6 @@ class SpecialServiceRepository private constructor(context: Context) {
                 SpecialServiceExpiry.prune(
                     MucMessageReducer.reconcile(mutableState.value, flights),
                     now,
-                ),
-            )
-        }
-    }
-
-    fun confirmReview(
-        reviewId: String,
-        flight: FlightReference,
-        serviceType: ServiceType,
-        wheelchairLevel: WheelchairLevel?,
-        count: Int?,
-    ) {
-        synchronized(lock) {
-            val current = mutableState.value
-            val review = current.pendingReviews.firstOrNull { it.id == reviewId } ?: return
-            val now = System.currentTimeMillis()
-            val correctedLevel = wheelchairLevel.takeIf { serviceType == ServiceType.WHEELCHAIR }
-            val latestExistingUpdate = current.records.asSequence()
-                .filter {
-                    it.flightNumber == flight.flightNumber &&
-                        it.operationDate == flight.operationDate &&
-                        it.serviceType == serviceType &&
-                        it.wheelchairLevel == correctedLevel
-                }
-                .maxOfOrNull(FlightServiceRecord::updatedAtEpochMillis)
-            val afterExisting = latestExistingUpdate?.let { if (it == Long.MAX_VALUE) it else it + 1L } ?: Long.MIN_VALUE
-            val corrected = review.toParsedCandidate().copy(
-                serviceType = serviceType,
-                wheelchairLevel = correctedLevel,
-                count = count?.takeIf { it > 0 },
-                confidence = Confidence.HIGH,
-                sourceEpochMillis = maxOf(review.sourceEpochMillis, now, afterExisting),
-            )
-            val records = SpecialServiceReducer.apply(
-                current.records,
-                corrected,
-                flight,
-                ReviewStatus.CONFIRMED,
-            ).records
-            val processed = current.processedFingerprints.map {
-                if (it.value == review.fingerprint) it.copy(expiresAtEpochMillis = maxOf(it.expiresAtEpochMillis, flight.expiresAtEpochMillis)) else it
-            }
-            publish(
-                SpecialServiceExpiry.prune(
-                    current.copy(
-                        records = records,
-                        pendingReviews = current.pendingReviews.filterNot { it.id == reviewId },
-                        flightCancellations = current.flightCancellations.filterNot {
-                            it.flightKey == flight.key && it.updatedAtEpochMillis < corrected.sourceEpochMillis
-                        },
-                        processedFingerprints = processed,
-                        lastProcessedEpochMillis = now,
-                        lastProcessingResult = "待确认特服消息已确认",
-                    ),
-                    now,
-                ),
-            )
-        }
-    }
-
-    fun ignoreReview(reviewId: String) {
-        synchronized(lock) {
-            val current = mutableState.value
-            val review = current.pendingReviews.firstOrNull { it.id == reviewId } ?: return
-            val pending = current.pendingReviews.filterNot { it.fingerprint == review.fingerprint }
-            val processed = current.processedFingerprints.map {
-                if (it.value == review.fingerprint) it.copy(ignored = true) else it
-            }
-            publish(
-                current.copy(
-                    pendingReviews = pending,
-                    processedFingerprints = processed,
-                    lastProcessedEpochMillis = System.currentTimeMillis(),
-                    lastProcessingResult = "待确认特服消息已忽略",
                 ),
             )
         }

@@ -1,88 +1,112 @@
-# MUC 特殊旅客与客舱宠物识别计划
+# AirShift 前端 UI / 交互重写计划
 
-## 总结
+## 1. 目标与约束
+- **约束（最高优先级）**：严禁对逻辑层（`parser/`、`api/`、`reminder/`、`specialservice/`、`location/`、`model/RosterAssignment`）做大量修改；仅允许为 UI 新交互做小幅度功能添加（见 §4）。
+- UI 全面重写为**中国东方航空 VI 风格**：主色采用东航红（约 `#C8102E`），白色卡片、浅灰背景、简洁商务；圆角与阴影保持克制。
+- 整体结构改为**底部三段导航**：
+  - 左：**全部执勤**（当日全部任务，结构与现 UI 相仿）
+  - 中：**当前执勤**（正在执行的任务，导航按钮视觉凸显）
+  - 右：**设置**（现设置对话框扩展为独立页面，功能不变）
+- 现状：`MainActivity.kt`（1332 行）承载全部 UI + 状态编排；无导航、无深色模式、字符串硬编码。本次重写 UI 层，逻辑层接口全部复用。
 
-- 将本计划保存为仓库根目录 `PLAN.md`，随后按阶段实施。
-- 使用 Android `NotificationListenerService` 监听通知，只处理已核实的 MUC 包 `com.ceair.im.muc`；用户需在系统设置中主动授予通知读取权限。[Android 通知监听文档](https://developer.android.com/reference/android/service/notification/NotificationListenerService)
-- 全流程仅在手机本机完成，不读取 MUC 数据库、不使用无障碍抓屏、不上传正文、不调用 AI 服务。
-- 第一阶段必须用无个人信息的测试消息验证 MUC 通知确实包含可读正文；若只能取得“新消息”等摘要，则停止并报告平台限制，不采用高风险替代方案。
+## 2. 逻辑层小幅度新增（仅 2 处）
+### 2.1 `data/RosterStore.kt`：执勤进度持久化（新增，约 30 行）
+- `dutyProgressDate: LocalDate?` + `currentDutyIndex: Int`，存 SharedPreferences。
+- 语义：
+  - 导入新排班时重置为 0 并记录当天日期（经确认：仅导入路径调用 `resetDutyProgress()`，实时刷新复用 `saveAssignments` 不重置，避免前台 5 分钟轮询刷掉执勤进度）；
+  - 读取时若 `dutyProgressDate != 今天` 则视为 0（每天执勤从第一个任务开始，不做自动判断逻辑）；
+  - `advanceDutyIndex()`：执勤完成按钮 +1。
+### 2.2 新增纯函数助手 `model/DutyTimeline.kt`（约 60 行，无副作用，可单测）
+为当前执勤页计算时间（规则与 `ReminderPolicy` 一致，但不改动它）：
+- `gateArrivalTime(assignment): LocalDateTime?` —— 须到达登机口时间：
+  - 进港（含接续）：实时到达（`actualArrival ?: estimatedArrival ?: scheduledArrival`）− 10 分钟；
+  - 仅出港：实时起飞（`actualDeparture ?: estimatedDeparture ?: scheduledDeparture`）− 1 小时。
+- `boardingStartTime(assignment): LocalDateTime?` —— 出港航段预计登机开始 = 实时起飞 − 40 分钟。
+- `gateCloseTime(assignment): LocalDateTime?` —— 预计登机口关闭 = 实时起飞 − 15 分钟。
+  - 用户要求"以实际起飞时间为准"：优先 `actualDeparture`，未起飞时回退 `estimatedDeparture`，再回退计划时间。
+> 以上是对逻辑层的全部改动；其余一律复用现有接口。
 
-## 核心实现
+## 3. UI 层新结构（新增 `ui/` 包，MainActivity 重写）
+```
+app/src/main/java/com/bradj/airshift/
+├── MainActivity.kt              ← 重写：保留依赖注入与业务编排，界面托管给 ui 层
+└── ui/
+    ├── theme/AirShiftTheme.kt   ← 东航 VI 配色（东航红主色）+ Typography
+    ├── AirShiftRoot.kt          ← Scaffold + 底部三段导航 + 各 section 切换；状态自 MainActivity 下传
+    ├── components/
+    │   ├── AssignmentCard.kt    ← 任务卡片（全部执勤用，精简版）
+    │   ├── SpecialServiceBadge.kt ← 特服小角标（仅标记有无，不显示数量明细）
+    │   └── ChangeIndicator.kt   ← 登机口/机位变更的最小提醒元素（小圆点+"变更"字样）
+    ├── all/AllDutyScreen.kt     ← 全部执勤页
+    ├── current/CurrentDutyScreen.kt ← 当前执勤页
+    ├── settings/SettingsScreen.kt   ← 设置页（独立页面）
+    └── onboarding/OnboardingScreen.kt ← 首启姓名页（沿用现逻辑，套用新主题）
+```
+- **状态管理**：维持现有架构（状态集中在根 Composable / MainActivity 编排函数中），不引入 ViewModel/导航库，保持最小改动。section 切换用一个 `enum class DutySection { ALL, CURRENT, SETTINGS }` + `rememberSaveable` 状态即可。
+- **底部导航**：Material3 `NavigationBar`，中间项使用凸显样式——红色实心圆形大图标（类似 FAB 嵌入），选中/未选中均比两侧大，两侧为标准 `NavigationBarItem`。三段名称：**全部执勤 / 当前执勤 / 设置**。
+- **主题**：`lightColorScheme` 定制（东航红 primary `#C8102E`、白 surface、浅灰背景 `#F5F6F8`、辅助深蓝灰），VIP 仍用琥珀色强调以保留辨识度。不需要新依赖（`material3` 已含 `NavigationBar` 与基础 Icons）。
 
-### 1. 通知接入与权限
+## 4. 各页面详细设计
+### 4.1 全部执勤（AllDutyScreen）
+沿用现 UI 结构与信息架构：
+- 顶部：问候 + 当前机场定位文本（去掉右上角"设置"入口，改由底部导航承担）。
+- 导入卡片：上传排班图片 / 导入 Excel（处理中态不变）。
+- 状态消息、精确闹钟提醒条、识别警告卡。（已取消：待确认特服区——低置信结果在逻辑层直接忽略，UI 不再展示。）
+- 任务列表 `AssignmentCard`（相对现 UI 的变化）：
+  - **特服**：不再列出徽章明细与说明文字，只在卡片角落显示**小角标**（如红色小圆点或"特服"小 pill，无论数量均一个标记）。
+  - **登机口/机位变更**：仅显示**最小提醒元素**（如登机口文字旁的橙色"变更"小点），不显示变更后的实际值；实际值只在当前执勤页展示。
+  - 其余（机号机型、进出港行、实时/计划时间、机场三字码、取消标记）保持现有展示。
+- 下拉刷新保留（PullToRefreshBox 移入本页）。
+### 4.2 当前执勤（CurrentDutyScreen）
+- 数据源：`assignments[dutyIndex]`；`dutyIndex` 来自 §2.1 的持久化进度。
+- **倒计时卡（页面顶部，最醒目）**：
+  - 主倒计时：当前任务的"须在 X 小时 Y 分钟后到达登机口（HH:mm）"，目标时间由 `DutyTimeline.gateArrivalTime` 计算，`LaunchedEffect` 每分钟 tick 刷新；已过时显示"应立即到位"。
+  - 副行：下一任务预告——"下一任务 MUxxxx：HH:mm 前到位（还有 X 小时 Y 分钟）"。
+- **当前任务详情卡**（比全部执勤更详细）：
+  - 机号、机型、任务类型、VIP 标记；
+  - 进出港航段完整信息（沿用现 FlightRow 全部字段：三字码+机场名、计划/预计/实际时间）；
+  - **登机口/机位变更的实际变更情况**：如"登机口 12 → 25（MUC 更新于 HH:mm）"，新旧值对比展示；
+  - 出港航段新增两行：**预计登机开始**（起飞前 40 分钟）与**预计登机口关闭**（起飞前 15 分钟），基于实时起飞时间；
+  - **特服详情区**：完整列出每条特服的类型、轮椅等级、数量、置信度、确认状态、更新时间（即现 UI 的详细形式）。
+- **底部"执勤完成"大按钮**：点击 → `advanceDutyIndex()` → 自动切到下一条任务；最后一条完成后显示"今日执勤全部完成"收尾页（含返回全部执勤入口）。
+- 边界：无排班 → 空态引导去导入；`dutyIndex` 越界 → 钳制到末位。
+### 4.3 设置（SettingsScreen）
+现 `SettingsDialog` 的所有功能原样平铺为独立页面（LazyColumn 分区）：
+- MUC 通知读取状态卡（授权状态、最近成功识别、最近处理结果、跳转系统授权页）；
+- 姓名编辑；
+- 飞常准 API Key（Keystore 加密保存说明、密码输入框、测试连接、清除 API Key）；
+- 保存按钮。
+行为与回调与现状完全一致（API Key 明文仍不得进入 saved-instance-state）。
+### 4.4 首启 Onboarding
+逻辑不变，套用东航红主题。
 
-- 在 `app/src/main/AndroidManifest.xml` 注册非导出的监听服务，使用系统要求的 `BIND_NOTIFICATION_LISTENER_SERVICE` 权限。
-- 设置页显示“未授权、已授权、最近成功识别时间”状态，并通过 `ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS` 打开本应用的授权页，无法解析时回退到通知监听器总设置页。[Android 设置接口](https://developer.android.com/reference/android/provider/Settings)
-- 仅处理新发布的 MUC 通知；通知被划掉或系统移除不视为业务取消。
-- 从 `EXTRA_MESSAGES`、`EXTRA_BIG_TEXT`、`EXTRA_TEXT_LINES`、`EXTRA_TEXT`、标题及会话标题中提取文本并去重，兼容普通、展开及群聊通知样式。[Android Notification extras](https://developer.android.com/reference/android/app/Notification)
-- 监听回调只做包名检查和文本提取，后续工作交给串行后台处理，避免阻塞系统主线程。
+## 5. MainActivity / 根 Composable 调整
+- `MainActivity.onCreate` 的依赖注入、`refreshLive`、`openExactAlarmSettings` 等保持不变。
+- `AirShiftApp` 中现有的编排逻辑（导入流程 `finishImport`、前台 5 分钟轮询、权限请求、生命周期 ON_START 同步、MUC state 收集）**原样保留**，仅：
+  - 界面部分替换为 `AirShiftRoot` + 三个 Screen；
+  - 新增 `dutyIndex` 状态（从 store 读、导入后重置）；
+  - `showSettings` 布尔状态改为 section 枚举；
+  - `SettingsDialog` → `SettingsScreen`。
+- 预计 MainActivity 净瘦身到约 400 行以内（纯编排），UI 组件全部移入 `ui/` 包。
 
-### 2. 高精度过滤与解析
+## 6. 测试与验证
+1. 新增 `DutyTimelineTest`（JVM 单测，覆盖进港/出港/接续、actual/estimated/scheduled 回退、空值）。
+2. 现有测试全部不受影响，必须保持通过。
+3. 构建验证：`gradlew.bat test lintDebug assembleDebug`（按 README 配置 JAVA_HOME）。
+4. 人工走查清单：首启 → 导入 → 三 tab 切换 → 当前执勤倒计时与登机时间 → 执勤完成推进 → 设置各项功能 → 下拉刷新。
 
-- 第一级过滤：包名必须等于 `com.ceair.im.muc`。
-- 第二级过滤：正文必须同时出现航班候选和特服、登机口/机位变更或业务取消线索；诸如“MU6700 有没有充电宝”直接丢弃。
-- 支持完整航班号与数字简写，例如 `MU857`、`2473`；统一以航班号完整数字部分精确匹配当前排班，不要求人工确认高置信结果。
-- 同一数字航班跨日期出现时，优先正文明确日期，其次通知日期，再选择日期距离最近的排班航段；高置信但尚无排班的结果保留 24 小时并自动重试。
-- 分类为五个独立类型：
-  - 残障旅客；
-  - 轮椅旅客，子类型 `WCHR`、`WCHS`、`WCHC`；
-  - `UM` 无陪伴儿童；
-  - `MAAS` 全流程陪伴；
-  - 客舱宠物。
-- 支持阿拉伯数字、常见中文数量词及大小写/全半角差异；数量无法可靠判断时保留“有该服务、人数未知”，不得从座位、行李、电话或票号误取数量。
-- 明确的 `UM/无陪伴儿童`、`MAAS/全流程陪伴`、轮椅代码、残障及“宠物进客舱”直接自动关联；仅出现“无随行”等弱别名时进入待确认。
-- 识别“登机口由 A2 变更为 A5”等消息，按航班数字部分自动更新航段卡；登机口关闭时间等无关字段不得误识别。
-- 识别“机位由 302 变更为 305”等消息，按航班数字部分自动覆盖进港到达机位或出港出发机位；机位关闭时间等无关字段不得误识别。
-- `取消、撤销、无需、放弃服务、更正、改为`等消息按时间更新同一航班同一类别；“取消行程、放弃行程、不乘机、退票”等航班级消息停用该航班特服并建立乱序保护，特别保护“无随行”不被当成否定词。
-- 同一群聊摘要反复推送时按正文指纹与消息时间去重；旧摘要不得覆盖更新记录。
+## 7. 实施顺序
+1. 生成 `PLAN.md` 到项目根目录（本计划内容）。
+2. `RosterStore` 进度持久化 + `DutyTimeline` + 单测。
+3. `ui/theme` + 底部导航骨架 + section 切换。
+4. `AllDutyScreen`（含精简卡片/角标/变更最小提醒）。
+5. `CurrentDutyScreen`（倒计时、详情、特服、变更对比、执勤完成）。
+6. `SettingsScreen` + `OnboardingScreen`。
+7. MainActivity 接线与清理；`README.md`「已实现」清单同步更新 UI 描述。
+8. 运行 §6 全部测试与构建，修复 lint 告警。
 
-样例预期：
-
-- `2473一位um` → `MU2473 / UM / 1`；
-- `9831一个UM，33J，托运1件，随身2件` → `UM / 1`，忽略座位和行李数量；
-- `2447一位MAAS全流程陪伴服务` → `MAAS / 1`；
-- `9670旅客临时轮椅服务：32C，WCHS` → `WCHS / 1`，忽略座位；
-- MU857、MU6802 的模板消息 → “客舱宠物”，不保存姓名、电话、票号、座位、品种或重量；
-- `无随行，6940值机已办理完毕……特服单据` → 疑似 UM，进入待确认。
-
-### 3. 数据模型、持久化与合并
-
-- 在独立 `specialservice` 模块中定义：
-  - `ServiceType`；
-  - `WheelchairLevel`；
-  - `ParsedServiceCandidate`；
-  - `FlightServiceRecord`；
-  - `ParsedGateChangeCandidate` 与 `GateChangeRecord`；
-  - `ParsedStandChangeCandidate` 与 `StandChangeRecord`；
-  - `ParsedFlightCancellationCandidate` 与 `FlightCancellationRecord`；
-  - `Confidence` 与 `ReviewStatus`。
-- 记录以“完整航班号、运行日期、服务类型、轮椅子类型”作为业务键，保存数量、更新时间、置信状态、到期时间和不可逆正文指纹。
-- 使用单独的本机 JSON/SharedPreferences 存储，不把特服字段塞入 `RosterAssignment`，避免排班重新导入或飞常准刷新覆盖结果，也不新增数据库依赖。
-- 通知正文只在内存中解析；持久化内容不得包含原文、姓名、发送人、电话、票号、座位、图片或附件。
-- 未匹配候选保留 24 小时，导入新排班后自动重新匹配；已匹配记录在航班实际、预计或计划完成时间后 24 小时清理。
-- 相同记录采用最新有效消息覆盖；用户可以确认、修改或忽略，忽略的正文指纹在到期前不再重复出现。
-- Repository 通过 `StateFlow` 向 Compose 暴露当前记录和待确认项，使前台收到通知后无需重启即可更新。
-
-### 4. UI 集成
-
-- 在进港和出港各自的航段区域显示徽标：`障残 ×N`、`WCHS ×N`、`UM ×N`、`MAAS ×N`、`客舱宠物 ×N`；数量未知时省略数量。
-- 卡片内显示类型、轮椅等级、置信状态和最后更新时间，不改变现有 VIP 边框与飞常准字段。
-- 首页“待确认特服消息”区域只展示低置信的脱敏候选；高置信未匹配项在后台等待排班并自动关联，不要求人工确认。
-- 航段卡显示 MUC 更新的登机口和机位，并在航班级特服取消或行程取消时显示明确状态。
-- 设置页提供通知访问状态、授权入口和最近一次处理结果，但不展示或记录完整通知正文。
-- 不额外发送本地特服提醒，避免与 MUC 原通知重复。
-
-## 测试与验收
-
-- 为文本标准化、关键词、数量、日期、完整航班号、数字简写、轮椅子类型、弱别名、否定/更正和多类别消息编写纯 Kotlin 单元测试。
-- 覆盖所有附件样例，以及无关聊天、手机号/票号/座位误识别、重复群摘要、乱序更新、跨日航班、同后缀歧义和记录过期。
-- 验证序列化结果不包含测试姓名、电话、票号、座位或原始正文。
-- 在真实手机上授予通知读取权限，发送一条无个人信息的 MUC 测试消息，确认通知字段可读、两秒内进入正确航段或待确认区；撤销权限后应用仍正常运行并明确提示。
-- 回归现有排班导入、VIP、飞常准刷新、定位和提醒功能；执行 `gradlew test lintDebug assembleDebug`，并在设备上完成相关冒烟测试。当前 `gradlew test` 基线已通过。
-
-## 假设与边界
-
-- V1 只识别通知中可见的文字，不读取历史聊天、图片、照片中的票据或被 MUC 隐藏的正文。
-- MUC 与本应用运行在同一 Android 用户空间；工作资料夹或企业策略若阻止通知监听，则视为平台限制。
-- 航班号数字部分无法在排班中匹配时先保留 24 小时；只有弱业务线索进入人工待确认。
-- 不新增服务器、网络接口、第三方依赖或飞常准 API 字段；原排班持久化格式和提醒规则保持不变，独立 MUC 状态仅做向后兼容扩展。
+## 8. 风险与注意
+- 不引入导航库等重型依赖（导航用手写枚举切换）；底部导航图标所需的 `material-icons-core` 并未随当前 Compose BOM 的 material3 传递进来，因此显式加入该官方轻量 artifact。若后续需要更丰富图标再评估 `material-icons-extended`。
+- 待确认特服流程已取消：低置信结果在 `MucMessageReducer` 中直接忽略（计数仍计入“最近处理结果”），`SpecialServiceRepository.confirmReview` / `ignoreReview` 及 UI 确认区已删除。
+- 倒计时仅 UI 展示，不改动 `ReminderPolicy` / 闹钟调度。
+- OneDrive 目录构建产物仍走 `%LOCALAPPDATA%/CodexBuild/AirShift`，不受影响。

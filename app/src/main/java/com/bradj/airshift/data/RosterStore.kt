@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import com.bradj.airshift.model.RosterAssignment
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 class RosterStore(context: Context) {
@@ -50,6 +51,28 @@ class RosterStore(context: Context) {
                 if (value == null) remove(KEY_LAST_LIVE_REFRESH) else putLong(KEY_LAST_LIVE_REFRESH, value)
             }
         }
+
+    val currentDutyIndex: Int
+        get() {
+            val progressDate = preferences.getString(KEY_DUTY_PROGRESS_DATE, null)
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            if (progressDate != LocalDate.now()) return 0
+            return preferences.getInt(KEY_DUTY_INDEX, 0).coerceAtLeast(0)
+        }
+
+    fun resetDutyProgress() {
+        preferences.edit {
+            putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+            putInt(KEY_DUTY_INDEX, 0)
+        }
+    }
+
+    fun advanceDutyIndex() {
+        preferences.edit {
+            putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+            putInt(KEY_DUTY_INDEX, currentDutyIndex + 1)
+        }
+    }
 
     fun saveAssignments(assignments: List<RosterAssignment>) {
         val array = JSONArray()
@@ -145,6 +168,8 @@ class RosterStore(context: Context) {
         private const val FILE_NAME = "air_shift"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_LAST_LIVE_REFRESH = "last_live_refresh"
+        private const val KEY_DUTY_PROGRESS_DATE = "duty_progress_date"
+        private const val KEY_DUTY_INDEX = "duty_index"
         private const val KEY_ASSIGNMENTS = "assignments"
         private const val KEY_LEGACY_SUPPLEMENT = "roster_supplement"
         private const val KEY_LEGACY_GATEWAY_URL = "gateway_url"

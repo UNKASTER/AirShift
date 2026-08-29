@@ -13,39 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,15 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -78,35 +38,26 @@ import com.bradj.airshift.api.VariFlightClient
 import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
-import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ReminderReceiver
 import com.bradj.airshift.reminder.ReminderScheduler
-import com.bradj.airshift.specialservice.Confidence
-import com.bradj.airshift.specialservice.CandidateAction
-import com.bradj.airshift.specialservice.FlightCancellationRecord
-import com.bradj.airshift.specialservice.FlightCancellationScope
-import com.bradj.airshift.specialservice.FlightReference
-import com.bradj.airshift.specialservice.FlightServiceRecord
-import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.NotificationAccess
-import com.bradj.airshift.specialservice.PendingServiceReview
-import com.bradj.airshift.specialservice.RosterFlightMatcher
-import com.bradj.airshift.specialservice.ServiceType
 import com.bradj.airshift.specialservice.SpecialServiceRepository
-import com.bradj.airshift.specialservice.StandChangeRecord
-import com.bradj.airshift.specialservice.WheelchairLevel
+import com.bradj.airshift.ui.AirShiftRoot
+import com.bradj.airshift.ui.DutySection
+import com.bradj.airshift.ui.all.AllDutyScreen
+import com.bradj.airshift.ui.current.CurrentDutyScreen
+import com.bradj.airshift.ui.onboarding.OnboardingScreen
+import com.bradj.airshift.ui.settings.SettingsScreen
+import com.bradj.airshift.ui.theme.AirShiftTheme
 import kotlinx.coroutines.delay
 import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 5 * 60 * 1000L
 private const val BUSY_REFRESH_RETRY_MILLIS = 15 * 1000L
@@ -227,7 +178,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AirShiftApp(
     context: Context,
@@ -259,7 +209,8 @@ private fun AirShiftApp(
     var exactAlarmWarning by remember {
         mutableStateOf(assignments.isNotEmpty() && !ReminderScheduler.canScheduleExactAlarms(context))
     }
-    var showSettings by remember { mutableStateOf(false) }
+    var section by rememberSaveable { mutableStateOf(DutySection.ALL) }
+    var dutyIndex by remember { mutableStateOf(store.currentDutyIndex) }
     var locationCandidates by remember { mutableStateOf(emptyList<AirportPoint>()) }
     var hasVariFlightApiKey by remember { mutableStateOf(store.hasVariFlightApiKey) }
     var notificationAccessGranted by remember { mutableStateOf(NotificationAccess.isGranted(context)) }
@@ -345,6 +296,8 @@ private fun AirShiftApp(
         if (apiKey == null) {
             isWorking = false
             scheduleAndSave(parsed)
+            store.resetDutyProgress()
+            dutyIndex = 0
             statusMessage = "排班已识别；尚未配置飞常准 API Key，当前按表内计划时间提醒"
             requestPermissionsAndLocate()
             return
@@ -355,6 +308,8 @@ private fun AirShiftApp(
             locationCandidates = refresh.airports
             warnings = result.warnings + refresh.errors
             scheduleAndSave(refresh.assignments)
+            store.resetDutyProgress()
+            dutyIndex = 0
             isWorking = false
             requestPermissionsAndLocate()
         }
@@ -423,6 +378,7 @@ private fun AirShiftApp(
                     assignments = restoredAssignments
                     specialServiceRepository.onRosterChanged(restoredAssignments)
                     notificationAccessGranted = NotificationAccess.isGranted(context)
+                    dutyIndex = store.currentDutyIndex
                     syncExactAlarmState(restoredAssignments, rescheduleIfAllowed = true)
                     isForeground = true
                 }
@@ -475,858 +431,82 @@ private fun AirShiftApp(
         }
     }
 
-    if (showSettings) {
-        SettingsDialog(
-            currentName = userName.orEmpty(),
-            currentApiKey = store.variFlightApiKey.orEmpty(),
-            hasStoredApiKey = hasVariFlightApiKey,
-            notificationAccessGranted = notificationAccessGranted,
-            lastSuccessfulRecognitionEpochMillis = specialServiceState.lastSuccessfulRecognitionEpochMillis,
-            lastProcessingResult = specialServiceState.lastProcessingResult,
-            onOpenNotificationAccessSettings = openNotificationAccessSettings,
-            onDismiss = { showSettings = false },
-            onSave = { name, apiKey ->
-                runCatching {
-                    store.userName = name
-                    if (apiKey.isNotBlank()) store.variFlightApiKey = apiKey
-                }.onSuccess {
-                    VariFlightClient.clearCachedFlights()
-                    hasVariFlightApiKey = store.hasVariFlightApiKey
-                    FlightRefreshScheduler.configure(context, hasVariFlightApiKey)
-                    userName = name.trim()
-                    showSettings = false
-                }.onFailure { error ->
-                    statusMessage = error.message ?: "无法保存设置"
-                }
-            },
-            onClearApiKey = {
-                store.clearVariFlightApiKey()
-                VariFlightClient.clearCachedFlights()
-                hasVariFlightApiKey = false
-                FlightRefreshScheduler.configure(context, enabled = false)
-                statusMessage = "飞常准 API Key 已清除，后台实时刷新已停止"
-            },
-            onTestConnection = ::testVariFlightApiKey,
-        )
-    }
-
     val visibleSpecialServiceRecords = specialServiceState.activeRecords()
     val visibleGateChanges = specialServiceState.activeGateChanges()
     val visibleStandChanges = specialServiceState.activeStandChanges()
     val visibleFlightCancellations = specialServiceState.activeFlightCancellations()
-    val manualReviews = specialServiceState.pendingReviews.filter { it.confidence == Confidence.LOW }
-    val rosterFlights = remember(assignments) { RosterFlightMatcher.index(assignments) }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isLiveRefreshing,
-            onRefresh = { refreshCurrentAssignments() },
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                item { Header(userName.orEmpty(), currentAirport, onSettings = { showSettings = true }) }
-                item {
-                    ImportCard(
-                        isWorking = isWorking,
-                        onImportImage = {
-                            photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        onImportExcel = { excelPicker.launch(arrayOf(XLS_MIME_TYPE, XLSX_MIME_TYPE)) },
-                    )
-                }
-                statusMessage?.let { message ->
-                    item {
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (exactAlarmWarning) {
-                    item {
-                        ActionNotice(
-                            text = "系统尚未允许精确闹钟，提醒时间可能略有偏差。",
-                            action = "开启精确提醒",
-                            onAction = openExactAlarmSettings,
-                        )
-                    }
-                }
-                if (warnings.isNotEmpty()) item { WarningCard(warnings) }
-                if (manualReviews.isNotEmpty()) {
-                    item {
-                        PendingSpecialServiceSection(
-                            reviews = manualReviews,
-                            rosterFlights = rosterFlights,
-                            onConfirm = specialServiceRepository::confirmReview,
-                            onIgnore = specialServiceRepository::ignoreReview,
-                        )
-                    }
-                }
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("我的保障任务", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("${assignments.size} 项", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                if (assignments.isEmpty()) {
-                    item { EmptyRoster() }
-                } else {
-                    items(assignments, key = { it.stableId }) { assignment ->
-                        AssignmentCard(
-                            assignment = assignment,
-                            specialServiceRecords = visibleSpecialServiceRecords,
-                            gateChanges = visibleGateChanges,
-                            standChanges = visibleStandChanges,
-                            flightCancellations = visibleFlightCancellations,
-                        )
-                    }
-                }
-                item { Spacer(Modifier.height(20.dp)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OnboardingScreen(onSave: (String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("航勤智排", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-            Text("先告诉我你的姓名。之后每次导入排班，只会提取分配给你的航班。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(28.dp))
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it.take(20) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("排班表中的姓名") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+    AirShiftRoot(
+        section = section,
+        onSectionSelected = { section = it },
+    ) { padding ->
+        when (section) {
+            DutySection.ALL -> AllDutyScreen(
+                userName = userName.orEmpty(),
+                currentAirport = currentAirport,
+                isWorking = isWorking,
+                isLiveRefreshing = isLiveRefreshing,
+                statusMessage = statusMessage,
+                warnings = warnings,
+                exactAlarmWarning = exactAlarmWarning,
+                assignments = assignments,
+                specialServiceRecords = visibleSpecialServiceRecords,
+                gateChanges = visibleGateChanges,
+                standChanges = visibleStandChanges,
+                flightCancellations = visibleFlightCancellations,
+                onImportImage = {
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onImportExcel = { excelPicker.launch(arrayOf(XLS_MIME_TYPE, XLSX_MIME_TYPE)) },
+                onRefresh = { refreshCurrentAssignments() },
+                onOpenExactAlarmSettings = openExactAlarmSettings,
+                modifier = Modifier.padding(padding),
             )
-            Spacer(Modifier.height(18.dp))
-            Button(
-                onClick = { onSave(name.trim()) },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                enabled = name.trim().length >= 2,
-            ) { Text("保存并开始使用") }
-            Spacer(Modifier.height(12.dp))
-            Text("姓名仅保存在本机，可稍后在设置中修改。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun Header(name: String, airport: String?, onSettings: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("你好，$name", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(
-                airport?.let { "当前位置：$it" } ?: "当前位置：导入并刷新航班后自动识别机场",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            DutySection.CURRENT -> CurrentDutyScreen(
+                assignments = assignments,
+                dutyIndex = dutyIndex,
+                specialServiceRecords = visibleSpecialServiceRecords,
+                gateChanges = visibleGateChanges,
+                standChanges = visibleStandChanges,
+                flightCancellations = visibleFlightCancellations,
+                onDutyComplete = {
+                    store.advanceDutyIndex()
+                    dutyIndex = store.currentDutyIndex
+                },
+                onGoToAllDuty = { section = DutySection.ALL },
+                modifier = Modifier.padding(padding),
             )
-        }
-        TextButton(onClick = onSettings) { Text("设置") }
-    }
-}
-
-@Composable
-private fun ImportCard(
-    isWorking: Boolean,
-    onImportImage: () -> Unit,
-    onImportExcel: () -> Unit,
-) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        if (isWorking) {
-            Button(
-                onClick = {},
-                modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-                enabled = false,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-                Spacer(Modifier.size(10.dp))
-                Text("处理中")
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Button(
-                    onClick = onImportImage,
-                    modifier = Modifier.weight(1f).height(52.dp),
-                ) { Text("上传排班图片") }
-                Button(
-                    onClick = onImportExcel,
-                    modifier = Modifier.weight(1f).height(52.dp),
-                ) { Text("导入 Excel") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssignmentCard(
-    assignment: RosterAssignment,
-    specialServiceRecords: List<FlightServiceRecord>,
-    gateChanges: List<GateChangeRecord>,
-    standChanges: List<StandChangeRecord>,
-    flightCancellations: List<FlightCancellationRecord>,
-) {
-    val vipAccent = Color(0xFFF59E0B)
-    val vipBadgeText = when {
-        assignment.inboundHasVip && assignment.outboundHasVip -> "VIP"
-        assignment.inboundHasVip -> "进港 VIP"
-        assignment.outboundHasVip -> "出港 VIP"
-        else -> null
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = if (assignment.hasVip) BorderStroke(2.dp, vipAccent) else null,
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    when (assignment.kind) {
-                        AssignmentKind.ARRIVAL_ONLY -> "进港保障"
-                        AssignmentKind.DEPARTURE_ONLY -> "出港保障"
-                        AssignmentKind.TURNAROUND -> "进港后接续出港"
-                    },
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                vipBadgeText?.let { label ->
-                    Surface(
-                        color = Color(0xFFFFE3A3),
-                        shape = RoundedCornerShape(7.dp),
-                    ) {
-                        Text(
-                            label,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            color = Color(0xFF7A4300),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-            Text(
-                buildList {
-                    add("机号：${assignment.aircraftRegistration}")
-                    assignment.aircraftType?.let { add("机型：$it") }
-                }.joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(14.dp))
-            assignment.inboundFlight?.let { flight ->
-                val operationDate = assignment.scheduledArrival?.toLocalDate()
-                val gateChange = gateChanges.gateForFlight(flight, operationDate)
-                val standChange = standChanges.standForFlight(flight, operationDate)
-                FlightRow(
-                    direction = "进港",
-                    flight = flight,
-                    fromCode = assignment.originCode,
-                    fromName = assignment.origin,
-                    toCode = assignment.localAirportCode,
-                    toName = assignment.localAirportName,
-                    planned = assignment.scheduledArrival,
-                    estimated = assignment.estimatedArrival,
-                    actual = assignment.actualArrival,
-                    specialServices = specialServiceRecords.forFlight(
-                        flight = flight,
-                        operationDate = operationDate,
-                    ),
-                    flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = listOf(
-                        "登机口：${gateChange?.boardingGate ?: assignment.inboundBoardingGate ?: "--"}${if (gateChange == null) "" else "（MUC更新）"}",
-                        "登机口关闭：${assignment.inboundGateClosedObservedAt.formatClock()}",
-                        "实际离位：${assignment.inboundActualOffBlock.formatClock()}",
-                        "到达机位：${standChange?.stand ?: assignment.arrivalStand ?: "--"}${if (standChange == null) "" else "（MUC更新）"}",
-                    ),
-                )
-            }
-            if (assignment.inboundFlight != null && assignment.outboundFlight != null) {
-                Spacer(Modifier.height(12.dp))
-            }
-            assignment.outboundFlight?.let { flight ->
-                val operationDate = assignment.scheduledDeparture?.toLocalDate()
-                val gateChange = gateChanges.gateForFlight(flight, operationDate)
-                val standChange = standChanges.standForFlight(flight, operationDate)
-                FlightRow(
-                    direction = "出港",
-                    flight = flight,
-                    fromCode = assignment.localAirportCode,
-                    fromName = assignment.localAirportName,
-                    toCode = assignment.destinationCode,
-                    toName = assignment.destination,
-                    planned = assignment.scheduledDeparture,
-                    estimated = assignment.estimatedDeparture,
-                    actual = assignment.actualDeparture,
-                    specialServices = specialServiceRecords.forFlight(
-                        flight = flight,
-                        operationDate = operationDate,
-                    ),
-                    flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                    details = listOf(
-                        "登机口：${gateChange?.boardingGate ?: assignment.boardingGate ?: "--"}${if (gateChange == null) "" else "（MUC更新）"}",
-                        "出发机位：${standChange?.stand ?: assignment.departureStand ?: "--"}${if (standChange == null) "" else "（MUC更新）"}",
-                        "登机口关闭：${assignment.outboundGateClosedObservedAt.formatClock()}",
-                        "实际离位：${assignment.outboundActualOffBlock.formatClock()}",
-                    ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FlightRow(
-    direction: String,
-    flight: String,
-    fromCode: String?,
-    fromName: String?,
-    toCode: String?,
-    toName: String?,
-    planned: LocalDateTime?,
-    estimated: LocalDateTime?,
-    actual: LocalDateTime?,
-    specialServices: List<FlightServiceRecord>,
-    flightCancellation: FlightCancellationRecord?,
-    details: List<String>,
-) {
-    val liveTime = actual ?: estimated
-    val timeColor = if (liveTime == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-    val isInbound = direction == "进港"
-    val sectionColor = if (isInbound) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer
-    val accentColor = if (isInbound) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = sectionColor,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(flight, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                }
-                Column(modifier = Modifier.padding(start = 12.dp), horizontalAlignment = Alignment.End) {
-                    Text(
-                        "实时",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        liveTime.formatClock(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = timeColor,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        "计划：${planned.formatClock()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                AirportRouteLabel(
-                    code = fromCode,
-                    name = fromName,
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.Start,
-                )
-                Text("→", modifier = Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                AirportRouteLabel(
-                    code = toCode,
-                    name = toName,
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End,
-                )
-            }
-            flightCancellation?.let { cancellation ->
-                Spacer(Modifier.height(8.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(7.dp),
-                ) {
-                    Text(
-                        if (cancellation.scope == FlightCancellationScope.TRIP) "MUC：行程已取消" else "MUC：特服已取消",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-            if (specialServices.isNotEmpty()) {
-                Spacer(Modifier.height(9.dp))
-                SpecialServiceDetails(specialServices)
-            }
-            if (details.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    details.forEach { detail ->
-                        Text(
-                            detail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = accentColor,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SpecialServiceDetails(records: List<FlightServiceRecord>) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        records.sortedBy { it.serviceType.ordinal }.forEach { record ->
-            Surface(
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                shape = RoundedCornerShape(7.dp),
-            ) {
-                Text(
-                    record.badgeLabel(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-    }
-    Spacer(Modifier.height(5.dp))
-    records.sortedBy { it.serviceType.ordinal }.forEach { record ->
-        Text(
-            "${record.typeLabel()} · ${record.confidence.label()} · 已确认 · 更新 ${record.updatedAtEpochMillis.formatEpoch("MM-dd HH:mm")}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-private fun List<FlightServiceRecord>.forFlight(
-    flight: String,
-    operationDate: LocalDate?,
-): List<FlightServiceRecord> {
-    if (operationDate == null) return emptyList()
-    val normalizedFlight = RosterFlightMatcher.normalizeFlight(flight)
-    return filter { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
-}
-
-private fun List<GateChangeRecord>.gateForFlight(
-    flight: String,
-    operationDate: LocalDate?,
-): GateChangeRecord? {
-    if (operationDate == null) return null
-    val normalizedFlight = RosterFlightMatcher.normalizeFlight(flight)
-    return firstOrNull { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
-}
-
-private fun List<StandChangeRecord>.standForFlight(
-    flight: String,
-    operationDate: LocalDate?,
-): StandChangeRecord? {
-    if (operationDate == null) return null
-    val normalizedFlight = RosterFlightMatcher.normalizeFlight(flight)
-    return firstOrNull { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
-}
-
-private fun List<FlightCancellationRecord>.cancellationForFlight(
-    flight: String,
-    operationDate: LocalDate?,
-): FlightCancellationRecord? {
-    if (operationDate == null) return null
-    val normalizedFlight = RosterFlightMatcher.normalizeFlight(flight)
-    return firstOrNull { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
-}
-
-@Composable
-private fun AirportRouteLabel(
-    code: String?,
-    name: String?,
-    modifier: Modifier,
-    horizontalAlignment: Alignment.Horizontal,
-) {
-    Column(modifier = modifier, horizontalAlignment = horizontalAlignment) {
-        Text(
-            code ?: "---",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            name ?: "机场名称待更新",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun WarningCard(warnings: List<String>) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("需要留意", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-            warnings.distinct().forEach {
-                Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActionNotice(text: String, action: String, onAction: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = onAction) { Text(action) }
-        }
-    }
-}
-
-@Composable
-private fun EmptyRoster() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("还没有排班", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("导入排班图片或 Excel 文件后，你的保障任务会显示在这里。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun PendingSpecialServiceSection(
-    reviews: List<PendingServiceReview>,
-    rosterFlights: List<FlightReference>,
-    onConfirm: (String, FlightReference, ServiceType, WheelchairLevel?, Int?) -> Unit,
-    onIgnore: (String) -> Unit,
-) {
-    var editingReviewId by remember { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("待确认特服消息", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        reviews.forEach { review ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                    Text(
-                        "航班候选：${review.flightToken} · ${review.explicitDate ?: review.notificationDate}",
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        buildList {
-                            add(review.typeLabel())
-                            add(review.count?.let { "数量 $it" } ?: "数量未知")
-                            add(review.confidence.label())
-                            if (review.action == CandidateAction.CANCEL) add("取消/撤销")
-                        }.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        if (review.suggestedFlights.isEmpty()) "当前排班没有唯一匹配" else "可选排班：${review.suggestedFlights.joinToString { it.flightNumber }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(modifier = Modifier.align(Alignment.End)) {
-                        TextButton(onClick = { onIgnore(review.id) }) { Text("忽略") }
-                        TextButton(onClick = { editingReviewId = review.id }) { Text("确认/修正") }
-                    }
-                }
-            }
-        }
-    }
-    reviews.firstOrNull { it.id == editingReviewId }?.let { review ->
-        SpecialServiceReviewDialog(
-            review = review,
-            rosterFlights = rosterFlights,
-            onDismiss = { editingReviewId = null },
-            onConfirm = { flight, serviceType, wheelchairLevel, count ->
-                onConfirm(review.id, flight, serviceType, wheelchairLevel, count)
-                editingReviewId = null
-            },
-        )
-    }
-}
-
-@Composable
-private fun SpecialServiceReviewDialog(
-    review: PendingServiceReview,
-    rosterFlights: List<FlightReference>,
-    onDismiss: () -> Unit,
-    onConfirm: (FlightReference, ServiceType, WheelchairLevel?, Int?) -> Unit,
-) {
-    val initialFlightKey = review.suggestedFlights.singleOrNull()?.key
-    var selectedFlightKey by remember(review.id, rosterFlights) { mutableStateOf(initialFlightKey) }
-    var serviceType by remember(review.id) { mutableStateOf(review.serviceType) }
-    var wheelchairLevel by remember(review.id) { mutableStateOf(review.wheelchairLevel) }
-    var countText by remember(review.id) { mutableStateOf(review.count?.toString().orEmpty()) }
-    val selectedFlight = rosterFlights.firstOrNull { it.key == selectedFlightKey }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("确认或修正特服") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 520.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("选择排班航班", fontWeight = FontWeight.Bold)
-                if (rosterFlights.isEmpty()) {
-                    Text("请先导入包含该航班的排班", color = MaterialTheme.colorScheme.error)
-                } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 150.dp)) {
-                        items(rosterFlights, key = FlightReference::key) { flight ->
-                            TextButton(onClick = { selectedFlightKey = flight.key }) {
-                                Text("${if (selectedFlightKey == flight.key) "✓ " else ""}${flight.flightNumber} · ${flight.operationDate}")
-                            }
-                        }
-                    }
-                }
-                Text("服务类型", fontWeight = FontWeight.Bold)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ServiceType.entries.forEach { type ->
-                        TextButton(onClick = { serviceType = type }) {
-                            Text("${if (serviceType == type) "✓ " else ""}${type.label()}")
-                        }
-                    }
-                }
-                if (serviceType == ServiceType.WHEELCHAIR) {
-                    Text("轮椅等级", fontWeight = FontWeight.Bold)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (listOf<WheelchairLevel?>(null) + WheelchairLevel.entries).forEach { level ->
-                            TextButton(onClick = { wheelchairLevel = level }) {
-                                Text("${if (wheelchairLevel == level) "✓ " else ""}${level?.name ?: "未指定"}")
-                            }
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = countText,
-                    onValueChange = { countText = it.filter(Char::isDigit).take(2) },
-                    label = { Text("数量（留空表示未知）") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    selectedFlight?.let { flight ->
-                        onConfirm(
-                            flight,
-                            serviceType,
-                            wheelchairLevel.takeIf { serviceType == ServiceType.WHEELCHAIR },
-                            countText.toIntOrNull()?.takeIf { it > 0 },
-                        )
+            DutySection.SETTINGS -> SettingsScreen(
+                currentName = userName.orEmpty(),
+                currentApiKey = store.variFlightApiKey.orEmpty(),
+                hasStoredApiKey = hasVariFlightApiKey,
+                notificationAccessGranted = notificationAccessGranted,
+                lastSuccessfulRecognitionEpochMillis = specialServiceState.lastSuccessfulRecognitionEpochMillis,
+                lastProcessingResult = specialServiceState.lastProcessingResult,
+                onOpenNotificationAccessSettings = openNotificationAccessSettings,
+                onSave = { name, apiKey ->
+                    runCatching {
+                        store.userName = name
+                        if (apiKey.isNotBlank()) store.variFlightApiKey = apiKey
+                    }.onSuccess {
+                        VariFlightClient.clearCachedFlights()
+                        hasVariFlightApiKey = store.hasVariFlightApiKey
+                        FlightRefreshScheduler.configure(context, hasVariFlightApiKey)
+                        userName = name.trim()
+                    }.onFailure { error ->
+                        statusMessage = error.message ?: "无法保存设置"
                     }
                 },
-                enabled = selectedFlight != null,
-            ) { Text("确认") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+                onClearApiKey = {
+                    store.clearVariFlightApiKey()
+                    VariFlightClient.clearCachedFlights()
+                    hasVariFlightApiKey = false
+                    FlightRefreshScheduler.configure(context, enabled = false)
+                    statusMessage = "飞常准 API Key 已清除，后台实时刷新已停止"
+                },
+                onTestConnection = ::testVariFlightApiKey,
+                modifier = Modifier.padding(padding),
+            )
+        }
+    }
 }
-
-@Composable
-private fun SettingsDialog(
-    currentName: String,
-    currentApiKey: String,
-    hasStoredApiKey: Boolean,
-    notificationAccessGranted: Boolean,
-    lastSuccessfulRecognitionEpochMillis: Long?,
-    lastProcessingResult: String?,
-    onOpenNotificationAccessSettings: () -> Unit,
-    onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit,
-    onClearApiKey: () -> Unit,
-    onTestConnection: (String, (Result<Unit>) -> Unit) -> Unit,
-) {
-    var name by rememberSaveable { mutableStateOf(currentName) }
-    // The plaintext API key must never enter Android's saved-instance-state bundle.
-    var apiKey by remember(currentApiKey) { mutableStateOf(currentApiKey) }
-    var isTesting by remember { mutableStateOf(false) }
-    var connectionMessage by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("设置") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text("MUC 通知读取", fontWeight = FontWeight.Bold)
-                        Text(if (notificationAccessGranted) "状态：已授权" else "状态：未授权")
-                        Text(
-                            "最近成功识别：${lastSuccessfulRecognitionEpochMillis?.formatEpoch("MM-dd HH:mm") ?: "暂无"}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        lastProcessingResult?.let { result ->
-                            Text(result, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        TextButton(onClick = onOpenNotificationAccessSettings) {
-                            Text(if (notificationAccessGranted) "管理通知读取权限" else "授予通知读取权限")
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(20) },
-                    label = { Text("姓名") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        connectionMessage = null
-                    },
-                    label = { Text("飞常准 API Key") },
-                    supportingText = { Text("由你手动输入，使用 Android Keystore + AES-GCM 加密保存") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                )
-                connectionMessage?.let { message ->
-                    Text(
-                        message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Row {
-                TextButton(
-                    onClick = {
-                        isTesting = true
-                        connectionMessage = null
-                        onTestConnection(apiKey.trim()) { result ->
-                            isTesting = false
-                            connectionMessage = result.fold(
-                                onSuccess = { "连接成功" },
-                                onFailure = { error -> "连接失败：${error.message ?: "请稍后重试"}" },
-                            )
-                        }
-                    },
-                    enabled = apiKey.isNotBlank() && !isTesting,
-                ) { Text(if (isTesting) "测试中…" else "测试连接") }
-                TextButton(
-                    onClick = { onSave(name.trim(), apiKey.trim()) },
-                    enabled = name.trim().length >= 2 && !isTesting,
-                ) { Text("保存") }
-            }
-        },
-        dismissButton = {
-            Row {
-                if (hasStoredApiKey || apiKey.isNotBlank()) {
-                    TextButton(
-                        onClick = {
-                            onClearApiKey()
-                            apiKey = ""
-                            connectionMessage = "API Key 已清除"
-                        },
-                        enabled = !isTesting,
-                    ) { Text("清除 API Key") }
-                }
-                TextButton(onClick = onDismiss, enabled = !isTesting) { Text("取消") }
-            }
-        },
-    )
-}
-
-@Composable
-private fun AirShiftTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Color(0xFF116B5B),
-            onPrimary = Color.White,
-            primaryContainer = Color(0xFFD6F2E9),
-            onPrimaryContainer = Color(0xFF083D34),
-            secondary = Color(0xFF48645D),
-            secondaryContainer = Color(0xFFD6E8E1),
-            tertiary = Color(0xFF765A00),
-            tertiaryContainer = Color(0xFFFFE08B),
-            background = Color(0xFFF6FAF8),
-            surface = Color.White,
-            surfaceVariant = Color(0xFFE9EFEC),
-        ),
-        content = content,
-    )
-}
-
-private fun LocalDateTime?.formatClock(): String =
-    this?.format(DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)) ?: "--:--"
-
-private fun FlightServiceRecord.badgeLabel(): String =
-    "${when (serviceType) {
-        ServiceType.DISABILITY -> "障残"
-        ServiceType.WHEELCHAIR -> wheelchairLevel?.name ?: "轮椅"
-        ServiceType.UNACCOMPANIED_MINOR -> "UM"
-        ServiceType.MAAS -> "MAAS"
-        ServiceType.CABIN_PET -> "客舱宠物"
-    }}${count?.let { " ×$it" }.orEmpty()}"
-
-private fun FlightServiceRecord.typeLabel(): String = when (serviceType) {
-    ServiceType.WHEELCHAIR -> "轮椅旅客${wheelchairLevel?.let { "（${it.name}）" }.orEmpty()}"
-    else -> serviceType.label()
-}
-
-private fun PendingServiceReview.typeLabel(): String = when (serviceType) {
-    ServiceType.WHEELCHAIR -> "轮椅旅客${wheelchairLevel?.let { "（${it.name}）" }.orEmpty()}"
-    else -> serviceType.label()
-}
-
-private fun ServiceType.label(): String = when (this) {
-    ServiceType.DISABILITY -> "残障旅客"
-    ServiceType.WHEELCHAIR -> "轮椅旅客"
-    ServiceType.UNACCOMPANIED_MINOR -> "UM 无陪伴儿童"
-    ServiceType.MAAS -> "MAAS 全流程陪伴"
-    ServiceType.CABIN_PET -> "客舱宠物"
-}
-
-private fun Confidence.label(): String = when (this) {
-    Confidence.HIGH -> "高置信"
-    Confidence.LOW -> "低置信"
-}
-
-private fun Long.formatEpoch(pattern: String): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
-    .format(DateTimeFormatter.ofPattern(pattern, Locale.CHINA))

@@ -3,8 +3,8 @@
     <style name="Theme.AirShift" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:colorAccent">#116B5B</item>
-        <item name="android:navigationBarColor">#F6FAF8</item>
-        <item name="android:statusBarColor">#F6FAF8</item>
+        <item name="android:colorAccent">#C8102E</item>
+        <item name="android:navigationBarColor">#F5F6F8</item>
+        <item name="android:statusBarColor">#F5F6F8</item>
     </style>
 </resources>

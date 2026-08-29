@@ -187,7 +187,7 @@ class SpecialServiceStateTest {
     }
 
     @Test
-    fun highConfidenceAutoMatchesNumericPartWhileLowConfidenceRemainsManual() {
+    fun highConfidenceAutoMatchesNumericPartWhileLowConfidenceIsIgnored() {
         val high = MucMessageReducer.apply(
             SpecialServiceState(),
             ParsedMucMessage(serviceCandidates = listOf(candidate(100L, "high"))),
@@ -203,7 +203,9 @@ class SpecialServiceStateTest {
             listOf(flight),
         )
         assertEquals(1, low.manualReviews)
-        assertEquals(Confidence.LOW, low.state.pendingReviews.single().confidence)
+        assertEquals(0, low.specialServicesAutoMatched)
+        assertTrue(low.state.pendingReviews.isEmpty())
+        assertTrue(low.state.records.isEmpty())
 
         val unmatched = MucMessageReducer.apply(
             SpecialServiceState(),
