@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.bradj.airshift.data.RosterStore
+import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.SpecialServiceRepository
 import java.time.Duration
@@ -22,6 +23,10 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
         val assignments = store.loadAssignments()
         if (assignments.isEmpty()) return Result.success()
         val now = LocalDateTime.now()
+        if (assignments.allDutiesComplete(now)) {
+            FlightRefreshScheduler.configure(applicationContext, enabled = false)
+            return Result.success()
+        }
         val relevantFlights = assignments.flatMap { assignment ->
             buildList {
                 assignment.inboundFlight?.let { flight ->

@@ -81,6 +81,7 @@ import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
@@ -136,7 +137,7 @@ class MainActivity : ComponentActivity() {
         ReminderReceiver.createChannel(this)
         val store = RosterStore(this)
         val specialServiceRepository = SpecialServiceRepository.get(this)
-        FlightRefreshScheduler.configure(this, store.hasVariFlightApiKey)
+        FlightRefreshScheduler.configure(this, store.hasVariFlightApiKey && !store.loadAssignments().allDutiesComplete())
         setContent {
             val pendingSharedExcelImports by sharedExcelImportQueue.pending.collectAsStateWithLifecycle()
             AirShiftTheme {
@@ -309,7 +310,7 @@ private fun AirShiftApp(
         assignments = updated
         store.saveAssignments(updated)
         specialServiceRepository.onRosterChanged(updated)
-        FlightRefreshScheduler.configure(context, hasVariFlightApiKey)
+        FlightRefreshScheduler.configure(context, hasVariFlightApiKey && !updated.allDutiesComplete())
         val summary = ReminderScheduler.scheduleAll(context, updated)
         exactAlarmWarning = updated.isNotEmpty() && !summary.exactAlarmsAllowed
         statusMessage = "已保存 ${updated.size} 个保障任务，安排 ${summary.scheduledCount} 个提醒"
@@ -466,6 +467,10 @@ private fun AirShiftApp(
     LaunchedEffect(isForeground, assignments.isNotEmpty(), hasVariFlightApiKey) {
         if (!isForeground || assignments.isEmpty() || !hasVariFlightApiKey) return@LaunchedEffect
         while (true) {
+            if (assignments.allDutiesComplete()) {
+                statusMessage = "今日执勤已全部完成，自动刷新已停止，导入新排班后恢复"
+                return@LaunchedEffect
+            }
             if (isWorking) {
                 delay(BUSY_REFRESH_RETRY_MILLIS)
                 continue

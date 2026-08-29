@@ -1,5 +1,6 @@
 package com.bradj.airshift.model
 
+import java.time.Duration
 import java.time.LocalDateTime
 
 data class RosterAssignment(
@@ -56,3 +57,23 @@ enum class AssignmentKind {
     DEPARTURE_ONLY,
     TURNAROUND,
 }
+
+/** 航班过点后仍视为"执勤完成"的宽限期（覆盖无实时数据、航班取消等场景）。 */
+val DUTY_COMPLETION_GRACE: Duration = Duration.ofHours(3)
+
+private fun isLegComplete(actual: LocalDateTime?, estimated: LocalDateTime?, scheduled: LocalDateTime?, now: LocalDateTime): Boolean {
+    if (actual != null) return true
+    val bestKnown = estimated ?: scheduled ?: return true // 无任何时间信息，无法跟踪，视为完成
+    return now >= bestKnown + DUTY_COMPLETION_GRACE
+}
+
+fun RosterAssignment.isDutyComplete(now: LocalDateTime = LocalDateTime.now()): Boolean {
+    val inboundComplete = inboundFlight == null ||
+        isLegComplete(actualArrival, estimatedArrival, scheduledArrival, now)
+    val outboundComplete = outboundFlight == null ||
+        isLegComplete(actualDeparture, estimatedDeparture, scheduledDeparture, now)
+    return inboundComplete && outboundComplete
+}
+
+fun List<RosterAssignment>.allDutiesComplete(now: LocalDateTime = LocalDateTime.now()): Boolean =
+    isNotEmpty() && all { it.isDutyComplete(now) }
