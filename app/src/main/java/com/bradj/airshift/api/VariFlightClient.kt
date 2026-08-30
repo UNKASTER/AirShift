@@ -56,10 +56,12 @@ class VariFlightClient(apiKey: String) {
         }
     }
 
-    fun fetchFlightBlocking(flightNumber: String, date: LocalDate): FlightInfo {
+    fun fetchFlightBlocking(flightNumber: String, date: LocalDate): FlightInfo =
+        fetchFlightBlocking(FlightLookup.of(flightNumber, date)) { true }
+
+    internal fun fetchFlightBlocking(lookup: FlightLookup, isCurrent: () -> Boolean): FlightInfo {
         ensureNotMainThread()
-        val lookup = FlightLookup.of(flightNumber, date)
-        return sharedProtection.fetch(lookup) { requestFlightBlocking(lookup) }
+        return sharedProtection.fetch(lookup, isCurrent) { requestFlightBlocking(lookup) }
     }
 
     private fun requestFlightBlocking(lookup: FlightLookup): FlightInfo {
@@ -123,6 +125,8 @@ class VariFlightClientException(
     message: String,
     val retryable: Boolean = false,
 ) : IOException(message)
+
+internal class FlightRefreshSkippedException : RuntimeException()
 
 internal fun buildVariFlightRequestBody(lookup: FlightLookup): String = JSONObject()
     .put("jsonrpc", "2.0")
@@ -357,9 +361,17 @@ internal class VariFlightRequestProtection(
     private val rateLimiter: SlidingWindowRateLimiter,
     private val cache: FlightResponseCache,
 ) {
-    fun fetch(lookup: FlightLookup, loader: () -> FlightInfo): FlightInfo {
+    fun fetch(
+        lookup: FlightLookup,
+        isCurrent: () -> Boolean = { true },
+        loader: () -> FlightInfo,
+    ): FlightInfo {
         acquireCapacity()
-        return cache.getOrFetch(lookup, loader)
+        return cache.getOrFetch(lookup) {
+            // Another refresh may have held this cache key while the duty window moved on.
+            if (!isCurrent()) throw FlightRefreshSkippedException()
+            loader()
+        }
     }
 
     fun fetchUncached(loader: () -> FlightInfo): FlightInfo {

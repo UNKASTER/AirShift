@@ -3,15 +3,19 @@ package com.bradj.airshift.api
 import com.bradj.airshift.model.RosterAssignment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class VariFlightProtectionTest {
     @Test
@@ -99,6 +103,72 @@ class VariFlightProtectionTest {
         }
 
         assertTrue(error.message.orEmpty().contains("每分钟 30 次"))
+    }
+
+    @Test
+    fun requestWaitingForAFailedCacheLoadRechecksTheWindowBeforeCallingUpstream() {
+        val protection = VariFlightRequestProtection(
+            rateLimiter = SlidingWindowRateLimiter(limit = 30),
+            cache = FlightResponseCache(ttlMillis = 120_000L),
+        )
+        val lookup = FlightLookup.of("MU1234", LocalDate.of(2026, 8, 23))
+        val firstFailure = VariFlightClientException("连接飞常准超时，请稍后重试", retryable = true)
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondCheckedWindow = CountDownLatch(1)
+        val secondThread = AtomicReference<Thread>()
+        val stillCurrent = AtomicBoolean(true)
+        val upstreamCalls = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit<FlightInfo> {
+                protection.fetch(lookup) {
+                    upstreamCalls.incrementAndGet()
+                    firstStarted.countDown()
+                    assertTrue(releaseFirst.await(5, TimeUnit.SECONDS))
+                    throw firstFailure
+                }
+            }
+            assertTrue(firstStarted.await(2, TimeUnit.SECONDS))
+            val second = pool.submit<FlightRefreshBatchResult> {
+                secondThread.set(Thread.currentThread())
+                refreshFlightBatch(
+                    setOf(lookup),
+                    isCurrent = {
+                        stillCurrent.get().also { current ->
+                            assertTrue(current)
+                            secondCheckedWindow.countDown()
+                        }
+                    },
+                ) { request ->
+                    protection.fetch(request, isCurrent = stillCurrent::get) {
+                        upstreamCalls.incrementAndGet()
+                        flight("must not be queried")
+                    }
+                }
+            }
+            assertTrue(secondCheckedWindow.await(2, TimeUnit.SECONDS))
+            // Confirm actual cache-lock contention, rather than only racing two task submissions.
+            val blockedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (secondThread.get().state != Thread.State.BLOCKED && System.nanoTime() < blockedDeadline) {
+                Thread.yield()
+            }
+            assertEquals(Thread.State.BLOCKED, secondThread.get().state)
+            stillCurrent.set(false)
+            releaseFirst.countDown()
+
+            val failure = assertThrows(ExecutionException::class.java) { first.get(2, TimeUnit.SECONDS) }
+            assertSame(firstFailure, failure.cause)
+            val result = second.get(2, TimeUnit.SECONDS)
+            assertEquals(1, upstreamCalls.get())
+            assertEquals(0, result.attemptedCount)
+            assertTrue(result.live.isEmpty())
+            assertTrue(result.errors.isEmpty())
+            assertEquals(0, result.retryableFailures)
+        } finally {
+            releaseFirst.countDown()
+            pool.shutdownNow()
+        }
     }
 
     @Test

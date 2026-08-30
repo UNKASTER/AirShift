@@ -13,8 +13,9 @@ import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.SpecialServiceRepository
-import java.time.Duration
 import java.time.LocalDateTime
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 private const val ROSTER_GENERATION_INPUT_KEY = "roster_generation"
@@ -35,60 +36,37 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
             cancelThisWork()
             return Result.success()
         }
-        val relevantFlights = assignments
-            .flatMap { assignment ->
-                buildList {
-                    assignment.inboundFlight?.let { flight ->
-                        add(
-                            FlightRequest(
-                                FlightLookup.of(flight, assignment.scheduledArrival?.toLocalDate() ?: now.toLocalDate()),
-                                assignment.scheduledArrival,
-                            ),
-                        )
-                    }
-                    assignment.outboundFlight?.let { flight ->
-                        add(
-                            FlightRequest(
-                                FlightLookup.of(flight, assignment.scheduledDeparture?.toLocalDate() ?: now.toLocalDate()),
-                                assignment.scheduledDeparture,
-                            ),
-                        )
-                    }
-                }
-            }
-            .filter { request ->
-                val scheduled = request.scheduled ?: return@filter false
-                val minutes = Duration.between(now, scheduled).toMinutes()
-                minutes in -60..240
-            }.distinctBy(FlightRequest::lookup)
+        val relevantFlights = assignments.dutyWindowLookups(snapshot.manuallyCompletedCount, now)
         if (relevantFlights.isEmpty()) return Result.success()
 
         val client = VariFlightClient(apiKey)
-        val live = mutableMapOf<FlightLookup, FlightInfo>()
-        var failed = 0
-        var retryableFailures = 0
-        relevantFlights.forEach { request ->
-            if (isStopped || store.rosterGeneration != snapshot.generation) return Result.success()
-            runCatching {
-                client.fetchFlightBlocking(
-                    request.lookup.flightNumber,
-                    request.lookup.date,
-                )
-            }.onSuccess { live[request.lookup] = it }
-                .onFailure { error ->
-                    failed++
-                    if (error !is VariFlightClientException || error.retryable) retryableFailures++
-                }
+        val isCurrent: (FlightLookup) -> Boolean = { lookup ->
+            val current = store.loadSnapshot()
+            !isStopped && current.generation == snapshot.generation && store.variFlightApiKey == apiKey &&
+                lookup in current.assignments.dutyWindowLookups(current.manuallyCompletedCount)
         }
-        if (isStopped || store.rosterGeneration != snapshot.generation) return Result.success()
-        if (live.isNotEmpty()) {
-            val enriched = assignments.map { it.withLiveInfo(live, now.toLocalDate()) }
-            if (!store.saveAssignmentsIfGeneration(enriched, snapshot.generation, System.currentTimeMillis())) {
+        val refresh = refreshFlightBatch(
+            targets = relevantFlights,
+            isCurrent = isCurrent,
+            fetch = { lookup -> client.fetchFlightBlocking(lookup) { isCurrent(lookup) } },
+        )
+        if (isStopped || store.rosterGeneration != snapshot.generation || store.variFlightApiKey != apiKey) {
+            return Result.success()
+        }
+        if (refresh.live.isNotEmpty()) {
+            if (store.mergeLiveInfoIfGeneration(
+                    refresh.live,
+                    snapshot.generation,
+                    now.toLocalDate(),
+                    System.currentTimeMillis(),
+                ) == null
+            ) {
                 return Result.success()
             }
             store.runIfGenerationCurrent(snapshot.generation) {
-                SpecialServiceRepository.get(applicationContext).onRosterChanged(enriched)
-                ReminderScheduler.scheduleAll(applicationContext, enriched)
+                val latest = store.loadSnapshot().assignments
+                SpecialServiceRepository.get(applicationContext).onRosterChanged(latest)
+                ReminderScheduler.scheduleAll(applicationContext, latest)
             }
             val current = store.loadSnapshot()
             val complete = current.assignments.allDutiesComplete(LocalDateTime.now(), current.manuallyCompletedCount)
@@ -96,30 +74,50 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
                 cancelThisWork()
             }
         }
-        return if (failed == relevantFlights.size && retryableFailures > 0) Result.retry() else Result.success()
+        return if (refresh.attemptedCount > 0 && refresh.errors.size == refresh.attemptedCount &&
+            refresh.retryableFailures > 0
+        ) Result.retry() else Result.success()
     }
 
     private fun cancelThisWork() {
         WorkManager.getInstance(applicationContext).cancelWorkById(id)
     }
-
-    private data class FlightRequest(val lookup: FlightLookup, val scheduled: LocalDateTime?)
 }
 
 object FlightRefreshScheduler {
     private const val WORK_NAME = "flight-live-refresh"
+    internal const val WORK_TAG = "flight-live-refresh-window"
+    private val executor = Executors.newSingleThreadExecutor()
 
-    fun configure(context: Context, enabled: Boolean) {
-        val manager = WorkManager.getInstance(context)
-        if (!enabled) {
-            manager.cancelUniqueWork(WORK_NAME)
-            return
+    fun configure(context: Context, enabled: Boolean): Future<*> {
+        val applicationContext = context.applicationContext
+        val store = RosterStore(applicationContext)
+        val generation = store.rosterGeneration
+        return executor.submit {
+            val manager = WorkManager.getInstance(applicationContext)
+            if (store.rosterGeneration != generation) return@submit
+            // Retire the fixed-name worker created by earlier app versions.
+            manager.cancelUniqueWork(WORK_NAME).result.get()
+            val existing = manager.getWorkInfosByTag(WORK_TAG).get()
+            val current = store.loadSnapshot()
+            if (current.generation != generation) return@submit
+            val eligible = store.hasVariFlightApiKey && current.assignments.isNotEmpty() &&
+                !current.assignments.allDutiesComplete(manuallyCompletedCount = current.manuallyCompletedCount)
+            if (!enabled && eligible) return@submit
+            val workName = "$WORK_NAME-$generation"
+            existing.filter { !it.state.isFinished && (!eligible || workName !in it.tags) }.forEach {
+                // Cancel captured IDs only: a stale configuration cannot cancel a newer roster's work.
+                manager.cancelWorkById(it.id).result.get()
+            }
+            if (!eligible || store.rosterGeneration != generation) return@submit
+            val request = PeriodicWorkRequestBuilder<FlightRefreshWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setInputData(Data.Builder().putLong(ROSTER_GENERATION_INPUT_KEY, generation).build())
+                .setInitialDelay(15, TimeUnit.MINUTES)
+                .addTag(WORK_TAG)
+                .addTag(workName)
+                .build()
+            manager.enqueueUniquePeriodicWork(workName, ExistingPeriodicWorkPolicy.KEEP, request).result.get()
         }
-        val request = PeriodicWorkRequestBuilder<FlightRefreshWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setInputData(Data.Builder().putLong(ROSTER_GENERATION_INPUT_KEY, RosterStore(context).rosterGeneration).build())
-            .build()
-        // A retiring worker must never share its ID with a newly scheduled roster refresh.
-        manager.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE, request)
     }
 }

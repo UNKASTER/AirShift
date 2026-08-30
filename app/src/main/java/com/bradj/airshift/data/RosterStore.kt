@@ -2,6 +2,12 @@ package com.bradj.airshift.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.bradj.airshift.api.FlightInfo
+import com.bradj.airshift.api.FlightLookup
+import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.api.refreshIndices
+import com.bradj.airshift.api.refreshLookups
+import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.model.RosterAssignment
 import org.json.JSONArray
 import org.json.JSONObject
@@ -124,6 +130,32 @@ class RosterStore(context: Context) {
             }
             true
         }
+    }
+
+    internal fun mergeLiveInfoIfGeneration(
+        live: Map<FlightLookup, FlightInfo>,
+        expectedGeneration: Long,
+        fallbackDate: LocalDate,
+        refreshedAtEpochMillis: Long? = null,
+        scope: FlightRefreshScope = FlightRefreshScope.DUTY_WINDOW,
+    ): RosterSnapshot? = synchronized(rosterLock) {
+        val current = loadSnapshot()
+        if (current.generation != expectedGeneration) return@synchronized null
+        val now = LocalDateTime.now()
+        val targetIndices = current.assignments.refreshIndices(current.manuallyCompletedCount, scope, now).toSet()
+        val allowedLookups = current.assignments.refreshLookups(current.manuallyCompletedCount, scope, now)
+        val relevantLive = live.filterKeys { it in allowedLookups }
+        if (relevantLive.isEmpty()) return@synchronized current
+
+        // Refreshes may overlap a duty completion or another refresh; merge into the latest roster.
+        val updated = current.assignments.mapIndexed { index, assignment ->
+            if (index in targetIndices) assignment.withLiveInfo(relevantLive, fallbackDate) else assignment
+        }
+        preferences.edit {
+            putString(KEY_ASSIGNMENTS, encodeAssignments(updated))
+            refreshedAtEpochMillis?.let { putLong(KEY_LAST_LIVE_REFRESH, it) }
+        }
+        current.copy(assignments = updated)
     }
 
     // Keep short follow-up effects ordered with imports; never perform network work in this block.

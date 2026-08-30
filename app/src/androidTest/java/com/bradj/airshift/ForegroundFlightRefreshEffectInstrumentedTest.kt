@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -142,6 +143,52 @@ class ForegroundFlightRefreshEffectInstrumentedTest {
         composeRule.mainClock.advanceTimeBy(BUSY_RETRY_MILLIS)
 
         composeRule.waitUntil { refreshes.get() == 1 }
+        assertEquals(1, configured.get())
+    }
+
+    @Test
+    fun updatedRefreshDeadlinePreventsAnEarlyDuplicateWithoutRestartingTheLoop() {
+        composeRule.mainClock.autoAdvance = false
+        var nextRefreshAt by mutableStateOf(composeRule.mainClock.currentTime + REFRESH_INTERVAL_MILLIS)
+        val configured = AtomicInteger()
+        val requestTimes = CopyOnWriteArrayList<Long>()
+        composeRule.setContent {
+            val currentDeadline = nextRefreshAt
+            ForegroundFlightRefreshEffect(
+                active = true,
+                rosterGeneration = 1L,
+                dutiesComplete = false,
+                isWorking = false,
+                onConfigure = { configured.incrementAndGet() },
+                onRefresh = {
+                    requestTimes += composeRule.mainClock.currentTime
+                    nextRefreshAt = composeRule.mainClock.currentTime + REFRESH_INTERVAL_MILLIS
+                },
+                onStopped = {},
+                refreshIntervalMillis = REFRESH_INTERVAL_MILLIS,
+                busyRetryMillis = BUSY_RETRY_MILLIS,
+                refreshDelayMillis = { currentDeadline - composeRule.mainClock.currentTime },
+            )
+        }
+        composeRule.mainClock.advanceTimeBy(REFRESH_INTERVAL_MILLIS / 2)
+        composeRule.waitForIdle()
+        assertTrue(requestTimes.isEmpty())
+
+        // A manual/import refresh can advance the deadline while the automatic loop is asleep.
+        val postponedDeadline = composeRule.mainClock.currentTime + REFRESH_INTERVAL_MILLIS * 2
+        composeRule.runOnIdle { nextRefreshAt = postponedDeadline }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeBy(REFRESH_INTERVAL_MILLIS)
+        composeRule.waitForIdle()
+        assertTrue(requestTimes.isEmpty())
+        assertEquals(1, configured.get())
+
+        composeRule.mainClock.advanceTimeBy(REFRESH_INTERVAL_MILLIS)
+        composeRule.waitUntil { requestTimes.size == 1 }
+        assertTrue(requestTimes.single() >= postponedDeadline)
+        composeRule.mainClock.advanceTimeBy(REFRESH_INTERVAL_MILLIS / 5)
+        composeRule.waitForIdle()
+        assertEquals(1, requestTimes.size)
         assertEquals(1, configured.get())
     }
 

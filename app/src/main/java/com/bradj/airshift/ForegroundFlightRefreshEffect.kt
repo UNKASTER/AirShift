@@ -17,11 +17,13 @@ internal fun ForegroundFlightRefreshEffect(
     onStopped: () -> Unit,
     refreshIntervalMillis: Long = 5 * 60 * 1000L,
     busyRetryMillis: Long = 15 * 1000L,
+    refreshDelayMillis: () -> Long = { 0L },
 ) {
     val latestIsWorking by rememberUpdatedState(isWorking)
     val latestOnConfigure by rememberUpdatedState(onConfigure)
     val latestOnRefresh by rememberUpdatedState(onRefresh)
     val latestOnStopped by rememberUpdatedState(onStopped)
+    val latestRefreshDelayMillis by rememberUpdatedState(refreshDelayMillis)
 
     LaunchedEffect(active, rosterGeneration, dutiesComplete) {
         if (!active) return@LaunchedEffect
@@ -33,6 +35,11 @@ internal fun ForegroundFlightRefreshEffect(
         while (true) {
             if (latestIsWorking) {
                 delay(busyRetryMillis)
+                continue
+            }
+            val remaining = latestRefreshDelayMillis()
+            if (remaining > 0) {
+                delay(remaining)
                 continue
             }
             latestOnRefresh()

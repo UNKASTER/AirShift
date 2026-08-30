@@ -6,6 +6,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,13 +39,16 @@ import com.bradj.airshift.api.AirportPoint
 import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScheduler
+import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.api.dutyWindowLookups
+import com.bradj.airshift.api.refreshFlightBatch
+import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.VariFlightClient
-import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.allDutiesComplete
-import com.bradj.airshift.model.nextIncompleteDutyIndex
+import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
@@ -58,25 +64,27 @@ import com.bradj.airshift.ui.onboarding.OnboardingScreen
 import com.bradj.airshift.ui.settings.SettingsScreen
 import com.bradj.airshift.ui.theme.AirShiftTheme
 import kotlinx.coroutines.delay
-import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.Executors
 
 private const val DUTY_STATE_TICK_MILLIS = 60 * 1000L
+private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 5 * 60 * 1000L
 
 internal data class LiveRefreshResult(
-    val assignments: List<RosterAssignment>,
+    val live: Map<FlightLookup, FlightInfo>,
     val airports: List<AirportPoint>,
     val errors: List<String>,
     val attemptedCount: Int,
     val refreshedCount: Int,
+    val fallbackDate: LocalDate = LocalDate.now(),
 )
 
-private data class LiveFlightRequest(
-    val lookup: FlightLookup,
-    val scheduled: LocalDateTime?,
+private data class PendingFlightRefresh(
+    val generation: Long,
+    val lookups: Set<FlightLookup>,
 )
 
 class MainActivity : ComponentActivity() {
@@ -123,70 +131,42 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshLive(
-        assignments: List<RosterAssignment>,
+        generation: Long,
         apiKey: String,
-        onlyOperationallyRelevant: Boolean,
+        lookups: Set<FlightLookup>,
+        scope: FlightRefreshScope,
         callback: (LiveRefreshResult) -> Unit,
     ) {
-        val now = LocalDateTime.now()
-        val requests = assignments.flatMap { assignment ->
-            buildList {
-                assignment.inboundFlight?.let { flight ->
-                    add(
-                        LiveFlightRequest(
-                            FlightLookup.of(flight, assignment.scheduledArrival?.toLocalDate() ?: now.toLocalDate()),
-                            assignment.scheduledArrival,
-                        ),
-                    )
-                }
-                assignment.outboundFlight?.let { flight ->
-                    add(
-                        LiveFlightRequest(
-                            FlightLookup.of(flight, assignment.scheduledDeparture?.toLocalDate() ?: now.toLocalDate()),
-                            assignment.scheduledDeparture,
-                        ),
-                    )
-                }
+        val fallbackDate = LocalDate.now()
+        flightRefreshExecutor.execute {
+            val store = RosterStore(this)
+            val client = VariFlightClient(apiKey)
+            val isCurrent: (FlightLookup) -> Boolean = { lookup ->
+                val current = store.loadSnapshot()
+                !isDestroyed && current.generation == generation && store.variFlightApiKey == apiKey &&
+                    lookup in current.assignments.refreshLookups(current.manuallyCompletedCount, scope)
             }
-        }.filter { request ->
-            if (!onlyOperationallyRelevant) return@filter true
-            val scheduled = request.scheduled ?: return@filter false
-            Duration.between(now, scheduled).toMinutes() in -60..240
-        }.distinctBy(LiveFlightRequest::lookup)
-        if (requests.isEmpty()) {
-            callback(LiveRefreshResult(assignments, emptyList(), emptyList(), 0, 0))
-            return
+            val batch = refreshFlightBatch(
+                targets = lookups,
+                isCurrent = isCurrent,
+                fetch = { lookup -> client.fetchFlightBlocking(lookup) { isCurrent(lookup) } },
+            )
+            val result = LiveRefreshResult(
+                live = batch.live,
+                airports = batch.live.values.flatMap { listOfNotNull(it.origin, it.destination) }.distinctBy { it.code },
+                errors = batch.errors,
+                attemptedCount = batch.attemptedCount,
+                refreshedCount = batch.live.size,
+                fallbackDate = fallbackDate,
+            )
+            Handler(Looper.getMainLooper()).post {
+                callback(result)
+            }
         }
+    }
 
-        val client = VariFlightClient(apiKey)
-        val results = mutableMapOf<FlightLookup, FlightInfo>()
-        val errors = mutableListOf<String>()
-        var remaining = requests.size
-        requests.forEach { request ->
-            client.fetchFlight(request.lookup.flightNumber, request.lookup.date) { result ->
-                val flightNumber = request.lookup.flightNumber
-                result.onSuccess { results[request.lookup] = it }
-                    .onFailure { errors += "$flightNumber：${it.message ?: "刷新失败"}" }
-                remaining--
-                if (remaining == 0) {
-                    val enriched = assignments.map { assignment ->
-                        assignment.withLiveInfo(results, now.toLocalDate())
-                    }
-                    val airports = results.values
-                        .flatMap { listOfNotNull(it.origin, it.destination) }
-                        .distinctBy { it.code }
-                    callback(
-                        LiveRefreshResult(
-                            assignments = enriched,
-                            airports = airports,
-                            errors = errors,
-                            attemptedCount = requests.size,
-                            refreshedCount = results.size,
-                        ),
-                    )
-                }
-            }
-        }
+    private companion object {
+        val flightRefreshExecutor = Executors.newSingleThreadExecutor()
     }
 
     private fun openExactAlarmSettings() {
@@ -205,12 +185,14 @@ internal fun AirShiftApp(
     specialServiceRepository: SpecialServiceRepository,
     readImageRoster: (Uri, String, (Result<RosterParseResult>) -> Unit) -> Unit,
     readExcelRoster: (Uri, String, (Result<RosterParseResult>) -> Unit) -> Unit,
-    refreshLive: (List<RosterAssignment>, String, Boolean, (LiveRefreshResult) -> Unit) -> Unit,
+    refreshLive: (Long, String, Set<FlightLookup>, FlightRefreshScope, (LiveRefreshResult) -> Unit) -> Unit,
     locateAirport: (Collection<AirportPoint>, (Result<com.bradj.airshift.location.AirportMatch>) -> Unit) -> Unit,
     openExactAlarmSettings: () -> Unit,
     openNotificationAccessSettings: () -> Unit,
     pendingSharedExcelImport: PendingSharedExcelImport?,
     sharedExcelImportQueue: SharedExcelImportQueueViewModel,
+    configureRefresh: (Boolean) -> Unit = { FlightRefreshScheduler.configure(context, it) },
+    refreshClock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     var userName by remember { mutableStateOf(store.userName) }
     if (userName == null) {
@@ -224,6 +206,8 @@ internal fun AirShiftApp(
     val initialRoster = remember { store.loadSnapshot() }
     var assignments by remember { mutableStateOf(initialRoster.assignments) }
     var rosterGeneration by remember { mutableLongStateOf(initialRoster.generation) }
+    var pendingRefresh by remember { mutableStateOf<PendingFlightRefresh?>(null) }
+    var nextForegroundRefreshAt by remember { mutableLongStateOf(0L) }
     val specialServiceState by specialServiceRepository.state.collectAsStateWithLifecycle()
     var isWorking by remember { mutableStateOf(false) }
     var isLiveRefreshing by remember { mutableStateOf(false) }
@@ -273,37 +257,50 @@ internal fun AirShiftApp(
         }
     }
 
-    fun scheduleAndSave(
-        updated: List<RosterAssignment>,
-        newRoster: Boolean = false,
-        expectedGeneration: Long = rosterGeneration,
-        refreshedAtEpochMillis: Long? = null,
+    fun syncSavedRoster(
+        expectedGeneration: Long,
+        previousAssignments: List<RosterAssignment>? = null,
     ): Boolean {
-        val previousAssignments = store.loadAssignments()
-        if (newRoster) {
-            rosterGeneration = store.replaceAssignments(updated)
-            if (refreshedAtEpochMillis != null) store.lastLiveRefreshEpochMillis = refreshedAtEpochMillis
-        } else if (!store.saveAssignmentsIfGeneration(updated, expectedGeneration, refreshedAtEpochMillis)) {
+        val applied = store.runIfGenerationCurrent(expectedGeneration) {
+            // Read after acquiring the lock: the worker may have merged another flight meanwhile.
             val current = store.loadSnapshot()
             assignments = current.assignments
             rosterGeneration = current.generation
             dutyIndex = current.manuallyCompletedCount
-            return false
+            dutyNow = LocalDateTime.now()
+            previousAssignments?.let { ReminderScheduler.cancelAll(context, it) }
+            specialServiceRepository.onRosterChanged(assignments)
+            configureRefresh(hasVariFlightApiKey && assignments.isNotEmpty() &&
+                !assignments.allDutiesComplete(dutyNow, dutyIndex))
+            val summary = ReminderScheduler.scheduleAll(context, assignments)
+            exactAlarmWarning = assignments.isNotEmpty() && !summary.exactAlarmsAllowed
+            statusMessage = "已保存 ${assignments.size} 个保障任务，安排 ${summary.scheduledCount} 个提醒"
         }
-        ReminderScheduler.cancelAll(context, previousAssignments)
-        assignments = updated
-        dutyIndex = store.currentDutyIndex
-        dutyNow = LocalDateTime.now()
-        specialServiceRepository.onRosterChanged(updated)
-        FlightRefreshScheduler.configure(
-            context,
-            hasVariFlightApiKey && updated.isNotEmpty() &&
-                !updated.allDutiesComplete(dutyNow, dutyIndex),
+        if (!applied) {
+            val current = store.loadSnapshot()
+            assignments = current.assignments
+            rosterGeneration = current.generation
+            dutyIndex = current.manuallyCompletedCount
+            dutyNow = LocalDateTime.now()
+            pendingRefresh = null
+        }
+        return applied
+    }
+
+    fun mergeRefresh(
+        refresh: LiveRefreshResult,
+        generation: Long,
+        scope: FlightRefreshScope = FlightRefreshScope.DUTY_WINDOW,
+    ): Boolean {
+        val merged = store.mergeLiveInfoIfGeneration(
+            live = refresh.live,
+            expectedGeneration = generation,
+            fallbackDate = refresh.fallbackDate,
+            refreshedAtEpochMillis = System.currentTimeMillis().takeIf { refresh.refreshedCount > 0 },
+            scope = scope,
         )
-        val summary = ReminderScheduler.scheduleAll(context, updated)
-        exactAlarmWarning = updated.isNotEmpty() && !summary.exactAlarmsAllowed
-        statusMessage = "已保存 ${updated.size} 个保障任务，安排 ${summary.scheduledCount} 个提醒"
-        return true
+        val current = syncSavedRoster(generation)
+        return merged != null && current
     }
 
     fun syncExactAlarmState(currentAssignments: List<RosterAssignment>, rescheduleIfAllowed: Boolean) {
@@ -351,28 +348,37 @@ internal fun AirShiftApp(
         if (!isOperationOwnerActive() || !isCurrentAttempt()) return
         val parsed = result.assignments
         warnings = result.warnings
+        val previousAssignments = store.loadAssignments()
+        val importGeneration = store.replaceAssignments(parsed)
+        pendingRefresh = null
+        syncSavedRoster(importGeneration, previousAssignments)
+        // The import is durable now. Retrying this event after recreation would reset duty progress.
+        onFinished()
         val apiKey = store.variFlightApiKey
         if (apiKey == null) {
-            scheduleAndSave(parsed, newRoster = true)
-            onFinished()
             isWorking = false
             statusMessage = "排班已识别；尚未配置飞常准 API Key，当前按表内计划时间提醒"
             requestPermissionsAndLocate()
             return
         }
-        statusMessage = "正在刷新实时航班信息…"
-        refreshLive(parsed, apiKey, false) { refresh ->
-            if (!isOperationOwnerActive() || !isCurrentAttempt()) return@refreshLive
-            locationCandidates = refresh.airports
-            warnings = result.warnings + refresh.errors
-            scheduleAndSave(
-                refresh.assignments,
-                newRoster = true,
-                refreshedAtEpochMillis = System.currentTimeMillis().takeIf { refresh.refreshedCount > 0 },
-            )
-            onFinished()
+        val lookups = parsed.dutyWindowLookups(0)
+        if (lookups.isEmpty()) {
             isWorking = false
+            statusMessage = "排班已保存，当前没有需要实时跟踪的航班"
             requestPermissionsAndLocate()
+            return
+        }
+        statusMessage = "正在刷新实时航班信息…"
+        nextForegroundRefreshAt = refreshClock() + FOREGROUND_REFRESH_INTERVAL_MILLIS
+        refreshLive(importGeneration, apiKey, lookups, FlightRefreshScope.DUTY_WINDOW) { refresh ->
+            if (!isOperationOwnerActive()) return@refreshLive
+            val applied = mergeRefresh(refresh, importGeneration)
+            if (applied) {
+                locationCandidates = refresh.airports
+                warnings = result.warnings + refresh.errors
+            }
+            isWorking = false
+            if (applied) requestPermissionsAndLocate()
         }
     }
 
@@ -405,23 +411,42 @@ internal fun AirShiftApp(
         }
     }
 
-    fun refreshCurrentAssignments(automatic: Boolean = false) {
+    fun refreshCurrentAssignments(automatic: Boolean = false, onlyLookups: Set<FlightLookup>? = null) {
         if (isWorking) return
-        if (automatic && assignments.allDutiesComplete(manuallyCompletedCount = dutyIndex)) return
         val apiKey = store.variFlightApiKey
         if (apiKey == null) {
             if (!automatic) statusMessage = "请先在设置中填写飞常准 API Key"
             return
         }
-        if (assignments.isEmpty()) {
+        val snapshot = store.loadSnapshot()
+        if (snapshot.assignments.isEmpty()) {
             if (!automatic) statusMessage = "请先导入排班图片或 Excel 文件"
             return
         }
+        val window = snapshot.assignments.dutyWindowLookups(snapshot.manuallyCompletedCount)
+        // An exhausted automatic window must not disable an explicit pull-to-refresh.
+        val scope = if (!automatic && window.isEmpty()) FlightRefreshScope.ALL_ROSTER else FlightRefreshScope.DUTY_WINDOW
+        val available = if (scope == FlightRefreshScope.ALL_ROSTER) {
+            snapshot.assignments.refreshLookups(snapshot.manuallyCompletedCount, scope)
+        } else window
+        val lookups = onlyLookups?.let { available.intersect(it) } ?: available
+        if (lookups.isEmpty()) {
+            if (!automatic) statusMessage = "当前没有需要实时跟踪的航班"
+            return
+        }
+        pendingRefresh = pendingRefresh?.takeIf { it.generation == snapshot.generation }?.let {
+            it.copy(lookups = it.lookups - lookups).takeIf { pending -> pending.lookups.isNotEmpty() }
+        }
         isWorking = true
         isLiveRefreshing = true
-        val refreshGeneration = rosterGeneration
-        statusMessage = if (automatic) "正在自动更新实时航班信息…" else "正在刷新实时航班信息…"
-        refreshLive(assignments, apiKey, automatic) { refresh ->
+        if (onlyLookups == null) nextForegroundRefreshAt = refreshClock() + FOREGROUND_REFRESH_INTERVAL_MILLIS
+        val refreshGeneration = snapshot.generation
+        statusMessage = when {
+            automatic -> "正在自动更新实时航班信息…"
+            scope == FlightRefreshScope.ALL_ROSTER -> "正在手动更新全部排班航班信息…"
+            else -> "正在刷新实时航班信息…"
+        }
+        refreshLive(refreshGeneration, apiKey, lookups, scope) { refresh ->
             if (!isOperationOwnerActive()) return@refreshLive
             if (refresh.attemptedCount == 0) {
                 isWorking = false
@@ -429,12 +454,7 @@ internal fun AirShiftApp(
                 statusMessage = "当前没有需要实时跟踪的航班"
                 return@refreshLive
             }
-            if (!scheduleAndSave(
-                    refresh.assignments,
-                    expectedGeneration = refreshGeneration,
-                    refreshedAtEpochMillis = System.currentTimeMillis().takeIf { refresh.refreshedCount > 0 },
-                )
-            ) {
+            if (!mergeRefresh(refresh, refreshGeneration, scope)) {
                 isWorking = false
                 isLiveRefreshing = false
                 statusMessage = "排班已变化，已忽略旧排班的刷新结果"
@@ -503,7 +523,20 @@ internal fun AirShiftApp(
         }
     }
 
-    val activeDutyIndex = assignments.nextIncompleteDutyIndex(dutyIndex, dutyNow)
+    LaunchedEffect(isWorking, isForeground, pendingRefresh, rosterGeneration) {
+        val pending = pendingRefresh ?: return@LaunchedEffect
+        if (pending.generation != rosterGeneration) {
+            pendingRefresh = null
+            return@LaunchedEffect
+        }
+        if (isWorking || !isForeground) return@LaunchedEffect
+        pendingRefresh = null
+        // If the regular cycle is due too, consume both needs in one full-window request.
+        val targets = pending.lookups.takeIf { nextForegroundRefreshAt > refreshClock() }
+        refreshCurrentAssignments(automatic = true, onlyLookups = targets)
+    }
+
+    val activeDutyIndex = assignments.dutyWindowIndices(dutyIndex, dutyNow).firstOrNull() ?: assignments.size
     val autoRefreshEligible = assignments.isNotEmpty() && !assignments.allDutiesComplete(dutyNow, dutyIndex)
     // 新导入必须重启已退出的循环；普通实时字段变化不能触发立即再次请求。
     ForegroundFlightRefreshEffect(
@@ -511,11 +544,12 @@ internal fun AirShiftApp(
         rosterGeneration = rosterGeneration,
         dutiesComplete = !autoRefreshEligible,
         isWorking = isWorking,
-        onConfigure = { FlightRefreshScheduler.configure(context, it) },
+        onConfigure = configureRefresh,
         onRefresh = { refreshCurrentAssignments(automatic = true) },
         onStopped = {
-            statusMessage = "今日执勤已全部完成，自动刷新已停止，导入新排班后恢复"
+            statusMessage = "今日执勤已全部完成，自动刷新已停止，仍可在全部执勤页下拉刷新"
         },
+        refreshDelayMillis = { nextForegroundRefreshAt - refreshClock() },
     )
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -588,19 +622,27 @@ internal fun AirShiftApp(
             DutySection.CURRENT -> CurrentDutyScreen(
                 assignments = assignments,
                 dutyIndex = activeDutyIndex,
+                now = dutyNow,
                 specialServiceRecords = visibleSpecialServiceRecords,
                 gateChanges = visibleGateChanges,
                 standChanges = visibleStandChanges,
                 flightCancellations = visibleFlightCancellations,
                 onDutyComplete = {
-                    store.setCurrentDutyIndex(activeDutyIndex + 1)
-                    dutyIndex = store.currentDutyIndex
-                    dutyNow = LocalDateTime.now()
-                    FlightRefreshScheduler.configure(
-                        context,
-                        hasVariFlightApiKey && assignments.isNotEmpty() &&
-                            !assignments.allDutiesComplete(dutyNow, dutyIndex),
-                    )
+                    store.runIfGenerationCurrent(rosterGeneration) {
+                        val before = store.loadSnapshot()
+                        val now = LocalDateTime.now()
+                        val currentIndex = before.assignments.dutyWindowIndices(before.manuallyCompletedCount, now).firstOrNull()
+                        // A second tap from the old composition must not complete the next duty.
+                        if (currentIndex == activeDutyIndex) {
+                            val oldWindow = before.assignments.dutyWindowLookups(before.manuallyCompletedCount, now)
+                            store.setCurrentDutyIndex(activeDutyIndex + 1)
+                            val newWindow = before.assignments.dutyWindowLookups(store.currentDutyIndex, now)
+                            val waiting = pendingRefresh?.takeIf { it.generation == before.generation }?.lookups.orEmpty()
+                            val pending = (waiting + (newWindow - oldWindow)).intersect(newWindow)
+                            pendingRefresh = PendingFlightRefresh(before.generation, pending).takeIf { pending.isNotEmpty() }
+                        }
+                    }
+                    syncSavedRoster(rosterGeneration)
                 },
                 onGoToAllDuty = { section = DutySection.ALL },
                 modifier = Modifier.padding(padding),
@@ -620,8 +662,7 @@ internal fun AirShiftApp(
                     }.onSuccess {
                         VariFlightClient.clearCachedFlights()
                         hasVariFlightApiKey = store.hasVariFlightApiKey
-                        FlightRefreshScheduler.configure(
-                            context,
+                        configureRefresh(
                             hasVariFlightApiKey && assignments.isNotEmpty() &&
                                 !assignments.allDutiesComplete(manuallyCompletedCount = dutyIndex),
                         )
@@ -634,7 +675,7 @@ internal fun AirShiftApp(
                     store.clearVariFlightApiKey()
                     VariFlightClient.clearCachedFlights()
                     hasVariFlightApiKey = false
-                    FlightRefreshScheduler.configure(context, enabled = false)
+                    configureRefresh(false)
                     statusMessage = "飞常准 API Key 已清除，后台实时刷新已停止"
                 },
                 onTestConnection = ::testVariFlightApiKey,

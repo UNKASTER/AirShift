@@ -5,7 +5,11 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.bradj.airshift.api.FlightInfo
+import com.bradj.airshift.api.FlightLookup
+import com.bradj.airshift.api.FlightRefreshScope
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.allDutiesComplete
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -100,6 +104,181 @@ class RosterStoreInstrumentedTest {
         assertEquals(0, store.currentDutyIndex)
         assertEquals(LocalDate.now().toString(), preferences.getString("duty_progress_date", null))
     }
+
+    @Test
+    fun oldBatchMergesOnlyCurrentWindowAndPreservesAnotherRefresh() {
+        val duties = (1..4).map { upcomingAssignment("B000$it", "MU100$it") }
+        val generation = store.replaceAssignments(duties)
+        val date = duties.first().scheduledArrival!!.toLocalDate()
+        store.setCurrentDutyIndex(1)
+
+        store.mergeLiveInfoIfGeneration(
+            mapOf(FlightLookup.of("MU1003", date) to liveFlight("MU1003", "NEW-C")),
+            generation,
+            date,
+            100L,
+        )
+        val merged = store.mergeLiveInfoIfGeneration(
+            mapOf(
+                FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE-A"),
+                FlightLookup.of("MU1002", date) to liveFlight("MU1002", "NEW-B"),
+            ),
+            generation,
+            date,
+            200L,
+        )!!
+
+        assertEquals(duties[0], merged.assignments[0])
+        assertEquals("NEW-B", merged.assignments[1].arrivalStand)
+        assertEquals("NEW-C", merged.assignments[2].arrivalStand)
+        assertEquals(duties[3], merged.assignments[3])
+        assertEquals(1, merged.manuallyCompletedCount)
+        assertEquals(generation, merged.generation)
+        assertEquals(merged, store.loadSnapshot())
+        assertEquals(200L, store.lastLiveRefreshEpochMillis)
+    }
+
+    @Test
+    fun duplicateFlightOutsideWindowIsNotUpdated() {
+        val duties = (1..3).map { upcomingAssignment("B000$it", "MU1001") }
+        val generation = store.replaceAssignments(duties)
+        val date = duties.first().scheduledArrival!!.toLocalDate()
+
+        val merged = store.mergeLiveInfoIfGeneration(
+            mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW")),
+            generation,
+            date,
+        )!!
+
+        assertEquals("NEW", merged.assignments[0].arrivalStand)
+        assertEquals("NEW", merged.assignments[1].arrivalStand)
+        assertEquals(duties[2], merged.assignments[2])
+    }
+
+    @Test
+    fun staleGenerationOrResultsOutsideWindowDoNotChangeDataOrTimestamp() {
+        val duties = (1..3).map { upcomingAssignment("B000$it", "MU100$it") }
+        val oldGeneration = store.replaceAssignments(duties)
+        val generation = store.replaceAssignments(duties)
+        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val before = store.loadSnapshot()
+
+        assertNull(
+            store.mergeLiveInfoIfGeneration(
+                mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE")),
+                oldGeneration,
+                date,
+                100L,
+            ),
+        )
+        assertEquals(
+            before,
+            store.mergeLiveInfoIfGeneration(
+                mapOf(FlightLookup.of("MU1003", date) to liveFlight("MU1003", "OUTSIDE")),
+                generation,
+                date,
+                200L,
+            ),
+        )
+        assertEquals(before, store.loadSnapshot())
+        assertNull(store.lastLiveRefreshEpochMillis)
+    }
+
+    @Test
+    fun allRosterMergeUpdatesCompletedFlightsWithoutResettingManualProgress() {
+        val duties = (1..3).map { upcomingAssignment("B000$it", "MU100$it") }
+        val generation = store.replaceAssignments(duties)
+        val date = duties.first().scheduledArrival!!.toLocalDate()
+        store.setCurrentDutyIndex(duties.size)
+        val live = mapOf(
+            FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW-FIRST"),
+            FlightLookup.of("MU1003", date) to liveFlight("MU1003", "NEW-LAST"),
+        )
+
+        val ignored = store.mergeLiveInfoIfGeneration(live, generation, date, 100L)!!
+        assertEquals(duties, ignored.assignments)
+        assertNull(store.lastLiveRefreshEpochMillis)
+
+        val merged = store.mergeLiveInfoIfGeneration(live, generation, date, 200L, FlightRefreshScope.ALL_ROSTER)!!
+
+        assertEquals("NEW-FIRST", merged.assignments[0].arrivalStand)
+        assertEquals(duties[1], merged.assignments[1])
+        assertEquals("NEW-LAST", merged.assignments[2].arrivalStand)
+        assertEquals(duties.size, merged.manuallyCompletedCount)
+        assertEquals(generation, merged.generation)
+        assertTrue(merged.assignments.allDutiesComplete(manuallyCompletedCount = merged.manuallyCompletedCount))
+        assertEquals(merged, store.loadSnapshot())
+        assertEquals(200L, store.lastLiveRefreshEpochMillis)
+    }
+
+    @Test
+    fun allRosterMergeCanCorrectAnAutomaticallyCompletedDutyWithoutChangingProgress() {
+        val now = LocalDateTime.now()
+        val duty = upcomingAssignment("B0001", "MU1001").copy(scheduledArrival = now.minusDays(1))
+        val generation = store.replaceAssignments(listOf(duty))
+        val date = duty.scheduledArrival!!.toLocalDate()
+        assertTrue(listOf(duty).allDutiesComplete(now))
+
+        val merged = store.mergeLiveInfoIfGeneration(
+            mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW").copy(estimatedArrival = now.plusHours(2))),
+            generation,
+            date,
+            scope = FlightRefreshScope.ALL_ROSTER,
+        )!!
+
+        assertEquals("NEW", merged.assignments.single().arrivalStand)
+        assertEquals(now.plusHours(2), merged.assignments.single().estimatedArrival)
+        assertFalse(merged.assignments.allDutiesComplete(now))
+        assertEquals(0, merged.manuallyCompletedCount)
+        assertEquals(generation, merged.generation)
+    }
+
+    @Test
+    fun allRosterMergeRejectsResultsFromAnOlderImportedRoster() {
+        val duties = listOf(upcomingAssignment("B0001", "MU1001"))
+        val oldGeneration = store.replaceAssignments(duties)
+        store.setCurrentDutyIndex(duties.size)
+        store.replaceAssignments(duties)
+        val before = store.loadSnapshot()
+        val date = duties.first().scheduledArrival!!.toLocalDate()
+
+        assertNull(
+            store.mergeLiveInfoIfGeneration(
+                mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE")),
+                oldGeneration,
+                date,
+                100L,
+                FlightRefreshScope.ALL_ROSTER,
+            ),
+        )
+        assertEquals(before, store.loadSnapshot())
+        assertNull(store.lastLiveRefreshEpochMillis)
+    }
+
+    private fun upcomingAssignment(registration: String, flight: String) = assignment(registration).copy(
+        inboundFlight = flight,
+        scheduledArrival = LocalDate.now().plusDays(1).atTime(12, 0),
+        outboundFlight = null,
+        scheduledDeparture = null,
+    )
+
+    private fun liveFlight(flight: String, stand: String) = FlightInfo(
+        flightNumber = flight,
+        origin = null,
+        destination = null,
+        plannedDeparture = null,
+        estimatedDeparture = null,
+        actualDeparture = null,
+        plannedArrival = null,
+        estimatedArrival = null,
+        actualArrival = null,
+        actualOffBlock = null,
+        gateClosedObservedAt = null,
+        boardingGate = null,
+        departureStand = null,
+        arrivalStand = stand,
+        arrivalBridge = null,
+    )
 
     private fun assignment(registration: String) = RosterAssignment(
         aircraftRegistration = registration,

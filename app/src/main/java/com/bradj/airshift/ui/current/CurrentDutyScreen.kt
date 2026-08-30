@@ -19,11 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -31,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.DutyTimeline
 import com.bradj.airshift.model.RosterAssignment
-import com.bradj.airshift.model.nextIncompleteDutyIndex
+import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
@@ -57,11 +52,8 @@ import com.bradj.airshift.ui.theme.TextHint
 import com.bradj.airshift.ui.theme.TextPrimary
 import com.bradj.airshift.ui.theme.TextSecondary
 import com.bradj.airshift.ui.theme.VipAmberContainer
-import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
-
-private const val COUNTDOWN_TICK_MILLIS = 60 * 1000L
 
 /** 当前执勤页：倒计时卡 + 当前任务详情 + 执勤完成推进。 */
 @Composable
@@ -75,16 +67,18 @@ fun CurrentDutyScreen(
     onDutyComplete: () -> Unit,
     onGoToAllDuty: () -> Unit,
     modifier: Modifier = Modifier,
+    now: LocalDateTime = LocalDateTime.now(),
 ) {
+    val window = assignments.dutyWindowIndices(dutyIndex, now)
     when {
         assignments.isEmpty() -> CurrentDutyEmpty(modifier, onGoToAllDuty)
-        dutyIndex >= assignments.size -> CurrentDutyFinished(modifier, onGoToAllDuty)
+        window.isEmpty() -> CurrentDutyFinished(modifier, onGoToAllDuty)
         else -> {
-            val index = dutyIndex.coerceAtMost(assignments.lastIndex)
             CurrentDutyContent(
                 modifier = modifier,
-                assignments = assignments,
-                index = index,
+                assignment = assignments[window.first()],
+                nextAssignment = window.getOrNull(1)?.let(assignments::get),
+                now = now,
                 specialServiceRecords = specialServiceRecords,
                 gateChanges = gateChanges,
                 standChanges = standChanges,
@@ -152,8 +146,9 @@ private fun CurrentDutyFinished(modifier: Modifier, onGoToAllDuty: () -> Unit) {
 
 @Composable
 private fun CurrentDutyContent(
-    assignments: List<RosterAssignment>,
-    index: Int,
+    assignment: RosterAssignment,
+    nextAssignment: RosterAssignment?,
+    now: LocalDateTime,
     specialServiceRecords: List<FlightServiceRecord>,
     gateChanges: List<GateChangeRecord>,
     standChanges: List<StandChangeRecord>,
@@ -161,15 +156,6 @@ private fun CurrentDutyContent(
     onDutyComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val assignment = assignments[index]
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(assignment.stableId) {
-        while (true) {
-            now = LocalDateTime.now()
-            delay(COUNTDOWN_TICK_MILLIS)
-        }
-    }
-
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(all = AirShiftSpacing.M),
@@ -178,7 +164,7 @@ private fun CurrentDutyContent(
         item {
             CountdownCard(
                 assignment = assignment,
-                nextAssignment = assignments.getOrNull(assignments.nextIncompleteDutyIndex(index + 1, now)),
+                nextAssignment = nextAssignment,
                 now = now,
             )
         }

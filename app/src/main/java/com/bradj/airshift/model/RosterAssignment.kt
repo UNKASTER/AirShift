@@ -85,6 +85,16 @@ fun List<RosterAssignment>.nextIncompleteDutyIndex(
     return (firstEligibleIndex until size).firstOrNull { !this[it].isDutyComplete(now) } ?: size
 }
 
+fun List<RosterAssignment>.dutyWindowIndices(
+    manuallyCompletedCount: Int,
+    now: LocalDateTime = LocalDateTime.now(),
+): List<Int> {
+    val current = nextIncompleteDutyIndex(manuallyCompletedCount, now)
+    if (current == size) return emptyList()
+    val next = nextIncompleteDutyIndex(current + 1, now)
+    return if (next == size) listOf(current) else listOf(current, next)
+}
+
 fun List<RosterAssignment>.allDutiesComplete(
     now: LocalDateTime = LocalDateTime.now(),
     manuallyCompletedCount: Int = 0,

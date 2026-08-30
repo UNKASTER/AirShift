@@ -114,7 +114,7 @@ class SharedExcelImportOwnerInstrumentedTest {
                             assertEquals(TEST_USER_NAME, name)
                             callbacks += callback
                         },
-                        refreshLive = { _, _, _, _ -> error("No API key is configured") },
+                        refreshLive = { _, _, _, _, _ -> error("No API key is configured") },
                         locateAirport = { _, _ -> error("A stale import must not request location") },
                         openExactAlarmSettings = { error("Exact alarm settings were not requested") },
                         openNotificationAccessSettings = { error("Notification settings were not requested") },
