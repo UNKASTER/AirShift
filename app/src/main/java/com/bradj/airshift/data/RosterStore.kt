@@ -8,6 +8,12 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
 
+data class RosterSnapshot(
+    val assignments: List<RosterAssignment>,
+    val generation: Long,
+    val manuallyCompletedCount: Int,
+)
+
 class RosterStore(context: Context) {
     private val preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
     private val variFlightApiKeyStore = VariFlightApiKeyStore(context.applicationContext)
@@ -53,31 +59,92 @@ class RosterStore(context: Context) {
         }
 
     val currentDutyIndex: Int
-        get() {
-            val progressDate = preferences.getString(KEY_DUTY_PROGRESS_DATE, null)
-                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            if (progressDate != LocalDate.now()) return 0
-            return preferences.getInt(KEY_DUTY_INDEX, 0).coerceAtLeast(0)
-        }
+        get() = synchronized(rosterLock) { readDutyIndex(LocalDate.now()) }
 
-    fun resetDutyProgress() {
-        preferences.edit {
-            putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
-            putInt(KEY_DUTY_INDEX, 0)
+    val rosterGeneration: Long
+        get() = synchronized(rosterLock) { preferences.getLong(KEY_ROSTER_GENERATION, 0L) }
+
+    fun resetDutyProgress() = setCurrentDutyIndex(0)
+
+    fun advanceDutyIndex() {
+        synchronized(rosterLock) {
+            setCurrentDutyIndex(readDutyIndex(LocalDate.now()) + 1)
         }
     }
 
-    fun advanceDutyIndex() {
-        preferences.edit {
-            putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
-            putInt(KEY_DUTY_INDEX, currentDutyIndex + 1)
+    fun setCurrentDutyIndex(index: Int) {
+        synchronized(rosterLock) {
+            preferences.edit {
+                putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+                putInt(KEY_DUTY_INDEX, index.coerceIn(0, loadAssignments().size))
+            }
+        }
+    }
+
+    fun loadSnapshot(): RosterSnapshot = synchronized(rosterLock) {
+        RosterSnapshot(
+            assignments = loadAssignments(),
+            generation = preferences.getLong(KEY_ROSTER_GENERATION, 0L),
+            manuallyCompletedCount = readDutyIndex(LocalDate.now()),
+        )
+    }
+
+    fun replaceAssignments(assignments: List<RosterAssignment>): Long {
+        val encoded = encodeAssignments(assignments)
+        return synchronized(rosterLock) {
+            val generation = Math.addExact(preferences.getLong(KEY_ROSTER_GENERATION, 0L), 1L)
+            preferences.edit {
+                putString(KEY_ASSIGNMENTS, encoded)
+                putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+                putInt(KEY_DUTY_INDEX, 0)
+                putLong(KEY_ROSTER_GENERATION, generation)
+            }
+            generation
         }
     }
 
     fun saveAssignments(assignments: List<RosterAssignment>) {
+        val encoded = encodeAssignments(assignments)
+        synchronized(rosterLock) {
+            preferences.edit { putString(KEY_ASSIGNMENTS, encoded) }
+        }
+    }
+
+    fun saveAssignmentsIfGeneration(
+        assignments: List<RosterAssignment>,
+        expectedGeneration: Long,
+        refreshedAtEpochMillis: Long? = null,
+    ): Boolean {
+        val encoded = encodeAssignments(assignments)
+        return synchronized(rosterLock) {
+            if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized false
+            preferences.edit {
+                putString(KEY_ASSIGNMENTS, encoded)
+                refreshedAtEpochMillis?.let { putLong(KEY_LAST_LIVE_REFRESH, it) }
+            }
+            true
+        }
+    }
+
+    // Keep short follow-up effects ordered with imports; never perform network work in this block.
+    internal fun runIfGenerationCurrent(expectedGeneration: Long, action: () -> Unit): Boolean =
+        synchronized(rosterLock) {
+            if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized false
+            action()
+            true
+        }
+
+    private fun readDutyIndex(today: LocalDate): Int {
+        val progressDate = preferences.getString(KEY_DUTY_PROGRESS_DATE, null)
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        if (progressDate != today) return 0
+        return preferences.getInt(KEY_DUTY_INDEX, 0).coerceAtLeast(0)
+    }
+
+    private fun encodeAssignments(assignments: List<RosterAssignment>): String {
         val array = JSONArray()
         assignments.forEach { assignment -> array.put(assignment.toJson()) }
-        preferences.edit { putString(KEY_ASSIGNMENTS, array.toString()) }
+        return array.toString()
     }
 
     fun loadAssignments(): List<RosterAssignment> {
@@ -169,11 +236,13 @@ class RosterStore(context: Context) {
         nullableString(key)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
 
     companion object {
+        private val rosterLock = Any()
         private const val FILE_NAME = "air_shift"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_LAST_LIVE_REFRESH = "last_live_refresh"
         private const val KEY_DUTY_PROGRESS_DATE = "duty_progress_date"
         private const val KEY_DUTY_INDEX = "duty_index"
+        private const val KEY_ROSTER_GENERATION = "roster_generation"
         private const val KEY_ASSIGNMENTS = "assignments"
         private const val KEY_LEGACY_SUPPLEMENT = "roster_supplement"
         private const val KEY_LEGACY_GATEWAY_URL = "gateway_url"

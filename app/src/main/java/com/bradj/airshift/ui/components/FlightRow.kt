@@ -270,4 +270,3 @@ fun SpecialServiceDetails(records: List<FlightServiceRecord>) {
         )
     }
 }
-

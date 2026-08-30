@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.DutyTimeline
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.nextIncompleteDutyIndex
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
@@ -177,7 +178,7 @@ private fun CurrentDutyContent(
         item {
             CountdownCard(
                 assignment = assignment,
-                nextAssignment = assignments.getOrNull(index + 1),
+                nextAssignment = assignments.getOrNull(assignments.nextIncompleteDutyIndex(index + 1, now)),
                 now = now,
             )
         }

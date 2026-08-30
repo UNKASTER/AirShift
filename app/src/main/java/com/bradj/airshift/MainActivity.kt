@@ -13,14 +13,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,6 +41,8 @@ import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.allDutiesComplete
+import com.bradj.airshift.model.nextIncompleteDutyIndex
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
@@ -58,13 +62,11 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicBoolean
 
-private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 5 * 60 * 1000L
-private const val BUSY_REFRESH_RETRY_MILLIS = 15 * 1000L
-private const val XLS_MIME_TYPE = "application/vnd.ms-excel"
-private const val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+private const val DUTY_STATE_TICK_MILLIS = 60 * 1000L
 
-private data class LiveRefreshResult(
+internal data class LiveRefreshResult(
     val assignments: List<RosterAssignment>,
     val airports: List<AirportPoint>,
     val errors: List<String>,
@@ -78,14 +80,24 @@ private data class LiveFlightRequest(
 )
 
 class MainActivity : ComponentActivity() {
+    private val sharedExcelImportQueue: SharedExcelImportQueueViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) sharedExcelImportQueue.enqueue(intent)
+        setIntent(Intent(Intent.ACTION_MAIN))
         enableEdgeToEdge()
         ReminderReceiver.createChannel(this)
         val store = RosterStore(this)
         val specialServiceRepository = SpecialServiceRepository.get(this)
-        FlightRefreshScheduler.configure(this, store.hasVariFlightApiKey)
+        val roster = store.loadSnapshot()
+        FlightRefreshScheduler.configure(
+            this,
+            store.hasVariFlightApiKey && roster.assignments.isNotEmpty() &&
+                !roster.assignments.allDutiesComplete(manuallyCompletedCount = roster.manuallyCompletedCount),
+        )
         setContent {
+            val pendingSharedExcelImports by sharedExcelImportQueue.pending.collectAsStateWithLifecycle()
             AirShiftTheme {
                 AirShiftApp(
                     context = this,
@@ -97,9 +109,17 @@ class MainActivity : ComponentActivity() {
                     locateAirport = { candidates, callback -> AirportLocator.locate(this, candidates, callback) },
                     openExactAlarmSettings = ::openExactAlarmSettings,
                     openNotificationAccessSettings = { NotificationAccess.openSettings(this) },
+                    pendingSharedExcelImport = pendingSharedExcelImports.firstOrNull(),
+                    sharedExcelImportQueue = sharedExcelImportQueue,
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedExcelImportQueue.enqueue(intent)
+        setIntent(Intent(Intent.ACTION_MAIN))
     }
 
     private fun refreshLive(
@@ -179,7 +199,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AirShiftApp(
+internal fun AirShiftApp(
     context: Context,
     store: RosterStore,
     specialServiceRepository: SpecialServiceRepository,
@@ -189,6 +209,8 @@ private fun AirShiftApp(
     locateAirport: (Collection<AirportPoint>, (Result<com.bradj.airshift.location.AirportMatch>) -> Unit) -> Unit,
     openExactAlarmSettings: () -> Unit,
     openNotificationAccessSettings: () -> Unit,
+    pendingSharedExcelImport: PendingSharedExcelImport?,
+    sharedExcelImportQueue: SharedExcelImportQueueViewModel,
 ) {
     var userName by remember { mutableStateOf(store.userName) }
     if (userName == null) {
@@ -199,7 +221,9 @@ private fun AirShiftApp(
         return
     }
 
-    var assignments by remember { mutableStateOf(store.loadAssignments()) }
+    val initialRoster = remember { store.loadSnapshot() }
+    var assignments by remember { mutableStateOf(initialRoster.assignments) }
+    var rosterGeneration by remember { mutableLongStateOf(initialRoster.generation) }
     val specialServiceState by specialServiceRepository.state.collectAsStateWithLifecycle()
     var isWorking by remember { mutableStateOf(false) }
     var isLiveRefreshing by remember { mutableStateOf(false) }
@@ -210,11 +234,19 @@ private fun AirShiftApp(
         mutableStateOf(assignments.isNotEmpty() && !ReminderScheduler.canScheduleExactAlarms(context))
     }
     var section by rememberSaveable { mutableStateOf(DutySection.ALL) }
-    var dutyIndex by remember { mutableStateOf(store.currentDutyIndex) }
+    var dutyIndex by remember { mutableIntStateOf(initialRoster.manuallyCompletedCount) }
+    var dutyNow by remember { mutableStateOf(LocalDateTime.now()) }
     var locationCandidates by remember { mutableStateOf(emptyList<AirportPoint>()) }
     var hasVariFlightApiKey by remember { mutableStateOf(store.hasVariFlightApiKey) }
     var notificationAccessGranted by remember { mutableStateOf(NotificationAccess.isGranted(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val operationOwner = remember { AtomicBoolean(true) }
+    DisposableEffect(operationOwner) {
+        onDispose { operationOwner.set(false) }
+    }
+    fun isOperationOwnerActive(): Boolean =
+        operationOwner.get() && lifecycleOwner.lifecycle.currentState != Lifecycle.State.DESTROYED
+
     var isForeground by remember {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
@@ -241,15 +273,37 @@ private fun AirShiftApp(
         }
     }
 
-    fun scheduleAndSave(updated: List<RosterAssignment>) {
-        ReminderScheduler.cancelAll(context, store.loadAssignments())
+    fun scheduleAndSave(
+        updated: List<RosterAssignment>,
+        newRoster: Boolean = false,
+        expectedGeneration: Long = rosterGeneration,
+        refreshedAtEpochMillis: Long? = null,
+    ): Boolean {
+        val previousAssignments = store.loadAssignments()
+        if (newRoster) {
+            rosterGeneration = store.replaceAssignments(updated)
+            if (refreshedAtEpochMillis != null) store.lastLiveRefreshEpochMillis = refreshedAtEpochMillis
+        } else if (!store.saveAssignmentsIfGeneration(updated, expectedGeneration, refreshedAtEpochMillis)) {
+            val current = store.loadSnapshot()
+            assignments = current.assignments
+            rosterGeneration = current.generation
+            dutyIndex = current.manuallyCompletedCount
+            return false
+        }
+        ReminderScheduler.cancelAll(context, previousAssignments)
         assignments = updated
-        store.saveAssignments(updated)
+        dutyIndex = store.currentDutyIndex
+        dutyNow = LocalDateTime.now()
         specialServiceRepository.onRosterChanged(updated)
-        FlightRefreshScheduler.configure(context, hasVariFlightApiKey)
+        FlightRefreshScheduler.configure(
+            context,
+            hasVariFlightApiKey && updated.isNotEmpty() &&
+                !updated.allDutiesComplete(dutyNow, dutyIndex),
+        )
         val summary = ReminderScheduler.scheduleAll(context, updated)
         exactAlarmWarning = updated.isNotEmpty() && !summary.exactAlarmsAllowed
         statusMessage = "已保存 ${updated.size} 个保障任务，安排 ${summary.scheduledCount} 个提醒"
+        return true
     }
 
     fun syncExactAlarmState(currentAssignments: List<RosterAssignment>, rescheduleIfAllowed: Boolean) {
@@ -289,34 +343,71 @@ private fun AirShiftApp(
         }
     }
 
-    fun finishImport(result: RosterParseResult) {
+    fun finishImport(
+        result: RosterParseResult,
+        isCurrentAttempt: () -> Boolean = { true },
+        onFinished: () -> Unit = {},
+    ) {
+        if (!isOperationOwnerActive() || !isCurrentAttempt()) return
         val parsed = result.assignments
         warnings = result.warnings
         val apiKey = store.variFlightApiKey
         if (apiKey == null) {
+            scheduleAndSave(parsed, newRoster = true)
+            onFinished()
             isWorking = false
-            scheduleAndSave(parsed)
-            store.resetDutyProgress()
-            dutyIndex = 0
             statusMessage = "排班已识别；尚未配置飞常准 API Key，当前按表内计划时间提醒"
             requestPermissionsAndLocate()
             return
         }
         statusMessage = "正在刷新实时航班信息…"
         refreshLive(parsed, apiKey, false) { refresh ->
-            if (refresh.refreshedCount > 0) store.lastLiveRefreshEpochMillis = System.currentTimeMillis()
+            if (!isOperationOwnerActive() || !isCurrentAttempt()) return@refreshLive
             locationCandidates = refresh.airports
             warnings = result.warnings + refresh.errors
-            scheduleAndSave(refresh.assignments)
-            store.resetDutyProgress()
-            dutyIndex = 0
+            scheduleAndSave(
+                refresh.assignments,
+                newRoster = true,
+                refreshedAtEpochMillis = System.currentTimeMillis().takeIf { refresh.refreshedCount > 0 },
+            )
+            onFinished()
             isWorking = false
             requestPermissionsAndLocate()
         }
     }
 
+    fun importExcel(
+        uri: Uri,
+        progressMessage: String,
+        sharedImport: PendingSharedExcelImport.File? = null,
+    ) {
+        if (isWorking) return
+        val attemptToken = sharedImport?.let { sharedExcelImportQueue.beginAttempt(it.id) ?: return }
+        val isCurrentAttempt = {
+            isOperationOwnerActive() &&
+                (sharedImport == null || sharedExcelImportQueue.isCurrentAttempt(sharedImport.id, checkNotNull(attemptToken)))
+        }
+        val finishSharedImport = {
+            if (sharedImport != null) sharedExcelImportQueue.consume(sharedImport.id, checkNotNull(attemptToken))
+            Unit
+        }
+        isWorking = true
+        warnings = emptyList()
+        statusMessage = progressMessage
+        readExcelRoster(uri, userName.orEmpty()) { result ->
+            if (!isCurrentAttempt()) return@readExcelRoster
+            result.onSuccess { finishImport(it, isCurrentAttempt, finishSharedImport) }
+                .onFailure {
+                    finishSharedImport()
+                    isWorking = false
+                    statusMessage = "Excel 识别失败：${it.message ?: "无法读取文件"}"
+                }
+        }
+    }
+
     fun refreshCurrentAssignments(automatic: Boolean = false) {
         if (isWorking) return
+        if (automatic && assignments.allDutiesComplete(manuallyCompletedCount = dutyIndex)) return
         val apiKey = store.variFlightApiKey
         if (apiKey == null) {
             if (!automatic) statusMessage = "请先在设置中填写飞常准 API Key"
@@ -328,18 +419,29 @@ private fun AirShiftApp(
         }
         isWorking = true
         isLiveRefreshing = true
+        val refreshGeneration = rosterGeneration
         statusMessage = if (automatic) "正在自动更新实时航班信息…" else "正在刷新实时航班信息…"
         refreshLive(assignments, apiKey, automatic) { refresh ->
+            if (!isOperationOwnerActive()) return@refreshLive
             if (refresh.attemptedCount == 0) {
                 isWorking = false
                 isLiveRefreshing = false
                 statusMessage = "当前没有需要实时跟踪的航班"
                 return@refreshLive
             }
-            if (refresh.refreshedCount > 0) store.lastLiveRefreshEpochMillis = System.currentTimeMillis()
+            if (!scheduleAndSave(
+                    refresh.assignments,
+                    expectedGeneration = refreshGeneration,
+                    refreshedAtEpochMillis = System.currentTimeMillis().takeIf { refresh.refreshedCount > 0 },
+                )
+            ) {
+                isWorking = false
+                isLiveRefreshing = false
+                statusMessage = "排班已变化，已忽略旧排班的刷新结果"
+                return@refreshLive
+            }
             locationCandidates = refresh.airports
             warnings = refresh.errors
-            scheduleAndSave(refresh.assignments)
             isWorking = false
             isLiveRefreshing = false
             statusMessage = when {
@@ -374,12 +476,14 @@ private fun AirShiftApp(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
-                    val restoredAssignments = store.loadAssignments()
-                    assignments = restoredAssignments
-                    specialServiceRepository.onRosterChanged(restoredAssignments)
+                    val restored = store.loadSnapshot()
+                    assignments = restored.assignments
+                    rosterGeneration = restored.generation
+                    specialServiceRepository.onRosterChanged(restored.assignments)
                     notificationAccessGranted = NotificationAccess.isGranted(context)
-                    dutyIndex = store.currentDutyIndex
-                    syncExactAlarmState(restoredAssignments, rescheduleIfAllowed = true)
+                    dutyIndex = restored.manuallyCompletedCount
+                    dutyNow = LocalDateTime.now()
+                    syncExactAlarmState(restored.assignments, rescheduleIfAllowed = true)
                     isForeground = true
                 }
                 Lifecycle.Event.ON_STOP -> isForeground = false
@@ -390,18 +494,29 @@ private fun AirShiftApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val latestAutomaticRefresh by rememberUpdatedState { refreshCurrentAssignments(automatic = true) }
-    LaunchedEffect(isForeground, assignments.isNotEmpty(), hasVariFlightApiKey) {
-        if (!isForeground || assignments.isEmpty() || !hasVariFlightApiKey) return@LaunchedEffect
+    LaunchedEffect(isForeground) {
+        if (!isForeground) return@LaunchedEffect
         while (true) {
-            if (isWorking) {
-                delay(BUSY_REFRESH_RETRY_MILLIS)
-                continue
-            }
-            latestAutomaticRefresh()
-            delay(FOREGROUND_REFRESH_INTERVAL_MILLIS)
+            dutyNow = LocalDateTime.now()
+            dutyIndex = store.currentDutyIndex
+            delay(DUTY_STATE_TICK_MILLIS)
         }
     }
+
+    val activeDutyIndex = assignments.nextIncompleteDutyIndex(dutyIndex, dutyNow)
+    val autoRefreshEligible = assignments.isNotEmpty() && !assignments.allDutiesComplete(dutyNow, dutyIndex)
+    // 新导入必须重启已退出的循环；普通实时字段变化不能触发立即再次请求。
+    ForegroundFlightRefreshEffect(
+        active = isForeground && assignments.isNotEmpty() && hasVariFlightApiKey,
+        rosterGeneration = rosterGeneration,
+        dutiesComplete = !autoRefreshEligible,
+        isWorking = isWorking,
+        onConfigure = { FlightRefreshScheduler.configure(context, it) },
+        onRefresh = { refreshCurrentAssignments(automatic = true) },
+        onStopped = {
+            statusMessage = "今日执勤已全部完成，自动刷新已停止，导入新排班后恢复"
+        },
+    )
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -409,7 +524,8 @@ private fun AirShiftApp(
         warnings = emptyList()
         statusMessage = "正在识别排班图片…"
         readImageRoster(uri, userName.orEmpty()) { result ->
-            result.onSuccess(::finishImport)
+            if (!isOperationOwnerActive()) return@readImageRoster
+            result.onSuccess { finishImport(it) }
                 .onFailure {
                     isWorking = false
                     statusMessage = "图片识别失败：${it.message ?: "无法读取图片"}"
@@ -419,15 +535,22 @@ private fun AirShiftApp(
 
     val excelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        isWorking = true
-        warnings = emptyList()
-        statusMessage = "正在解析 Excel 排班…"
-        readExcelRoster(uri, userName.orEmpty()) { result ->
-            result.onSuccess(::finishImport)
-                .onFailure {
-                    isWorking = false
-                    statusMessage = "Excel 识别失败：${it.message ?: "无法读取文件"}"
-                }
+        importExcel(uri, "正在解析 Excel 排班…")
+    }
+
+    LaunchedEffect(pendingSharedExcelImport?.id, userName, isWorking) {
+        val pending = pendingSharedExcelImport ?: return@LaunchedEffect
+        if (isWorking) return@LaunchedEffect
+        when (pending) {
+            is PendingSharedExcelImport.File -> importExcel(
+                pending.uri,
+                "正在解析分享的 Excel 排班…",
+                pending,
+            )
+            is PendingSharedExcelImport.Error -> {
+                statusMessage = "Excel 分享导入失败：${pending.message}"
+                sharedExcelImportQueue.consume(pending.id)
+            }
         }
     }
 
@@ -457,21 +580,27 @@ private fun AirShiftApp(
                 onImportImage = {
                     photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
-                onImportExcel = { excelPicker.launch(arrayOf(XLS_MIME_TYPE, XLSX_MIME_TYPE)) },
+                onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
                 onRefresh = { refreshCurrentAssignments() },
                 onOpenExactAlarmSettings = openExactAlarmSettings,
                 modifier = Modifier.padding(padding),
             )
             DutySection.CURRENT -> CurrentDutyScreen(
                 assignments = assignments,
-                dutyIndex = dutyIndex,
+                dutyIndex = activeDutyIndex,
                 specialServiceRecords = visibleSpecialServiceRecords,
                 gateChanges = visibleGateChanges,
                 standChanges = visibleStandChanges,
                 flightCancellations = visibleFlightCancellations,
                 onDutyComplete = {
-                    store.advanceDutyIndex()
+                    store.setCurrentDutyIndex(activeDutyIndex + 1)
                     dutyIndex = store.currentDutyIndex
+                    dutyNow = LocalDateTime.now()
+                    FlightRefreshScheduler.configure(
+                        context,
+                        hasVariFlightApiKey && assignments.isNotEmpty() &&
+                            !assignments.allDutiesComplete(dutyNow, dutyIndex),
+                    )
                 },
                 onGoToAllDuty = { section = DutySection.ALL },
                 modifier = Modifier.padding(padding),
@@ -491,7 +620,11 @@ private fun AirShiftApp(
                     }.onSuccess {
                         VariFlightClient.clearCachedFlights()
                         hasVariFlightApiKey = store.hasVariFlightApiKey
-                        FlightRefreshScheduler.configure(context, hasVariFlightApiKey)
+                        FlightRefreshScheduler.configure(
+                            context,
+                            hasVariFlightApiKey && assignments.isNotEmpty() &&
+                                !assignments.allDutiesComplete(manuallyCompletedCount = dutyIndex),
+                        )
                         userName = name.trim()
                     }.onFailure { error ->
                         statusMessage = error.message ?: "无法保存设置"
