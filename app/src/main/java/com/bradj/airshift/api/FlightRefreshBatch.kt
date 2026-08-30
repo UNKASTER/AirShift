@@ -3,7 +3,7 @@ package com.bradj.airshift.api
 import java.util.concurrent.CancellationException
 
 internal data class FlightRefreshBatchResult(
-    val live: Map<FlightLookup, FlightInfo>,
+    val live: Map<FlightLookup, List<FlightInfo>>,
     val errors: List<String>,
     val attemptedCount: Int,
     val retryableFailures: Int,
@@ -12,9 +12,9 @@ internal data class FlightRefreshBatchResult(
 internal fun refreshFlightBatch(
     targets: Set<FlightLookup>,
     isCurrent: (FlightLookup) -> Boolean,
-    fetch: (FlightLookup) -> FlightInfo,
+    fetch: (FlightLookup) -> List<FlightInfo>,
 ): FlightRefreshBatchResult {
-    val live = mutableMapOf<FlightLookup, FlightInfo>()
+    val live = mutableMapOf<FlightLookup, List<FlightInfo>>()
     val errors = mutableListOf<String>()
     var attemptedCount = 0
     var retryableFailures = 0

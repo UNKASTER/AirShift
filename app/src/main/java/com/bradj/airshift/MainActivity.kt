@@ -74,7 +74,7 @@ private const val DUTY_STATE_TICK_MILLIS = 60 * 1000L
 private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 5 * 60 * 1000L
 
 internal data class LiveRefreshResult(
-    val live: Map<FlightLookup, FlightInfo>,
+    val live: Map<FlightLookup, List<FlightInfo>>,
     val airports: List<AirportPoint>,
     val errors: List<String>,
     val attemptedCount: Int,
@@ -153,7 +153,9 @@ class MainActivity : ComponentActivity() {
             )
             val result = LiveRefreshResult(
                 live = batch.live,
-                airports = batch.live.values.flatMap { listOfNotNull(it.origin, it.destination) }.distinctBy { it.code },
+                airports = batch.live.values.flatten()
+                    .flatMap { listOfNotNull(it.origin, it.destination) }
+                    .distinctBy { it.code },
                 errors = batch.errors,
                 attemptedCount = batch.attemptedCount,
                 refreshedCount = batch.live.size,

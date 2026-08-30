@@ -26,7 +26,7 @@ class FlightRefreshBatchTest {
 
         val result = refreshFlightBatch(targets, isCurrent = { true }) { lookup ->
             requested += lookup
-            flight(lookup)
+            listOf(flight(lookup))
         }
 
         assertEquals(twoDuties.toList(), requested)
@@ -52,7 +52,7 @@ class FlightRefreshBatchTest {
         ) { lookup ->
             requested += lookup
             if (lookup == firstInbound) window = setOf(secondInbound, secondOutbound, thirdFlight)
-            flight(lookup)
+            listOf(flight(lookup))
         }
 
         assertEquals(twoDuties.toList(), checked)
@@ -71,7 +71,7 @@ class FlightRefreshBatchTest {
         val result = refreshFlightBatch(twoDuties, isCurrent = { currentGeneration == batchGeneration }) { lookup ->
             requested += lookup
             currentGeneration++
-            flight(lookup)
+            listOf(flight(lookup))
         }
 
         assertEquals(listOf(firstInbound), requested)
@@ -96,7 +96,7 @@ class FlightRefreshBatchTest {
     fun flightRetiredInsideTheRequestProtectionDoesNotCountAsAnAttemptOrFailure() {
         val result = refreshFlightBatch(twoDuties, isCurrent = { true }) { lookup ->
             if (lookup == firstInbound) throw FlightRefreshSkippedException()
-            flight(lookup)
+            listOf(flight(lookup))
         }
 
         assertEquals(twoDuties - firstInbound, result.live.keys)
@@ -109,14 +109,14 @@ class FlightRefreshBatchTest {
     fun partialFailuresKeepSuccessfulDataAndDoNotExposeUnexpectedExceptionDetails() {
         val result = refreshFlightBatch(twoDuties, isCurrent = { true }) { lookup ->
             when (lookup) {
-                firstInbound -> flight(lookup)
+                firstInbound -> listOf(flight(lookup))
                 firstOutbound -> throw VariFlightClientException("连接飞常准超时，请稍后重试", retryable = true)
                 secondInbound -> throw IllegalStateException("private token=secret response body")
                 else -> throw VariFlightClientException("飞常准 API Key 无效或无权访问 Aviation MCP")
             }
         }
 
-        assertEquals(mapOf(firstInbound to flight(firstInbound)), result.live)
+        assertEquals(mapOf(firstInbound to listOf(flight(firstInbound))), result.live)
         assertEquals(
             listOf(
                 "MU1235：连接飞常准超时，请稍后重试",

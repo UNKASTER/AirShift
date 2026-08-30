@@ -390,7 +390,7 @@ class DutyWindowRefreshInstrumentedTest {
 
     private fun finishRequest(index: Int) {
         val request = requests[index]
-        val live = request.targets.associateWith { lookup -> flight(lookup.flightNumber) }
+        val live = request.targets.associateWith { lookup -> listOf(flight(lookup.flightNumber)) }
         composeRule.runOnIdle {
             request.callback(
                 LiveRefreshResult(

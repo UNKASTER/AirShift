@@ -32,7 +32,7 @@ class VariFlightClient(apiKey: String) {
     fun fetchFlight(
         flightNumber: String,
         date: LocalDate,
-        callback: (Result<FlightInfo>) -> Unit,
+        callback: (Result<List<FlightInfo>>) -> Unit,
     ) {
         executor.execute {
             val result = runCatching { fetchFlightBlocking(flightNumber, date) }
@@ -56,15 +56,15 @@ class VariFlightClient(apiKey: String) {
         }
     }
 
-    fun fetchFlightBlocking(flightNumber: String, date: LocalDate): FlightInfo =
+    fun fetchFlightBlocking(flightNumber: String, date: LocalDate): List<FlightInfo> =
         fetchFlightBlocking(FlightLookup.of(flightNumber, date)) { true }
 
-    internal fun fetchFlightBlocking(lookup: FlightLookup, isCurrent: () -> Boolean): FlightInfo {
+    internal fun fetchFlightBlocking(lookup: FlightLookup, isCurrent: () -> Boolean): List<FlightInfo> {
         ensureNotMainThread()
         return sharedProtection.fetch(lookup, isCurrent) { requestFlightBlocking(lookup) }
     }
 
-    private fun requestFlightBlocking(lookup: FlightLookup): FlightInfo {
+    private fun requestFlightBlocking(lookup: FlightLookup): List<FlightInfo> {
         var connection: HttpURLConnection? = null
         return try {
             val activeConnection = (URI(MCP_URL).toURL().openConnection() as HttpURLConnection)
@@ -154,7 +154,7 @@ internal fun httpFailure(statusCode: Int): VariFlightClientException = when (sta
 }
 
 internal object VariFlightJsonRpcParser {
-    fun parse(body: String, fallbackFlightNumber: String): FlightInfo {
+    fun parse(body: String, fallbackFlightNumber: String): List<FlightInfo> {
         if (body.isBlank()) throw VariFlightClientException("飞常准返回空响应", retryable = true)
         val rpc = parseRpcObject(body)
             ?: throw VariFlightClientException("飞常准响应格式异常", retryable = true)
@@ -168,11 +168,15 @@ internal object VariFlightJsonRpcParser {
         }
         val content = result.optJSONArray("content")
             ?: throw VariFlightClientException("飞常准响应格式异常", retryable = true)
-        val payload = (0 until content.length()).firstNotNullOfOrNull { index ->
+        // Each content item may hold one leg or a whole list of legs; read them all.
+        val payloads = (0 until content.length()).mapNotNull { index ->
             val value = content.optJSONObject(index)?.opt("text")
             (value as? String)?.takeIf { it.isNotBlank() }
-        } ?: throw VariFlightClientException("飞常准返回空航班数据")
-        return VariFlightPayloadParser.parse(payload, fallbackFlightNumber)
+        }
+        if (payloads.isEmpty()) throw VariFlightClientException("飞常准返回空航班数据")
+        val legs = payloads.flatMap { VariFlightPayloadParser.parseLegs(it, fallbackFlightNumber) }
+        if (legs.isEmpty()) throw VariFlightClientException("未查询到该航班的实时信息")
+        return legs
     }
 
     private fun parseRpcObject(body: String): JSONObject? {
@@ -188,35 +192,51 @@ internal object VariFlightJsonRpcParser {
 }
 
 internal object VariFlightPayloadParser {
-    fun parse(payload: String, fallbackFlightNumber: String): FlightInfo {
+    /**
+     * The payload is a Python-dict-style response. Real responses wrap the flight list in
+     * `Flight details: {'code': 200, ..., 'data': [...]}`; a stopover flight (e.g. DNH→LHW→PKX)
+     * puts one element per leg into `data`, plus a whole-route summary record (StopFlag '1').
+     */
+    fun parseLegs(payload: String, fallbackFlightNumber: String): List<FlightInfo> {
         if (payload.isBlank()) throw VariFlightClientException("飞常准返回空航班数据")
+        val parsed = splitLegElements(payload).mapNotNull { element ->
+            parseLeg(element, fallbackFlightNumber)?.let { leg ->
+                leg to (stringField(element, "StopFlag") == "1")
+            }
+        }
+        if (parsed.size <= 1) return parsed.map { it.first }
+        // Drop the whole-route summary records when per-leg records are available.
+        val legsOnly = parsed.filterNot { it.second }.map { it.first }
+        return legsOnly.ifEmpty { parsed.map { it.first } }
+    }
 
-        val flightNumber = stringField(payload, "FlightNo")
-        val plannedDeparture = dateTimeField(payload, "FlightDeptimePlanDate")
-        val estimatedDeparture = dateTimeField(payload, "VeryZhunReadyDeptimeDate")
-            ?: dateTimeField(payload, "FlightDeptimeReadyDate")
-        val actualDeparture = dateTimeField(payload, "FlightDeptimeDate")
-        val plannedArrival = dateTimeField(payload, "FlightArrtimePlanDate")
-        val estimatedArrival = dateTimeField(payload, "VeryZhunReadyArrtimeDate")
-            ?: dateTimeField(payload, "FlightArrtimeReadyDate")
-        val actualArrival = dateTimeField(payload, "FlightArrtimeDate")
-        val actualOffBlock = dateTimeField(payload, "FlightOutgateTime")
-        val gateClosedObservedAt = dateTimeField(payload, "EstimateBoardingEndTime")
-        val boardingGate = stringField(payload, "BoardGate")
-        val departureStand = stringField(payload, "DepStandGate")
-        val arrivalStand = stringField(payload, "ArrStandGate")
-        val arrivalBridge = stringField(payload, "arr_bridge") ?: stringField(payload, "bridge")
+    private fun parseLeg(element: String, fallbackFlightNumber: String): FlightInfo? {
+        val flightNumber = stringField(element, "FlightNo")
+        val plannedDeparture = dateTimeField(element, "FlightDeptimePlanDate")
+        val estimatedDeparture = dateTimeField(element, "VeryZhunReadyDeptimeDate")
+            ?: dateTimeField(element, "FlightDeptimeReadyDate")
+        val actualDeparture = dateTimeField(element, "FlightDeptimeDate")
+        val plannedArrival = dateTimeField(element, "FlightArrtimePlanDate")
+        val estimatedArrival = dateTimeField(element, "VeryZhunReadyArrtimeDate")
+            ?: dateTimeField(element, "FlightArrtimeReadyDate")
+        val actualArrival = dateTimeField(element, "FlightArrtimeDate")
+        val actualOffBlock = dateTimeField(element, "FlightOutgateTime")
+        val gateClosedObservedAt = dateTimeField(element, "EstimateBoardingEndTime")
+        val boardingGate = stringField(element, "BoardGate")
+        val departureStand = stringField(element, "DepStandGate")
+        val arrivalStand = stringField(element, "ArrStandGate")
+        val arrivalBridge = stringField(element, "arr_bridge") ?: stringField(element, "bridge")
         val origin = airport(
-            code = stringField(payload, "FlightDepcode"),
-            name = stringField(payload, "FlightDepAirport"),
-            latitude = numberField(payload, "DepAirportLat"),
-            longitude = numberField(payload, "DepAirportLon"),
+            code = stringField(element, "FlightDepcode"),
+            name = stringField(element, "FlightDepAirport"),
+            latitude = numberField(element, "DepAirportLat"),
+            longitude = numberField(element, "DepAirportLon"),
         )
         val destination = airport(
-            code = stringField(payload, "FlightArrcode"),
-            name = stringField(payload, "FlightArrAirport"),
-            latitude = numberField(payload, "ArrAirportLat"),
-            longitude = numberField(payload, "ArrAirportLon"),
+            code = stringField(element, "FlightArrcode"),
+            name = stringField(element, "FlightArrAirport"),
+            latitude = numberField(element, "ArrAirportLat"),
+            longitude = numberField(element, "ArrAirportLon"),
         )
         val hasFlightData = listOf(
             flightNumber,
@@ -235,7 +255,7 @@ internal object VariFlightPayloadParser {
             origin,
             destination,
         ).any { it != null }
-        if (!hasFlightData) throw VariFlightClientException("未查询到该航班的实时信息")
+        if (!hasFlightData) return null
 
         return FlightInfo(
             flightNumber = flightNumber ?: fallbackFlightNumber,
@@ -254,6 +274,72 @@ internal object VariFlightPayloadParser {
             arrivalStand = arrivalStand,
             arrivalBridge = arrivalBridge,
         )
+    }
+
+    /**
+     * Splits the leg elements of the `data` array when the response wraps it in
+     * `{'code': ..., 'data': [...]}`; otherwise scans the whole payload for top-level dicts.
+     */
+    private fun splitLegElements(payload: String): List<String> =
+        splitTopLevelDicts(dataArrayRegion(payload) ?: payload)
+
+    /** Returns the region between the brackets of the `data` array, quotes/braces aware. */
+    private fun dataArrayRegion(payload: String): String? {
+        val match = Regex("['\"]data['\"]\\s*:\\s*\\[").find(payload) ?: return null
+        var depth = 1
+        var quote: Char? = null
+        var index = match.range.last + 1
+        while (index < payload.length) {
+            val char = payload[index]
+            val activeQuote = quote
+            when {
+                activeQuote != null -> when (char) {
+                    '\\' -> index++ // skip the escaped character
+                    activeQuote -> quote = null
+                }
+                char == '\'' || char == '"' -> quote = char
+                char == '[' -> depth++
+                char == ']' -> {
+                    depth--
+                    if (depth == 0) return payload.substring(match.range.last + 1, index)
+                }
+            }
+            index++
+        }
+        return null
+    }
+
+    /** Splits top-level `{...}` elements, ignoring brackets and braces inside quoted strings. */
+    private fun splitTopLevelDicts(payload: String): List<String> {
+        val elements = mutableListOf<String>()
+        var depth = 0
+        var start = -1
+        var quote: Char? = null
+        var index = 0
+        while (index < payload.length) {
+            val char = payload[index]
+            val activeQuote = quote
+            when {
+                activeQuote != null -> when (char) {
+                    '\\' -> index++ // skip the escaped character
+                    activeQuote -> quote = null
+                }
+                char == '\'' || char == '"' -> quote = char
+                char == '{' -> {
+                    if (depth == 0) start = index
+                    depth++
+                }
+                char == '}' && depth > 0 -> {
+                    depth--
+                    if (depth == 0 && start >= 0) {
+                        elements += payload.substring(start, index + 1)
+                        start = -1
+                    }
+                }
+            }
+            index++
+        }
+        return elements
     }
 
     private fun stringField(payload: String, key: String): String? =
@@ -306,7 +392,7 @@ internal class FlightResponseCache(
     private val ttlMillis: Long,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private data class CacheEntry(val flight: FlightInfo, val expiresAtMillis: Long)
+    private data class CacheEntry(val legs: List<FlightInfo>, val expiresAtMillis: Long)
 
     private val entries = ConcurrentHashMap<FlightLookup, CacheEntry>()
 
@@ -314,7 +400,7 @@ internal class FlightResponseCache(
         require(ttlMillis >= 0) { "Cache TTL must not be negative" }
     }
 
-    fun getOrFetch(lookup: FlightLookup, loader: () -> FlightInfo): FlightInfo {
+    fun getOrFetch(lookup: FlightLookup, loader: () -> List<FlightInfo>): List<FlightInfo> {
         if (ttlMillis == 0L) return loader()
         val entry = entries.compute(lookup) { _, existing ->
             val now = nowMillis()
@@ -324,7 +410,7 @@ internal class FlightResponseCache(
                 CacheEntry(loader(), now + ttlMillis)
             }
         } ?: error("Cache entry was not created")
-        return entry.flight
+        return entry.legs
     }
 
     fun clear() {
@@ -364,8 +450,8 @@ internal class VariFlightRequestProtection(
     fun fetch(
         lookup: FlightLookup,
         isCurrent: () -> Boolean = { true },
-        loader: () -> FlightInfo,
-    ): FlightInfo {
+        loader: () -> List<FlightInfo>,
+    ): List<FlightInfo> {
         acquireCapacity()
         return cache.getOrFetch(lookup) {
             // Another refresh may have held this cache key while the duty window moved on.
@@ -374,7 +460,7 @@ internal class VariFlightRequestProtection(
         }
     }
 
-    fun fetchUncached(loader: () -> FlightInfo): FlightInfo {
+    fun fetchUncached(loader: () -> List<FlightInfo>): List<FlightInfo> {
         acquireCapacity()
         return loader()
     }

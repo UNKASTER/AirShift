@@ -133,7 +133,7 @@ class RosterStore(context: Context) {
     }
 
     internal fun mergeLiveInfoIfGeneration(
-        live: Map<FlightLookup, FlightInfo>,
+        live: Map<FlightLookup, List<FlightInfo>>,
         expectedGeneration: Long,
         fallbackDate: LocalDate,
         refreshedAtEpochMillis: Long? = null,

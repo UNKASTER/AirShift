@@ -36,12 +36,12 @@ class VariFlightProtectionTest {
         val cache = FlightResponseCache(ttlMillis = 100L) { now }
         val lookup = FlightLookup.of("MU1234", LocalDate.of(2026, 8, 23))
 
-        assertEquals("1", cache.getOrFetch(lookup) { flight("1").also { upstreamCalls++ } }.arrivalBridge)
-        assertEquals("1", cache.getOrFetch(lookup) { flight("2").also { upstreamCalls++ } }.arrivalBridge)
+        assertEquals("1", cache.getOrFetch(lookup) { listOf(flight("1")).also { upstreamCalls++ } }.first().arrivalBridge)
+        assertEquals("1", cache.getOrFetch(lookup) { listOf(flight("2")).also { upstreamCalls++ } }.first().arrivalBridge)
         assertEquals(1, upstreamCalls)
 
         now += 100L
-        assertEquals("2", cache.getOrFetch(lookup) { flight("2").also { upstreamCalls++ } }.arrivalBridge)
+        assertEquals("2", cache.getOrFetch(lookup) { listOf(flight("2")).also { upstreamCalls++ } }.first().arrivalBridge)
         assertEquals(2, upstreamCalls)
     }
 
@@ -58,8 +58,8 @@ class VariFlightProtectionTest {
                 error("temporary failure")
             }
         }
-        cache.getOrFetch(firstDate) { flight("first").also { calls++ } }
-        cache.getOrFetch(secondDate) { flight("second").also { calls++ } }
+        cache.getOrFetch(firstDate) { listOf(flight("first")).also { calls++ } }
+        cache.getOrFetch(secondDate) { listOf(flight("second")).also { calls++ } }
 
         assertEquals(3, calls)
     }
@@ -73,16 +73,16 @@ class VariFlightProtectionTest {
         val pool = Executors.newFixedThreadPool(4)
         try {
             val futures = (1..4).map {
-                pool.submit<FlightInfo> {
+                pool.submit<List<FlightInfo>> {
                     start.await()
                     cache.getOrFetch(lookup) {
                         calls.incrementAndGet()
-                        flight("shared")
+                        listOf(flight("shared"))
                     }
                 }
             }
             start.countDown()
-            futures.forEach { assertEquals("shared", it.get(2, TimeUnit.SECONDS).arrivalBridge) }
+            futures.forEach { assertEquals("shared", it.get(2, TimeUnit.SECONDS).first().arrivalBridge) }
             assertEquals(1, calls.get())
         } finally {
             pool.shutdownNow()
@@ -97,9 +97,9 @@ class VariFlightProtectionTest {
         )
         val lookup = FlightLookup.of("MU1234", LocalDate.of(2026, 8, 23))
 
-        protection.fetch(lookup) { flight("cached") }
+        protection.fetch(lookup) { listOf(flight("cached")) }
         val error = assertThrows(VariFlightClientException::class.java) {
-            protection.fetch(lookup) { flight("unused") }
+            protection.fetch(lookup) { listOf(flight("unused")) }
         }
 
         assertTrue(error.message.orEmpty().contains("每分钟 30 次"))
@@ -121,7 +121,7 @@ class VariFlightProtectionTest {
         val upstreamCalls = AtomicInteger()
         val pool = Executors.newFixedThreadPool(2)
         try {
-            val first = pool.submit<FlightInfo> {
+            val first = pool.submit<List<FlightInfo>> {
                 protection.fetch(lookup) {
                     upstreamCalls.incrementAndGet()
                     firstStarted.countDown()
@@ -143,7 +143,7 @@ class VariFlightProtectionTest {
                 ) { request ->
                     protection.fetch(request, isCurrent = stillCurrent::get) {
                         upstreamCalls.incrementAndGet()
-                        flight("must not be queried")
+                        listOf(flight("must not be queried"))
                     }
                 }
             }
@@ -178,8 +178,8 @@ class VariFlightProtectionTest {
         val firstArrival = LocalDateTime.of(2026, 8, 23, 12, 10)
         val secondArrival = LocalDateTime.of(2026, 8, 24, 13, 20)
         val live = mapOf(
-            FlightLookup.of("MU1234", firstDate) to flight(actualArrival = firstArrival),
-            FlightLookup.of("MU1234", secondDate) to flight(actualArrival = secondArrival),
+            FlightLookup.of("MU1234", firstDate) to listOf(flight(actualArrival = firstArrival)),
+            FlightLookup.of("MU1234", secondDate) to listOf(flight(actualArrival = secondArrival)),
         )
 
         assertEquals(firstArrival, assignment(firstDate).withLiveInfo(live, firstDate).actualArrival)

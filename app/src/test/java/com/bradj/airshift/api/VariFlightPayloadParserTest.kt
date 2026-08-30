@@ -29,7 +29,7 @@ class VariFlightPayloadParserTest {
               'EstimateBoardingEndTime': '2026-08-20 10:25:00', 'arr_bridge': '靠廊桥'}]
         """.trimIndent()
 
-        val flight = VariFlightPayloadParser.parse(payload, "fallback")
+        val flight = VariFlightPayloadParser.parseLegs(payload, "fallback").single()
 
         assertEquals("ZZ1001", flight.flightNumber)
         assertEquals(LocalDateTime.of(2026, 8, 20, 10, 40), flight.plannedDeparture)
@@ -61,7 +61,7 @@ class VariFlightPayloadParserTest {
               'bridge': '远机位'}]
         """.trimIndent()
 
-        val flight = VariFlightPayloadParser.parse(payload, "MU1234")
+        val flight = VariFlightPayloadParser.parseLegs(payload, "MU1234").single()
 
         assertEquals("MU1234", flight.flightNumber)
         assertEquals(LocalDateTime.of(2026, 8, 20, 10, 47), flight.estimatedDeparture)
@@ -74,22 +74,130 @@ class VariFlightPayloadParserTest {
     }
 
     @Test
+    fun splitsAStopoverFlightIntoOneLegPerElement() {
+        val payload = """
+            [{'FlightNo': 'MU2415',
+              'FlightDepcode': 'DNH', 'FlightDepAirport': '敦煌莫高',
+              'FlightArrcode': 'LHW', 'FlightArrAirport': '兰州中川',
+              'FlightDeptimePlanDate': datetime.datetime(2026, 8, 30, 12, 40),
+              'FlightDeptimeDate': datetime.datetime(2026, 8, 30, 12, 47),
+              'FlightArrtimePlanDate': datetime.datetime(2026, 8, 30, 14, 30),
+              'BoardGate': '301', 'ArrStandGate': '105'},
+             {'FlightNo': 'MU2415',
+              'FlightDepcode': 'LHW', 'FlightDepAirport': '兰州中川',
+              'FlightArrcode': 'PKX', 'FlightArrAirport': '北京大兴',
+              'FlightDeptimePlanDate': datetime.datetime(2026, 8, 30, 15, 30),
+              'FlightArrtimePlanDate': datetime.datetime(2026, 8, 30, 17, 35),
+              'BoardGate': 'D58', 'DepStandGate': '358'}]
+        """.trimIndent()
+
+        val legs = VariFlightPayloadParser.parseLegs(payload, "fallback")
+
+        assertEquals(2, legs.size)
+        assertEquals("DNH", legs[0].origin?.code)
+        assertEquals("LHW", legs[0].destination?.code)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 12, 40), legs[0].plannedDeparture)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 12, 47), legs[0].actualDeparture)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 14, 30), legs[0].plannedArrival)
+        assertEquals("301", legs[0].boardingGate)
+        assertEquals("105", legs[0].arrivalStand)
+        assertEquals("LHW", legs[1].origin?.code)
+        assertEquals("PKX", legs[1].destination?.code)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 15, 30), legs[1].plannedDeparture)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 17, 35), legs[1].plannedArrival)
+        assertEquals("358", legs[1].departureStand)
+    }
+
+    @Test
+    fun skipsElementsWithoutFlightData() {
+        val payload = "[{}, {'FlightNo': 'MU1234', 'FlightDepcode': 'LHW'}]"
+
+        val legs = VariFlightPayloadParser.parseLegs(payload, "fallback")
+
+        assertEquals(1, legs.size)
+        assertEquals("MU1234", legs[0].flightNumber)
+    }
+
+    @Test
     fun rejectsPayloadWithoutFlightData() {
+        val rpc = successfulRpc("[]")
+
         val error = assertThrows(VariFlightClientException::class.java) {
-            VariFlightPayloadParser.parse("[]", "MU1234")
+            VariFlightJsonRpcParser.parse(rpc, "MU1234")
         }
 
         assertEquals("未查询到该航班的实时信息", error.message)
     }
 
     @Test
+    fun unwrapsTheDataArrayAndDropsTheStopoverSummaryRecord() {
+        // Real MU2415 response shape: a 'Flight details: ' prefix, a {'code', 'message', 'data'}
+        // wrapper, and a whole-route summary record (StopFlag '1') before the two leg records.
+        val payload = """
+            Flight details: {'code': 200, 'message': 'Success', 'data': [
+              {'FlightNo': 'MU2415', 'FlightDepcode': 'DNH', 'FlightDepAirport': '敦煌莫高',
+               'FlightArrcode': 'PKX', 'FlightArrAirport': '北京大兴',
+               'FlightDeptimePlanDate': '2026-08-30 12:45:00', 'FlightArrtimePlanDate': '2026-08-30 17:55:00',
+               'BoardGate': '301', 'ArrStandGate': '105', 'StopFlag': '1', 'StopAirportCode': 'LHW'},
+              {'FlightNo': 'MU2415', 'FlightDepcode': 'DNH', 'FlightDepAirport': '敦煌莫高',
+               'FlightArrcode': 'LHW', 'FlightArrAirport': '兰州中川',
+               'FlightDeptimePlanDate': '2026-08-30 12:45:00', 'FlightDeptimeDate': '2026-08-30 12:47:00',
+               'FlightArrtimePlanDate': '2026-08-30 14:30:00', 'FlightArrtimeDate': '2026-08-30 14:03:47',
+               'BoardGate': '301', 'ArrStandGate': '351', 'StopFlag': '0'},
+              {'FlightNo': 'MU2415', 'FlightDepcode': 'LHW', 'FlightDepAirport': '兰州中川',
+               'FlightArrcode': 'PKX', 'FlightArrAirport': '北京大兴',
+               'FlightDeptimePlanDate': '2026-08-30 15:30:00', 'FlightDeptimeDate': '2026-08-30 15:31:05',
+               'FlightArrtimePlanDate': '2026-08-30 17:55:00', 'FlightArrtimeDate': '2026-08-30 17:31:25',
+               'BoardGate': 'C51', 'DepStandGate': '351', 'ArrStandGate': '105', 'StopFlag': '0'}]}
+        """.trimIndent()
+
+        val legs = VariFlightPayloadParser.parseLegs(payload, "fallback")
+
+        assertEquals(2, legs.size)
+        assertEquals("DNH", legs[0].origin?.code)
+        assertEquals("LHW", legs[0].destination?.code)
+        assertEquals("兰州中川", legs[0].destination?.name)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 14, 30), legs[0].plannedArrival)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 14, 3, 47), legs[0].actualArrival)
+        assertEquals("351", legs[0].arrivalStand)
+        assertEquals("LHW", legs[1].origin?.code)
+        assertEquals("PKX", legs[1].destination?.code)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 15, 30), legs[1].plannedDeparture)
+        assertEquals(LocalDateTime.of(2026, 8, 30, 15, 31, 5), legs[1].actualDeparture)
+        assertEquals("C51", legs[1].boardingGate)
+        assertEquals("105", legs[1].arrivalStand)
+    }
+
+    @Test
+    fun combinesLegsFromMultipleContentItems() {
+        val rpc = JSONObject()
+            .put("jsonrpc", "2.0")
+            .put(
+                "result",
+                JSONObject().put(
+                    "content",
+                    JSONArray()
+                        .put(JSONObject().put("type", "text").put("text", "[{'FlightNo': 'MU2415', 'FlightDepcode': 'DNH', 'FlightArrcode': 'LHW'}]"))
+                        .put(JSONObject().put("type", "text").put("text", "[{'FlightNo': 'MU2415', 'FlightDepcode': 'LHW', 'FlightArrcode': 'PKX'}]")),
+                ),
+            )
+            .toString()
+
+        val legs = VariFlightJsonRpcParser.parse(rpc, "fallback")
+
+        assertEquals(2, legs.size)
+        assertEquals("DNH", legs[0].origin?.code)
+        assertEquals("PKX", legs[1].destination?.code)
+    }
+
+    @Test
     fun parsesJsonRpcAndServerSentEventResponses() {
         val rpc = successfulRpc("[{'FlightNo': 'MU1234'}]")
 
-        assertEquals("MU1234", VariFlightJsonRpcParser.parse(rpc, "fallback").flightNumber)
+        assertEquals("MU1234", VariFlightJsonRpcParser.parse(rpc, "fallback").single().flightNumber)
         assertEquals(
             "MU1234",
-            VariFlightJsonRpcParser.parse("event: message\ndata: $rpc\n\n", "fallback").flightNumber,
+            VariFlightJsonRpcParser.parse("event: message\ndata: $rpc\n\n", "fallback").single().flightNumber,
         )
     }
 

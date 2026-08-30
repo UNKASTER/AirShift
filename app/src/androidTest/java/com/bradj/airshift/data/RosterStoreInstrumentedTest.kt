@@ -113,15 +113,15 @@ class RosterStoreInstrumentedTest {
         store.setCurrentDutyIndex(1)
 
         store.mergeLiveInfoIfGeneration(
-            mapOf(FlightLookup.of("MU1003", date) to liveFlight("MU1003", "NEW-C")),
+            mapOf(FlightLookup.of("MU1003", date) to liveLegs("MU1003", "NEW-C")),
             generation,
             date,
             100L,
         )
         val merged = store.mergeLiveInfoIfGeneration(
             mapOf(
-                FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE-A"),
-                FlightLookup.of("MU1002", date) to liveFlight("MU1002", "NEW-B"),
+                FlightLookup.of("MU1001", date) to liveLegs("MU1001", "STALE-A"),
+                FlightLookup.of("MU1002", date) to liveLegs("MU1002", "NEW-B"),
             ),
             generation,
             date,
@@ -145,7 +145,7 @@ class RosterStoreInstrumentedTest {
         val date = duties.first().scheduledArrival!!.toLocalDate()
 
         val merged = store.mergeLiveInfoIfGeneration(
-            mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW")),
+            mapOf(FlightLookup.of("MU1001", date) to liveLegs("MU1001", "NEW")),
             generation,
             date,
         )!!
@@ -165,7 +165,7 @@ class RosterStoreInstrumentedTest {
 
         assertNull(
             store.mergeLiveInfoIfGeneration(
-                mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE")),
+                mapOf(FlightLookup.of("MU1001", date) to liveLegs("MU1001", "STALE")),
                 oldGeneration,
                 date,
                 100L,
@@ -174,7 +174,7 @@ class RosterStoreInstrumentedTest {
         assertEquals(
             before,
             store.mergeLiveInfoIfGeneration(
-                mapOf(FlightLookup.of("MU1003", date) to liveFlight("MU1003", "OUTSIDE")),
+                mapOf(FlightLookup.of("MU1003", date) to liveLegs("MU1003", "OUTSIDE")),
                 generation,
                 date,
                 200L,
@@ -191,8 +191,8 @@ class RosterStoreInstrumentedTest {
         val date = duties.first().scheduledArrival!!.toLocalDate()
         store.setCurrentDutyIndex(duties.size)
         val live = mapOf(
-            FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW-FIRST"),
-            FlightLookup.of("MU1003", date) to liveFlight("MU1003", "NEW-LAST"),
+            FlightLookup.of("MU1001", date) to liveLegs("MU1001", "NEW-FIRST"),
+            FlightLookup.of("MU1003", date) to liveLegs("MU1003", "NEW-LAST"),
         )
 
         val ignored = store.mergeLiveInfoIfGeneration(live, generation, date, 100L)!!
@@ -220,7 +220,7 @@ class RosterStoreInstrumentedTest {
         assertTrue(listOf(duty).allDutiesComplete(now))
 
         val merged = store.mergeLiveInfoIfGeneration(
-            mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "NEW").copy(estimatedArrival = now.plusHours(2))),
+            mapOf(FlightLookup.of("MU1001", date) to listOf(liveFlight("MU1001", "NEW").copy(estimatedArrival = now.plusHours(2)))),
             generation,
             date,
             scope = FlightRefreshScope.ALL_ROSTER,
@@ -244,7 +244,7 @@ class RosterStoreInstrumentedTest {
 
         assertNull(
             store.mergeLiveInfoIfGeneration(
-                mapOf(FlightLookup.of("MU1001", date) to liveFlight("MU1001", "STALE")),
+                mapOf(FlightLookup.of("MU1001", date) to liveLegs("MU1001", "STALE")),
                 oldGeneration,
                 date,
                 100L,
@@ -261,6 +261,8 @@ class RosterStoreInstrumentedTest {
         outboundFlight = null,
         scheduledDeparture = null,
     )
+
+    private fun liveLegs(flight: String, stand: String) = listOf(liveFlight(flight, stand))
 
     private fun liveFlight(flight: String, stand: String) = FlightInfo(
         flightNumber = flight,
