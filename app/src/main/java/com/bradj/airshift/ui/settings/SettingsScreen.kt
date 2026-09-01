@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -35,10 +35,9 @@ import androidx.compose.ui.unit.dp
 import com.bradj.airshift.ui.components.QuietCard
 import com.bradj.airshift.ui.components.StatusDot
 import com.bradj.airshift.ui.components.formatEpoch
+import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.SuccessGreen
-import com.bradj.airshift.ui.theme.TextPrimary
-import com.bradj.airshift.ui.theme.TextSecondary
 
 /** 设置页：卡片化分区；保存为东航红主按钮，清除 API Key 降级为红色文字按钮。 */
 @Composable
@@ -70,8 +69,7 @@ fun SettingsScreen(
             Text(
                 "设置",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         item {
@@ -109,7 +107,7 @@ fun SettingsScreen(
                     Text(
                         message,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(Modifier.height(AirShiftSpacing.S))
@@ -154,9 +152,9 @@ fun SettingsScreen(
             Button(
                 onClick = { onSave(name.trim(), apiKey.trim()) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = CircleShape,
+                shape = RoundedCornerShape(AirShiftRadius.Button),
                 enabled = name.trim().length >= 2 && !isTesting,
-            ) { Text("保存", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+            ) { Text("保存", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         }
         item { Spacer(Modifier.height(AirShiftSpacing.L)) }
     }
@@ -173,8 +171,8 @@ private fun SettingsSection(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(AirShiftSpacing.M))
             content()
@@ -208,10 +206,10 @@ private fun MucNotificationCard(
         Text(
             "最近成功识别：${lastSuccessfulRecognitionEpochMillis?.formatEpoch("MM-dd HH:mm") ?: "暂无"}",
             style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         lastProcessingResult?.let { result ->
-            Text(result, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            Text(result, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton(onClick = onOpenNotificationAccessSettings) {
             Text(if (notificationAccessGranted) "管理通知读取权限" else "授予通知读取权限")
@@ -234,7 +232,7 @@ private fun SettingsTextField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
-        supportingText = supportingText?.let { text -> { Text(text, color = TextSecondary) } },
+        supportingText = supportingText?.let { text -> { Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         singleLine = true,

@@ -2,6 +2,7 @@ package com.bradj.airshift.ui.all
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -36,8 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
@@ -45,17 +46,19 @@ import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.StandChangeRecord
 import com.bradj.airshift.ui.components.AccentBar
 import com.bradj.airshift.ui.components.AssignmentCard
+import com.bradj.airshift.ui.components.LinearIcons
 import com.bradj.airshift.ui.components.QuietCard
 import com.bradj.airshift.ui.components.RouteArcsDecoration
-import com.bradj.airshift.ui.components.StatusDot
-import com.bradj.airshift.ui.theme.AmberAccent
+import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
+import com.bradj.airshift.ui.theme.AmberAccent
+import com.bradj.airshift.ui.theme.AmberSoft
 import com.bradj.airshift.ui.theme.CeaNavy
-import com.bradj.airshift.ui.theme.CeaRedGradient
-import com.bradj.airshift.ui.theme.InboundBlue
+import com.bradj.airshift.ui.theme.CeaNavyGradient
+import com.bradj.airshift.ui.theme.CeaRed
 import com.bradj.airshift.ui.theme.TextHint
-import com.bradj.airshift.ui.theme.TextPrimary
-import com.bradj.airshift.ui.theme.TextSecondary
+import com.bradj.airshift.ui.theme.currentCardShadow
+import java.time.LocalDate
 
 /** 全部执勤页：当日全部任务，含导入、状态消息与任务列表。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,7 +105,7 @@ fun AllDutyScreen(
                     Text(
                         message,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -125,15 +128,20 @@ fun AllDutyScreen(
                     Text(
                         "我的保障任务",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        "${assignments.size} 项",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = CircleShape,
+                    ) {
+                        Text(
+                            "${assignments.size} 项",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             if (assignments.isEmpty()) {
@@ -155,61 +163,74 @@ fun AllDutyScreen(
 }
 
 /**
- * 白底问候头部：红色小色块点缀 + 藏青大标题 + 低透明度航线弧线装饰。
- * 红色仅作标识区点缀，不大面积铺屏。
+ * 页头：深藏青 135° 微渐变底 + 低透明度燕子弧线纹理；
+ * 问候语缩小、日期信息放大、位置做成 chip。
  */
 @Composable
 private fun AllDutyHeader(name: String, airport: String?) {
-    QuietCard(modifier = Modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            RouteArcsDecoration(
-                color = CeaNavy.copy(alpha = 0.07f),
-                modifier = Modifier.matchParentSize(),
+    val today = LocalDate.now()
+    val weekdays = listOf("一", "二", "三", "四", "五", "六", "日")
+    val dateText = "${today.monthValue}月${today.dayOfMonth}日 星期${weekdays[today.dayOfWeek.value - 1]}"
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .currentCardShadow(MaterialTheme.shapes.large)
+            .clip(MaterialTheme.shapes.large)
+            .background(CeaNavyGradient),
+    ) {
+        RouteArcsDecoration(
+            color = Color.White.copy(alpha = 0.08f),
+            modifier = Modifier.matchParentSize(),
+        )
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                "中国东方航空 · 地面服务保障",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.75f),
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(AirShiftSpacing.M),
-                verticalAlignment = Alignment.CenterVertically,
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "你好，$name",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.75f),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                dateText,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(10.dp))
+            // 位置 chip
+            Surface(
+                color = Color.White.copy(alpha = 0.14f),
+                shape = CircleShape,
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(6.dp)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(CeaRedGradient),
-                )
-                Spacer(Modifier.width(AirShiftSpacing.M))
-                Column {
-                    Text(
-                        "中国东方航空 · 地面服务保障",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = InboundBlue,
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = LinearIcons.Stand,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = Color.White,
                     )
-                    Spacer(Modifier.height(AirShiftSpacing.S))
+                    Spacer(Modifier.width(4.dp))
                     Text(
-                        "你好，$name",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        airport ?: "导入并刷新航班后自动识别机场",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
                     )
-                    Spacer(Modifier.height(AirShiftSpacing.S))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        StatusDot(color = InboundBlue, modifier = Modifier.size(6.dp))
-                        Spacer(Modifier.width(AirShiftSpacing.S))
-                        Text(
-                            airport?.let { "当前位置：$it" } ?: "当前位置：导入并刷新航班后自动识别机场",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                        )
-                    }
                 }
             }
         }
     }
 }
 
+/** 导入排班：主按钮东航红实心+白色图标，次按钮 1px 藏青描边；说明文字 12sp 灰。 */
 @Composable
 private fun ImportCard(
     isWorking: Boolean,
@@ -225,7 +246,7 @@ private fun ImportCard(
                     .padding(AirShiftSpacing.M)
                     .height(48.dp),
                 enabled = false,
-                shape = CircleShape,
+                shape = RoundedCornerShape(AirShiftRadius.Button),
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
@@ -240,39 +261,46 @@ private fun ImportCard(
                 Text(
                     "导入排班",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     "截图或 Excel 均可，只提取分配给你的航班",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(AirShiftSpacing.M))
                 Row(horizontalArrangement = Arrangement.spacedBy(AirShiftSpacing.S)) {
                     Button(
                         onClick = onImportImage,
                         modifier = Modifier.weight(1f).height(48.dp),
-                        shape = CircleShape,
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(AirShiftSpacing.S))
-                        Text("排班图片")
-                    }
-                    OutlinedButton(
-                        onClick = onImportExcel,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = CircleShape,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = CeaNavy),
+                        shape = RoundedCornerShape(AirShiftRadius.Button),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CeaRed,
+                            contentColor = Color.White,
+                        ),
                     ) {
                         Icon(
-                            Icons.Default.DateRange,
+                            LinearIcons.Image,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(AirShiftSpacing.S))
-                        Text("Excel 文件")
+                        Text("排班图片", fontWeight = FontWeight.SemiBold)
+                    }
+                    OutlinedButton(
+                        onClick = onImportExcel,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(AirShiftRadius.Button),
+                        border = BorderStroke(1.dp, CeaNavy),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = CeaNavy),
+                    ) {
+                        Icon(
+                            LinearIcons.File,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(AirShiftSpacing.S))
+                        Text("Excel 文件", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -280,10 +308,15 @@ private fun ImportCard(
     }
 }
 
-/** “需要留意”提示：白卡 + 左侧琥珀竖条 + 小图标，不用大色块。 */
+/** "需要留意"提示条：琥珀左边条 + 浅琥珀底（深色模式为半透明琥珀）+ 三角警告图标。 */
 @Composable
 private fun WarningCard(warnings: List<String>) {
-    QuietCard {
+    val container = if (isSystemInDarkTheme()) AmberAccent.copy(alpha = 0.16f) else AmberSoft
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = container,
+        shape = MaterialTheme.shapes.large,
+    ) {
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             AccentBar(color = AmberAccent)
             Column(
@@ -291,32 +324,25 @@ private fun WarningCard(warnings: List<String>) {
                 verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(AmberAccent.copy(alpha = 0.14f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "!",
-                            color = AmberAccent,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
+                    Icon(
+                        imageVector = LinearIcons.Alert,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = AmberAccent,
+                    )
                     Spacer(Modifier.width(AirShiftSpacing.S))
                     Text(
                         "需要留意",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 warnings.distinct().forEach {
                     Text(
                         "• $it",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -324,10 +350,15 @@ private fun WarningCard(warnings: List<String>) {
     }
 }
 
-/** 轻量提醒条：白卡 + 琥珀竖条 + 文字按钮。 */
+/** 轻量提醒条：浅琥珀底 + 琥珀左边条 + 文字按钮。 */
 @Composable
 private fun ActionNotice(text: String, action: String, onAction: () -> Unit) {
-    QuietCard {
+    val container = if (isSystemInDarkTheme()) AmberAccent.copy(alpha = 0.16f) else AmberSoft
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = container,
+        shape = MaterialTheme.shapes.large,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
@@ -339,11 +370,18 @@ private fun ActionNotice(text: String, action: String, onAction: () -> Unit) {
                     .padding(horizontal = AirShiftSpacing.M),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector = LinearIcons.Alert,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = AmberAccent,
+                )
+                Spacer(Modifier.width(AirShiftSpacing.S))
                 Text(
                     text,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 TextButton(onClick = onAction) { Text(action) }
             }
@@ -361,11 +399,17 @@ private fun EmptyRoster() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
         ) {
+            Icon(
+                imageVector = LinearIcons.Plane,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = TextHint,
+            )
             Text(
                 "还没有排班",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 "导入排班图片或 Excel 文件后，你的保障任务会显示在这里。",

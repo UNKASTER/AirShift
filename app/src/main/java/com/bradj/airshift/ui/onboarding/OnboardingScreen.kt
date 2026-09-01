@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -30,10 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
-import com.bradj.airshift.ui.theme.CeaRedGradient
-import com.bradj.airshift.ui.theme.TextPrimary
-import com.bradj.airshift.ui.theme.TextSecondary
+import com.bradj.airshift.ui.theme.CeaRed
 
 /** 首启姓名页：逻辑不变，套用「安静的效率感」主题。 */
 @Composable
@@ -49,14 +47,13 @@ fun OnboardingScreen(onSave: (String) -> Unit) {
                     .width(48.dp)
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(CeaRedGradient),
+                    .background(CeaRed),
             )
             Spacer(Modifier.height(AirShiftSpacing.M))
             Text(
                 "航勤智排",
                 style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(AirShiftSpacing.S))
             Text(
@@ -67,7 +64,7 @@ fun OnboardingScreen(onSave: (String) -> Unit) {
             Spacer(Modifier.height(AirShiftSpacing.M))
             Text(
                 "先告诉我你的姓名。之后每次导入排班，只会提取分配给你的航班。",
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(AirShiftSpacing.L))
             TextField(
@@ -90,14 +87,14 @@ fun OnboardingScreen(onSave: (String) -> Unit) {
             Button(
                 onClick = { onSave(name.trim()) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = CircleShape,
+                shape = RoundedCornerShape(AirShiftRadius.Button),
                 enabled = name.trim().length >= 2,
-            ) { Text("保存并开始使用") }
+            ) { Text("保存并开始使用", fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(AirShiftSpacing.M))
             Text(
                 "姓名仅保存在本机，可稍后在设置中修改。",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
