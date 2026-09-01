@@ -78,6 +78,7 @@ object SpecialServiceJsonCodec {
         put("updatedAtEpochMillis", updatedAtEpochMillis)
         put("expiresAtEpochMillis", expiresAtEpochMillis)
         put("fingerprint", fingerprint)
+        putNullable("previousGate", previousGate)
     }
 
     private fun ParsedGateChangeCandidate.toJson() = JSONObject().apply {
@@ -88,6 +89,7 @@ object SpecialServiceJsonCodec {
         put("boardingGate", boardingGate)
         put("sourceEpochMillis", sourceEpochMillis)
         put("expiresAtEpochMillis", expiresAtEpochMillis)
+        putNullable("previousGate", previousGate)
     }
 
     private fun StandChangeRecord.toJson() = JSONObject().apply {
@@ -179,6 +181,7 @@ object SpecialServiceJsonCodec {
         updatedAtEpochMillis = getLong("updatedAtEpochMillis"),
         expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
         fingerprint = getString("fingerprint"),
+        previousGate = nullableString("previousGate"),
     )
 
     private fun JSONObject.toParsedGateChange() = ParsedGateChangeCandidate(
@@ -189,6 +192,7 @@ object SpecialServiceJsonCodec {
         boardingGate = getString("boardingGate"),
         sourceEpochMillis = getLong("sourceEpochMillis"),
         expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
+        previousGate = nullableString("previousGate"),
     )
 
     private fun JSONObject.toStandChangeRecord() = StandChangeRecord(

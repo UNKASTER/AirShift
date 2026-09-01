@@ -39,6 +39,7 @@ import com.bradj.airshift.ui.components.cancellationForFlight
 import com.bradj.airshift.ui.components.forFlight
 import com.bradj.airshift.ui.components.formatClock
 import com.bradj.airshift.ui.components.formatEpoch
+import com.bradj.airshift.ui.components.gateChangeDisplayValue
 import com.bradj.airshift.ui.components.gateForFlight
 import com.bradj.airshift.ui.components.standForFlight
 import com.bradj.airshift.ui.theme.AirShiftSpacing
@@ -384,7 +385,7 @@ private fun CurrentAssignmentCard(
                             DetailEntry(
                                 label = "登机口",
                                 value = gateChange?.let {
-                                    "${assignment.inboundBoardingGate ?: "--"} → ${it.boardingGate}"
+                                    gateChangeDisplayValue(assignment.inboundBoardingGate, it)
                                 } ?: (assignment.inboundBoardingGate ?: "--"),
                                 hasChange = gateChange != null,
                             ),
@@ -440,7 +441,7 @@ private fun CurrentAssignmentCard(
                             DetailEntry(
                                 label = "登机口",
                                 value = gateChange?.let {
-                                    "${assignment.boardingGate ?: "--"} → ${it.boardingGate}"
+                                    gateChangeDisplayValue(assignment.boardingGate, it)
                                 } ?: (assignment.boardingGate ?: "--"),
                                 hasChange = gateChange != null,
                             ),

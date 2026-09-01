@@ -2,6 +2,7 @@ package com.bradj.airshift.specialservice
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.json.JSONObject
@@ -130,7 +131,7 @@ class SpecialServiceStateTest {
             records = listOf(record),
             pendingReviews = listOf(candidate(200L, "pending-hmac").toPending(listOf(flight))),
             gateChanges = listOf(
-                GateChangeRecord("MU2473", date, "A5", 210L, 10_000L, "gate-hmac"),
+                GateChangeRecord("MU2473", date, "A5", 210L, 10_000L, "gate-hmac", previousGate = "A2"),
             ),
             pendingGateChanges = listOf(gateCandidate(220L, "pending-gate-hmac")),
             standChanges = listOf(
@@ -319,6 +320,39 @@ class SpecialServiceStateTest {
         ).state
         assertTrue(restored.records.single().active)
         assertTrue(restored.flightCancellations.isEmpty())
+    }
+
+    @Test
+    fun gateChangeInheritsPreviousGateFromExistingRecordWhenAbsent() {
+        val first = MucMessageReducer.apply(
+            SpecialServiceState(),
+            ParsedMucMessage(gateChanges = listOf(gateCandidate(100L, "gate-1", "A5").copy(previousGate = "A2"))),
+            listOf(flight),
+        ).state
+        assertEquals("A5", first.gateChanges.single().boardingGate)
+        assertEquals("A2", first.gateChanges.single().previousGate)
+
+        // 新消息未携带原登机口（如「现为A8」）时，沿用既有记录的当前值，保持变更链完整
+        val chained = MucMessageReducer.apply(
+            first,
+            ParsedMucMessage(gateChanges = listOf(gateCandidate(200L, "gate-2", "A8"))),
+            listOf(flight),
+        ).state
+        assertEquals("A8", chained.gateChanges.single().boardingGate)
+        assertEquals("A5", chained.gateChanges.single().previousGate)
+    }
+
+    @Test
+    fun gateChangeJsonRoundTripsPreviousGateAndToleratesLegacyData() {
+        val record = GateChangeRecord("MU2473", date, "A5", 210L, 10_000L, "gate-hmac", previousGate = "A2")
+        val encoded = SpecialServiceJsonCodec.encode(SpecialServiceState(gateChanges = listOf(record)))
+        assertEquals(record, SpecialServiceJsonCodec.decode(encoded).gateChanges.single())
+
+        // 旧版本数据没有 previousGate 字段，解码为 null
+        val legacy = JSONObject(encoded).apply {
+            getJSONArray("gateChanges").getJSONObject(0).remove("previousGate")
+        }
+        assertNull(SpecialServiceJsonCodec.decode(legacy.toString()).gateChanges.single().previousGate)
     }
 
     @Test

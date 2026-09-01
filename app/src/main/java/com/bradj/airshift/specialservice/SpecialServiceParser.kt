@@ -28,6 +28,12 @@ object SpecialServiceParser {
     private val gateChangeRegex = Regex(
         "登机口.{0,18}?(?:(?:变更|更改|调整|改|换|变)(?:为|至|到)?|现为)\\s*[:：]?\\s*([A-Z]?\\d{1,3}[A-Z]?)",
     )
+    // 链式写法：「登机口[由|从]X改Y[ 改Z…]」，可还原原登机口 X，且最新值为链尾（如「C57改C55 改C54」→ C54）。
+    private val gateTokenRegex = Regex("[A-Z]?\\d{1,3}[A-Z]?")
+    private val gateChangeChainRegex = Regex(
+        "登机口\\s*(?:由|从)?\\s*(${gateTokenRegex.pattern})" +
+            "((?:[\\s,，、]*(?:变更|更改|调整|改|换|变)(?:为|至|到)?\\s*[:：]?\\s*(${gateTokenRegex.pattern}))+)",
+    )
     private val standChangeRegex = Regex(
         "机位.{0,18}?(?:(?:变更|更改|调整|改|换|变)(?:为|至|到)?|现为)\\s*[:：]?\\s*([A-Z]?\\d{1,4}[A-Z]?)",
     )
@@ -190,9 +196,24 @@ object SpecialServiceParser {
         sourceEpochMillis: Long,
         expiresAtEpochMillis: Long,
     ): List<ParsedGateChangeCandidate> {
-        val gateChange = gateChangeRegex.find(segment) ?: return emptyList()
-        if (Regex("登机口(?:关闭|开放|开启|截止|时间)").containsMatchIn(gateChange.value)) return emptyList()
-        val boardingGate = gateChange.groupValues[1].trim().uppercase()
+        val closedGuard = Regex("登机口(?:关闭|开放|开启|截止|时间)")
+        val boardingGate: String
+        val previousGate: String?
+        val chain = gateChangeChainRegex.find(segment)?.takeIf { !closedGuard.containsMatchIn(it.value) }
+        if (chain != null) {
+            previousGate = chain.groupValues[1].trim().uppercase()
+            boardingGate = gateTokenRegex.findAll(chain.groupValues[2]).lastOrNull()?.value
+                ?.trim()?.uppercase() ?: return emptyList()
+        } else {
+            val gateChange = gateChangeRegex.find(segment) ?: return emptyList()
+            if (closedGuard.containsMatchIn(gateChange.value)) return emptyList()
+            boardingGate = gateChange.groupValues[1].trim().uppercase()
+            previousGate = null
+        }
+        // 归一化后相同（如 A08改A8）不算变更。
+        if (previousGate != null && normalizeGateCode(previousGate) == normalizeGateCode(boardingGate)) {
+            return emptyList()
+        }
         val localFlights = findFlightTokens(segment)
         val flightTokens = if (localFlights.isNotEmpty()) localFlights else findFlightTokens(fallbackText)
         return flightTokens.map { flightToken ->
@@ -204,6 +225,7 @@ object SpecialServiceParser {
                 boardingGate = boardingGate,
                 sourceEpochMillis = sourceEpochMillis,
                 expiresAtEpochMillis = expiresAtEpochMillis,
+                previousGate = previousGate,
             )
         }
     }
@@ -285,7 +307,8 @@ object SpecialServiceParser {
         if (carrier.isNotBlank()) return false
         val dateRanges = fullDateRegex.findAll(text).map(MatchResult::range) + monthDayRegex.findAll(text).map(MatchResult::range)
         if (dateRanges.any { dateRange -> range.first >= dateRange.first && range.last <= dateRange.last }) return true
-        val facilityChangeRanges = gateChangeRegex.findAll(text).map(MatchResult::range) +
+        val facilityChangeRanges = gateChangeChainRegex.findAll(text).map(MatchResult::range) +
+            gateChangeRegex.findAll(text).map(MatchResult::range) +
             standChangeRegex.findAll(text).map(MatchResult::range)
         if (facilityChangeRanges.any { changeRange -> range.first >= changeRange.first && range.last <= changeRange.last }) return true
         val before = text.substring(maxOf(0, range.first - 5), range.first)

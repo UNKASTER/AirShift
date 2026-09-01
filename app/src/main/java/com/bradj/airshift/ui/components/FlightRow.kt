@@ -214,10 +214,13 @@ private fun StationDetail(entry: DetailEntry, alignEnd: Boolean) {
         Spacer(Modifier.width(4.dp))
         Text(
             entry.value,
+            modifier = Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.bodySmall,
             color = TextBody,
             fontWeight = FontWeight.Medium,
             textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         if (entry.hasChange) {
             ChangeIndicator(modifier = Modifier.padding(start = 4.dp))

@@ -7,6 +7,7 @@ import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.RosterFlightMatcher
 import com.bradj.airshift.specialservice.ServiceType
 import com.bradj.airshift.specialservice.StandChangeRecord
+import com.bradj.airshift.specialservice.normalizeGateCode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -40,6 +41,16 @@ internal fun List<GateChangeRecord>.gateForFlight(
     if (operationDate == null) return null
     val normalizedFlight = RosterFlightMatcher.normalizeFlight(flight)
     return firstOrNull { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
+}
+
+/**
+ * 登机口变更的显示值：原登机口优先取 MUC 消息中的记录；缺失时回退实时值，
+ * 但实时值与新值归一化后相同（如 A08 与 A8）时不显示原值，避免出现 "D65 → D65"。
+ */
+internal fun gateChangeDisplayValue(currentGate: String?, change: GateChangeRecord): String {
+    val from = change.previousGate
+        ?: currentGate?.takeIf { normalizeGateCode(it) != normalizeGateCode(change.boardingGate) }
+    return listOfNotNull(from, change.boardingGate).joinToString(" → ")
 }
 
 internal fun List<StandChangeRecord>.standForFlight(

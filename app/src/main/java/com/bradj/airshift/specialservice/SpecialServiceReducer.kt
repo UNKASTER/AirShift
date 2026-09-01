@@ -90,6 +90,8 @@ object SpecialServiceReducer {
             updatedAtEpochMillis = candidate.sourceEpochMillis,
             expiresAtEpochMillis = flight.expiresAtEpochMillis,
             fingerprint = candidate.fingerprint,
+            // 候选未携带原登机口时（如「现为D66」），沿用既有记录的当前值，保持变更链完整。
+            previousGate = candidate.previousGate ?: existing?.boardingGate,
         )
         return GateChangeReduction(
             records = records.filterNot { it.flightKey == flight.key } + updated,

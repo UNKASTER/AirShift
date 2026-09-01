@@ -120,6 +120,39 @@ class SpecialServiceParserTest {
     }
 
     @Test
+    fun parsesMucStyleGateChangesWithPreviousGate() {
+        val simple = parseMessage("2233登机口D64改D65").gateChanges.single()
+        assertEquals("2233", simple.flightToken)
+        assertEquals("D65", simple.boardingGate)
+        assertEquals("D64", simple.previousGate)
+
+        val mentioned = parseMessage("6828登机口C53改C55@甲子 @甲丑").gateChanges.single()
+        assertEquals("C55", mentioned.boardingGate)
+        assertEquals("C53", mentioned.previousGate)
+
+        // 一条消息内的连续变更：最新值取链尾，原值取链头
+        val chained = parseMessage("2416登机口C57改C55 改C54").gateChanges.single()
+        assertEquals("C54", chained.boardingGate)
+        assertEquals("C57", chained.previousGate)
+
+        assertEquals("A2", parseMessage("MU719登机口由A2变更为A5").gateChanges.single().previousGate)
+        assertNull(parseMessage("MU719登机口更改：205").gateChanges.single().previousGate)
+
+        // 归一化后相同（A08 与 A8）不算变更
+        assertTrue(parseMessage("2233登机口A08改A8").gateChanges.isEmpty())
+    }
+
+    @Test
+    fun normalizesGateCodesWithLeadingZeros() {
+        assertEquals("A8", normalizeGateCode("A08"))
+        assertEquals("A8", normalizeGateCode("a8"))
+        assertEquals("A8", normalizeGateCode("A8"))
+        assertEquals("D65", normalizeGateCode("D65"))
+        assertEquals("365R", normalizeGateCode("365R"))
+        assertEquals("205", normalizeGateCode("205"))
+    }
+
+    @Test
     fun parsesStandChangesWithoutTreatingStandAsFlightNumber() {
         val numeric = parseMessage("719机位由302变更为305").standChanges.single()
         assertEquals("719", numeric.flightToken)

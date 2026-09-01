@@ -33,6 +33,8 @@ fun ChangeIndicator(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelSmall,
             color = ChangeOrange,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
