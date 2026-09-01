@@ -20,6 +20,7 @@ import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.specialservice.SpecialServiceRepository
+import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.theme.AirShiftTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -120,6 +121,7 @@ class SharedExcelImportOwnerInstrumentedTest {
                         openNotificationAccessSettings = { error("Notification settings were not requested") },
                         pendingSharedExcelImport = pending.firstOrNull(),
                         sharedExcelImportQueue = queue,
+                        dutyNavigation = DutyNavigationViewModel(),
                     )
                 }
             }

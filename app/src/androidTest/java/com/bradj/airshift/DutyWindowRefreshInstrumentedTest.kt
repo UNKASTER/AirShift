@@ -31,6 +31,7 @@ import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.SpecialServiceRepository
+import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.theme.AirShiftTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -122,6 +123,7 @@ class DutyWindowRefreshInstrumentedTest {
         assertEquals(expected, requests[1].targets)
         finishRequest(1)
 
+        selectSection("全部执勤")
         pullToRefresh()
         awaitRequests(3)
         assertEquals(expected, requests[2].targets)
@@ -250,6 +252,7 @@ class DutyWindowRefreshInstrumentedTest {
         assertTrue(requests.isEmpty())
         assertFalse(refreshConfigurations.last())
 
+        selectSection("全部执勤")
         pullToRefresh()
         awaitRequests(1)
         assertEquals(lookups(roster), requests.single().targets)
@@ -270,6 +273,7 @@ class DutyWindowRefreshInstrumentedTest {
         showAirShiftApp()
         composeRule.mainClock.advanceTimeBy(AUTO_REFRESH_INTERVAL_MILLIS)
         composeRule.waitForIdle()
+        selectSection("全部执勤")
         pullToRefresh()
         assertTrue(requests.isEmpty())
         assertTrue(store.loadAssignments().isEmpty())
@@ -374,6 +378,7 @@ class DutyWindowRefreshInstrumentedTest {
                         openNotificationAccessSettings = { error("Notification settings were not requested") },
                         pendingSharedExcelImport = pending.firstOrNull(),
                         sharedExcelImportQueue = queue,
+                        dutyNavigation = DutyNavigationViewModel(),
                         configureRefresh = { refreshConfigurations += it },
                         refreshClock = { composeRule.mainClock.currentTime },
                     )

@@ -57,6 +57,7 @@ import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.NotificationAccess
 import com.bradj.airshift.specialservice.SpecialServiceRepository
 import com.bradj.airshift.ui.AirShiftRoot
+import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.DutySection
 import com.bradj.airshift.ui.all.AllDutyScreen
 import com.bradj.airshift.ui.current.CurrentDutyScreen
@@ -89,6 +90,7 @@ private data class PendingFlightRefresh(
 
 class MainActivity : ComponentActivity() {
     private val sharedExcelImportQueue: SharedExcelImportQueueViewModel by viewModels()
+    private val dutyNavigation: DutyNavigationViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,6 +121,7 @@ class MainActivity : ComponentActivity() {
                     openNotificationAccessSettings = { NotificationAccess.openSettings(this) },
                     pendingSharedExcelImport = pendingSharedExcelImports.firstOrNull(),
                     sharedExcelImportQueue = sharedExcelImportQueue,
+                    dutyNavigation = dutyNavigation,
                 )
             }
         }
@@ -128,6 +131,16 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         sharedExcelImportQueue.enqueue(intent)
         setIntent(Intent(Intent.ACTION_MAIN))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dutyNavigation.onActivityForegrounded()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        dutyNavigation.onActivityBackgrounded(isChangingConfigurations)
     }
 
     private fun refreshLive(
@@ -193,6 +206,7 @@ internal fun AirShiftApp(
     openNotificationAccessSettings: () -> Unit,
     pendingSharedExcelImport: PendingSharedExcelImport?,
     sharedExcelImportQueue: SharedExcelImportQueueViewModel,
+    dutyNavigation: DutyNavigationViewModel,
     configureRefresh: (Boolean) -> Unit = { FlightRefreshScheduler.configure(context, it) },
     refreshClock: () -> Long = SystemClock::elapsedRealtime,
 ) {
@@ -219,7 +233,7 @@ internal fun AirShiftApp(
     var exactAlarmWarning by remember {
         mutableStateOf(assignments.isNotEmpty() && !ReminderScheduler.canScheduleExactAlarms(context))
     }
-    var section by rememberSaveable { mutableStateOf(DutySection.ALL) }
+    val section by dutyNavigation.section.collectAsStateWithLifecycle()
     var dutyIndex by remember { mutableIntStateOf(initialRoster.manuallyCompletedCount) }
     var dutyNow by remember { mutableStateOf(LocalDateTime.now()) }
     var locationCandidates by remember { mutableStateOf(emptyList<AirportPoint>()) }
@@ -597,7 +611,7 @@ internal fun AirShiftApp(
 
     AirShiftRoot(
         section = section,
-        onSectionSelected = { section = it },
+        onSectionSelected = dutyNavigation::selectSection,
     ) { padding ->
         when (section) {
             DutySection.ALL -> AllDutyScreen(
@@ -646,7 +660,7 @@ internal fun AirShiftApp(
                     }
                     syncSavedRoster(rosterGeneration)
                 },
-                onGoToAllDuty = { section = DutySection.ALL },
+                onGoToAllDuty = { dutyNavigation.selectSection(DutySection.ALL) },
                 modifier = Modifier.padding(padding),
             )
             DutySection.SETTINGS -> SettingsScreen(
