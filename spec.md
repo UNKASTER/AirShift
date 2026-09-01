@@ -392,6 +392,18 @@ CEA 分支为 `RosterAssignment` 增加：
 6. 后台 Worker 在发起 API 请求前检测完成状态，完成时取消唯一周期任务。
 7. 手动下拉刷新不受该短路限制。
 
+### 6.10 安卓桌面小组件
+
+1. `widget/DutyWidgetProvider` 注册 `APPWIDGET_UPDATE`（exported，供桌面 launcher 绑定）；`widget/DutyWidgetService` 以 `BIND_REMOTEVIEWS` 保护提供 `RemoteViewsFactory`。数据直接读 `RosterStore`，不新建存储。
+2. 集合容器为 `ListView`（垂直自由滚动，每个 item 占满视口高，单卡片观感；`StackView` 的卡片堆叠边缘、`AdapterViewFlipper` 无触摸手势均被否），每页一个执勤，上下滑动翻看；`onUpdate` 用 `setScrollPosition` 定位到 `nextIncompleteDutyIndex` 给出的当前执勤。
+3. 页面状态：当前执勤之前（或按 6.9 完成规则已完成）的执勤显示“已完成”；当前及之后的执勤显示到位倒计时——已过点显示“应立即到位”，无法计算到位时间显示“暂无到位时间信息”。视觉沿用 CEA 设计令牌：左侧东航红竖条、蓝/红圆角方向标签（进/出）、VIP 琥珀徽章、登机口大号粗体值；结构为标题行（执勤序号/任务类型/机号，机型置尾随宽度省略）、Hero 区（倒计时或状态文字 + 右侧“到位时间”标签与时刻，`weight=1` 吸收多余高度避免留白）、每个航段一行（方向标签+航班号+地点紧跟航班号填充中段，“登机口”标签与值贴右缘、逐列对齐，无数据 `--` 亦对齐；进港地点为出发地、出港地点为目的地，地点优先城市名、回退三字码）。
+4. 倒计时使用 RemoteViews 支持的 `Chronometer`（countDown 模式），由桌面 launcher 渲染逐秒跳动，小组件进程零唤醒；计时到 00:00 停住，“应立即到位”的翻转依赖下一次数据刷新或 30 分钟 `updatePeriodMillis` 兜底更新。
+5. 登机口取 `inboundBoardingGate` / `boardingGate` 字段（已含飞常准实时值），不叠加 MUC 变更提醒。
+6. 刷新挂接：`syncSavedRoster`（导入/执勤完成/前台合并共用）、`FlightRefreshWorker` 后台合并成功、`ReminderReceiver.onReceive`（置于通知权限检查之前）、`BootReceiver`；统一经 `DutyWidgetUpdater.notifyRosterChanged` 调 `notifyAppWidgetViewDataChanged`，不重置用户正在浏览的页码。
+7. 页面模型 `DutyWidgetModel.toWidgetPages` 为纯 Kotlin 函数，单元测试覆盖空排班、全部完成、已完成/倒计时/过点/无时间各分支与进出港字段。
+8. 点击任意页通过 PendingIntent 模板 + 空 fillInIntent 打开 `MainActivity`。
+9. OriginOS 6（vivo/iQOO）适配：圆角取 `@android:dimen/system_app_widget_background_radius` 跟随系统挂件；`targetCellWidth/Height=4x2`、`minHeight=100dp` 适配 vivo 桌面 4 列网格；颜色固定深字白卡不随主题变化。OriginOS“原子组件”为 vivo 合作方专有体系，第三方 App 无法注册，本组件按标准 AppWidget 归入“应用挂件”。
+
 ## 7. 数据、持久化与安全
 
 ### 7.1 本地存储
@@ -428,7 +440,9 @@ CEA 分支为 `RosterAssignment` 增加：
 - 导出的 launcher `MainActivity`；
 - 非导出的 `MucNotificationListenerService`，受 `BIND_NOTIFICATION_LISTENER_SERVICE` 保护；
 - 非导出的 `ReminderReceiver`；
-- 非导出的、监听 `BOOT_COMPLETED` 的 `BootReceiver`。
+- 非导出的、监听 `BOOT_COMPLETED` 的 `BootReceiver`；
+- 导出的 `widget/DutyWidgetProvider`（仅 `APPWIDGET_UPDATE`，供桌面 launcher 绑定）；
+- 非导出的 `widget/DutyWidgetService`，受 `BIND_REMOTEVIEWS` 保护。
 
 WPS 分支让 `MainActivity` 同时成为 Excel `ACTION_SEND` 分享目标，因此所有外部 Intent 都必须经过 MIME、action、项目数和 URI scheme 校验。
 

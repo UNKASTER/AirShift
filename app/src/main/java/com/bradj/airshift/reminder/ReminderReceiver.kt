@@ -13,9 +13,11 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.bradj.airshift.MainActivity
 import com.bradj.airshift.R
+import com.bradj.airshift.widget.DutyWidgetUpdater
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        DutyWidgetUpdater.notifyRosterChanged(context)
         createChannel(context)
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return

@@ -64,6 +64,7 @@ import com.bradj.airshift.ui.current.CurrentDutyScreen
 import com.bradj.airshift.ui.onboarding.OnboardingScreen
 import com.bradj.airshift.ui.settings.SettingsScreen
 import com.bradj.airshift.ui.theme.AirShiftTheme
+import com.bradj.airshift.widget.DutyWidgetUpdater
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -300,6 +301,7 @@ internal fun AirShiftApp(
             dutyNow = LocalDateTime.now()
             pendingRefresh = null
         }
+        if (applied) DutyWidgetUpdater.notifyRosterChanged(context)
         return applied
     }
 

@@ -13,6 +13,7 @@ import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.SpecialServiceRepository
+import com.bradj.airshift.widget.DutyWidgetUpdater
 import java.time.LocalDateTime
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -67,6 +68,7 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
                 val latest = store.loadSnapshot().assignments
                 SpecialServiceRepository.get(applicationContext).onRosterChanged(latest)
                 ReminderScheduler.scheduleAll(applicationContext, latest)
+                DutyWidgetUpdater.notifyRosterChanged(applicationContext)
             }
             val current = store.loadSnapshot()
             val complete = current.assignments.allDutiesComplete(LocalDateTime.now(), current.manuallyCompletedCount)

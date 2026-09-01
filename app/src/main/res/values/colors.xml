@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小组件（RemoteViews）用色，与 ui/theme/AirShiftTheme.kt 的设计令牌保持一致。 -->
+<resources>
+    <color name="cea_red">#C8102E</color>
+    <color name="inbound_blue">#2B5EA7</color>
+    <color name="text_primary">#1B2A4A</color>
+    <color name="text_body">#3A4356</color>
+    <color name="text_secondary">#5F6673</color>
+    <color name="text_hint">#8A8F99</color>
+    <color name="success_green">#1B7F4C</color>
+    <color name="border_soft">#ECEEF2</color>
+    <color name="card_white">#FFFFFF</color>
+    <color name="vip_container">#FCEBC8</color>
+    <color name="on_vip_container">#6E4200</color>
+</resources>
