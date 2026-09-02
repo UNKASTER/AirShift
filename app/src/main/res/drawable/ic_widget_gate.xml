@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 登机口小图标：立柱指示牌，填充色取藏青灰阶 #4A5568。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#4A5568"
+        android:pathData="M5,3 h2 v18 H5 z" />
+    <path
+        android:fillColor="#4A5568"
+        android:pathData="M10,5 h8 a2,2 0 0 1 2,2 v4 a2,2 0 0 1 -2,2 h-8 z" />
+</vector>

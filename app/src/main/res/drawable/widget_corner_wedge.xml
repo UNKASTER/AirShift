@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 右上角撞色块：藏青大三角 + 东航红小三角交叠，出血边缘由宿主视图 clipToOutline 随卡片圆角裁剪。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="84dp"
+    android:viewportWidth="108"
+    android:viewportHeight="84">
+    <path
+        android:fillColor="#2B14284B"
+        android:pathData="M26,0 L108,0 L108,84 Z" />
+    <path
+        android:fillColor="#33C8102E"
+        android:pathData="M64,0 L108,0 L108,44 Z" />
+</vector>

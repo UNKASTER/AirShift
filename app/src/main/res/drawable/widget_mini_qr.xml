@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- meta 头带右端 mini 登机票据码纹理（装饰，不承载信息），15% 藏青。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="14"
+    android:viewportHeight="14">
+    <path
+        android:fillColor="#2614284B"
+        android:fillType="evenOdd"
+        android:pathData="M0,0 h5 v5 h-5 Z M1.4,1.4 h2.2 v2.2 h-2.2 Z" />
+    <path
+        android:fillColor="#2614284B"
+        android:fillType="evenOdd"
+        android:pathData="M9,0 h5 v5 h-5 Z M10.4,1.4 h2.2 v2.2 h-2.2 Z" />
+    <path
+        android:fillColor="#2614284B"
+        android:fillType="evenOdd"
+        android:pathData="M0,9 h5 v5 h-5 Z M1.4,10.4 h2.2 v2.2 h-2.2 Z" />
+    <path
+        android:fillColor="#2614284B"
+        android:pathData="M7,6 h2 v2 h-2 Z M10.5,7 h1.6 v1.6 h-1.6 Z M6.5,9.5 h1.6 v1.6 h-1.6 Z M9,10.5 h2 v2 h-2 Z M12,12 h1.6 v1.6 h-1.6 Z M7,12.5 h1.4 v1.4 h-1.4 Z" />
+</vector>

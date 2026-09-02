@@ -1,25 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 当前执勤小组件：装饰层（左缘红竖条 + 红色 L 角并入卡片背景、右下燕尾弧线水印、右上撞色角块、
+     左下条码、底边红蓝斜纹条）位于内容层之下；内容自上而下——meta 头带 / hero 区（倒计时 + 完成按钮，
+     衬底双弧线）/ 航线虚线带（端点圆点 + 红环 + 小飞机）/ 底部航班信息行。
+     注意：launcher 对超出格子高度的内容做底部裁剪，内容与 duty_widget_info 的 targetCellHeight=3 配套。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_duty_item_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background"
-    android:orientation="horizontal"
-    android:padding="12dp">
+    android:background="@drawable/widget_background">
 
-    <!-- 东航红品牌竖条 -->
-    <TextView
-        android:id="@+id/widget_accent_bar"
-        android:layout_width="3dp"
-        android:layout_height="match_parent"
-        android:layout_marginEnd="10dp"
-        android:background="@drawable/widget_accent_bar" />
+    <!-- 装饰层：底边航空邮件红蓝斜纹条（颜色对撞锚点，仅底部出血裁圆角，让开左缘红竖条） -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/widget_watermark_clip"
+        android:clipToOutline="true"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_stripes" />
 
+    <!-- 装饰层：左下角条码纹理（登机票肌理，12% 藏青，不承载信息） -->
+    <ImageView
+        android:layout_width="52dp"
+        android:layout_height="28dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="20dp"
+        android:layout_marginBottom="14dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_barcode" />
+
+    <!-- 装饰层：右上角藏青×红撞色双三角，出血随卡片圆角裁剪 -->
+    <ImageView
+        android:layout_width="108dp"
+        android:layout_height="84dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/widget_watermark_clip"
+        android:clipToOutline="true"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_corner_wedge" />
+
+    <!-- 装饰层：品牌燕尾弧线水印，右下角出血、随卡片圆角裁剪，8% 不透明压场不抢信息 -->
+    <ImageView
+        android:layout_width="140dp"
+        android:layout_height="110dp"
+        android:layout_gravity="bottom|end"
+        android:alpha="0.08"
+        android:background="@drawable/widget_watermark_clip"
+        android:clipToOutline="true"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_brand_arcs" />
+
+    <!-- 内容层 -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:clipChildren="false"
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <!-- 整页提示：无排班 / 今日全部完成 -->
         <LinearLayout
@@ -54,13 +93,21 @@
             android:id="@+id/widget_duty_content"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:gravity="center_vertical"
             android:orientation="vertical">
 
+            <!-- 1. meta 头带：浅灰胶囊底 + 执勤信息 + 右端 mini 票据码纹理 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="@drawable/widget_meta_band"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp">
 
                 <TextView
                     android:id="@+id/widget_header"
@@ -68,10 +115,18 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:ellipsize="end"
+                    android:fontFeatureSettings="tnum"
                     android:singleLine="true"
-                    android:text="执勤 4/7 · 进港后接续出港 · B1609 · 320"
+                    android:text="执勤 1/7 · 出港保障 · B32KH · 32N"
                     android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="8dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/widget_mini_qr" />
 
                 <TextView
                     android:id="@+id/widget_vip"
@@ -90,68 +145,187 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- Hero 区：weight=1 吃掉多余高度，内容垂直居中 -->
+            <!-- 登机牌撕线（头带下方穿孔线） -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/widget_divider_tear"
+                android:layerType="software" />
+
+            <!-- 2. hero 区：左列状态标签 + 倒计时 + 到位时间，右列纵向占满的「完成」大按钮；衬底双弧线 -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/widget_hero_arcs"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <FrameLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content">
-
-                    <Chronometer
-                        android:id="@+id/widget_countdown"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/cea_red"
-                        android:textSize="34sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/widget_status_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="已完成"
-                        android:textColor="@color/success_green"
-                        android:textSize="24sp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
-                </FrameLayout>
-
                 <LinearLayout
-                    android:id="@+id/widget_due_column"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:gravity="end"
                     android:orientation="vertical">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="到位时间"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="10sp" />
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                    <TextView
-                        android:id="@+id/widget_gate_arrival"
+                        <ImageView
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_widget_clock" />
+
+                        <TextView
+                            android:id="@+id/widget_status_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:text="距离到位"
+                            android:textColor="@color/text_hint"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp">
+
+                        <Chronometer
+                            android:id="@+id/widget_countdown"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFeatureSettings="tnum"
+                            android:includeFontPadding="false"
+                            android:textColor="@color/cea_red"
+                            android:textSize="36sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/widget_status_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="已完成"
+                            android:textColor="@color/success_green"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:id="@+id/widget_due_column"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="13:35"
-                        android:textColor="@color/text_primary"
-                        android:textSize="22sp"
-                        android:textStyle="bold" />
+                        android:layout_marginTop="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="到位时间"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/widget_gate_arrival"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:fontFeatureSettings="tnum"
+                            android:includeFontPadding="false"
+                            android:text="06:35"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/widget_complete_duty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/widget_complete_button"
+                    android:clickable="true"
+                    android:contentDescription="@string/duty_widget_complete_content_description"
+                    android:elevation="2dp"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:minWidth="96dp"
+                    android:minHeight="56dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="@string/duty_widget_complete"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- 3. 航线带：穿孔虚线 + 左端藏青圆点 + 右端红环（按钮左缘前 16dp 收笔）+ 中段小飞机；
+                    带高仍为 2dp，端点与飞机溢出到上下留白，不增加内容高度；无航段时整带由 renderer 隐藏 -->
+            <FrameLayout
+                android:id="@+id/widget_divider"
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_marginTop="8dp"
+                android:clipChildren="false">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:background="@drawable/widget_divider_dash"
+                    android:layerType="software" />
+
+                <ImageView
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/widget_route_dot" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="112dp"
+                    android:clipChildren="false">
+
+                    <ImageView
+                        android:layout_width="5dp"
+                        android:layout_height="5dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/widget_route_ring" />
+
+                    <FrameLayout
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/widget_plane_halo">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_gravity="center"
+                            android:importantForAccessibility="no"
+                            android:rotation="-30"
+                            android:src="@drawable/ic_widget_plane" />
+                    </FrameLayout>
+                </FrameLayout>
+            </FrameLayout>
+
+            <!-- 4. 底部信息行：方向 chip + 航班号 + 航站 ｜ 登机口图标 + 值 -->
             <LinearLayout
                 android:id="@+id/widget_leg_primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -160,23 +334,25 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/widget_tag_inbound"
-                    android:paddingStart="5dp"
-                    android:paddingEnd="5dp"
-                    android:paddingTop="1dp"
-                    android:paddingBottom="1dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
                     android:text="进"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textColor="@color/inbound_blue"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/widget_leg_primary_flight"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="8dp"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
                     android:text="MU2448"
                     android:textColor="@color/text_primary"
-                    android:textSize="16sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -187,33 +363,34 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:text="南京禄口"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
+                    android:text="南京禄口 NKG"
+                    android:textColor="@color/text_hint"
+                    android:textSize="14sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="登机口"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="登机口"
+                    android:src="@drawable/ic_widget_gate" />
 
                 <TextView
                     android:id="@+id/widget_leg_primary_gate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="4dp"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
                     android:text="--"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/text_body"
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/widget_leg_secondary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="4dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -222,23 +399,25 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/widget_tag_outbound"
-                    android:paddingStart="5dp"
-                    android:paddingEnd="5dp"
-                    android:paddingTop="1dp"
-                    android:paddingBottom="1dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
                     android:text="出"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textColor="@color/on_cea_red_soft"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/widget_leg_secondary_flight"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="8dp"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
                     android:text="MU6157"
                     android:textColor="@color/text_primary"
-                    android:textSize="16sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -249,27 +428,28 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:text="呼和浩特白塔"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
+                    android:text="呼和浩特白塔 HET"
+                    android:textColor="@color/text_hint"
+                    android:textSize="14sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="登机口"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="登机口"
+                    android:src="@drawable/ic_widget_gate" />
 
                 <TextView
                     android:id="@+id/widget_leg_secondary_gate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="4dp"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
                     android:text="C42"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/text_body"
+                    android:textSize="14sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 垂直滑动列表：每页一个执勤占满视口，上下滑动翻看。 -->
-<ListView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_list"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:divider="@null"
-    android:dividerHeight="0dp"
-    android:scrollbars="none" />

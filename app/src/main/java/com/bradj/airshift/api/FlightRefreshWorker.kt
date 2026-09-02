@@ -5,6 +5,7 @@ import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -20,6 +21,8 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 private const val ROSTER_GENERATION_INPUT_KEY = "roster_generation"
+private const val TARGET_FLIGHT_LOOKUPS_INPUT_KEY = "target_flight_lookups"
+private const val FLIGHT_LOOKUP_SEPARATOR = "|"
 
 class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
     override fun doWork(): Result {
@@ -37,7 +40,11 @@ class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Work
             cancelThisWork()
             return Result.success()
         }
-        val relevantFlights = assignments.dutyWindowLookups(snapshot.manuallyCompletedCount, now)
+        val currentWindow = assignments.dutyWindowLookups(snapshot.manuallyCompletedCount, now)
+        val requestedFlights = inputData.getStringArray(TARGET_FLIGHT_LOOKUPS_INPUT_KEY)
+            ?.mapNotNull(::decodeFlightLookup)
+            ?.toSet()
+        val relevantFlights = requestedFlights?.intersect(currentWindow) ?: currentWindow
         if (relevantFlights.isEmpty()) return Result.success()
 
         val client = VariFlightClient(apiKey)
@@ -122,4 +129,42 @@ object FlightRefreshScheduler {
             manager.enqueueUniquePeriodicWork(workName, ExistingPeriodicWorkPolicy.KEEP, request).result.get()
         }
     }
+
+    /** Refresh only flights newly entering the two-duty window after a manual completion. */
+    internal fun refreshNow(
+        context: Context,
+        expectedGeneration: Long,
+        lookups: Set<FlightLookup>,
+    ) {
+        if (lookups.isEmpty()) return
+        val request = OneTimeWorkRequestBuilder<FlightRefreshWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(
+                Data.Builder()
+                    .putLong(ROSTER_GENERATION_INPUT_KEY, expectedGeneration)
+                    .putStringArray(
+                        TARGET_FLIGHT_LOOKUPS_INPUT_KEY,
+                        lookups.sortedWith(compareBy(FlightLookup::date, FlightLookup::flightNumber))
+                            .map(::encodeFlightLookup)
+                            .toTypedArray(),
+                    )
+                    .build(),
+            )
+            .build()
+        WorkManager.getInstance(context.applicationContext).enqueue(request)
+    }
+}
+
+private fun encodeFlightLookup(lookup: FlightLookup): String =
+    "${lookup.date}$FLIGHT_LOOKUP_SEPARATOR${lookup.flightNumber}"
+
+private fun decodeFlightLookup(encoded: String): FlightLookup? {
+    val separatorIndex = encoded.indexOf(FLIGHT_LOOKUP_SEPARATOR)
+    if (separatorIndex <= 0 || separatorIndex == encoded.lastIndex) return null
+    return runCatching {
+        FlightLookup.of(
+            encoded.substring(separatorIndex + FLIGHT_LOOKUP_SEPARATOR.length),
+            java.time.LocalDate.parse(encoded.substring(0, separatorIndex)),
+        )
+    }.getOrNull()
 }

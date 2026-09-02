@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 左下角装饰性条码纹理（登机票语言），12% 不透明藏青，仅作肌理不承载信息。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="52dp"
+    android:height="28dp"
+    android:viewportWidth="52"
+    android:viewportHeight="28">
+    <path android:fillColor="#1F14284B" android:pathData="M0,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M4,2 h1 v20 h-1 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M7,2 h3 v20 h-3 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M12,2 h1 v20 h-1 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M15,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M19,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M23,2 h1 v20 h-1 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M26,2 h3 v20 h-3 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M31,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M35,2 h1 v20 h-1 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M38,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M42,2 h3 v20 h-3 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M47,2 h2 v20 h-2 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M51,2 h1 v20 h-1 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M4,24 h20 v2 h-20 Z" />
+    <path android:fillColor="#1F14284B" android:pathData="M30,24 h10 v2 h-10 Z" />
+</vector>

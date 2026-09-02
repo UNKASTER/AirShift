@@ -2,13 +2,19 @@
 <!-- 小组件（RemoteViews）用色，与 ui/theme/AirShiftTheme.kt 的设计令牌保持一致。 -->
 <resources>
     <color name="cea_red">#C8102E</color>
+    <color name="cea_red_soft">#FDECEE</color>
+    <color name="on_cea_red_soft">#9C0B22</color>
     <color name="inbound_blue">#2B5EA7</color>
-    <color name="text_primary">#1B2A4A</color>
-    <color name="text_body">#3A4356</color>
-    <color name="text_secondary">#5F6673</color>
-    <color name="text_hint">#8A8F99</color>
-    <color name="success_green">#1B7F4C</color>
+    <color name="inbound_blue_soft">#EAF1FB</color>
+    <color name="text_primary">#14284B</color>
+    <color name="text_body">#4A5568</color>
+    <color name="text_secondary">#4A5568</color>
+    <color name="text_hint">#8A94A6</color>
+    <color name="success_green">#0F7B5F</color>
     <color name="border_soft">#ECEEF2</color>
+    <color name="field_fill">#F0F2F5</color>
+    <color name="divider_dash">#E2E6EC</color>
+    <color name="divider_tear">#EEF0F4</color>
     <color name="card_white">#FFFFFF</color>
     <color name="vip_container">#FCEBC8</color>
     <color name="on_vip_container">#6E4200</color>

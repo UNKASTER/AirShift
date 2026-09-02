@@ -646,19 +646,17 @@ internal fun AirShiftApp(
                 standChanges = visibleStandChanges,
                 flightCancellations = visibleFlightCancellations,
                 onDutyComplete = {
-                    store.runIfGenerationCurrent(rosterGeneration) {
-                        val before = store.loadSnapshot()
-                        val now = LocalDateTime.now()
-                        val currentIndex = before.assignments.dutyWindowIndices(before.manuallyCompletedCount, now).firstOrNull()
-                        // A second tap from the old composition must not complete the next duty.
-                        if (currentIndex == activeDutyIndex) {
-                            val oldWindow = before.assignments.dutyWindowLookups(before.manuallyCompletedCount, now)
-                            store.setCurrentDutyIndex(activeDutyIndex + 1)
-                            val newWindow = before.assignments.dutyWindowLookups(store.currentDutyIndex, now)
-                            val waiting = pendingRefresh?.takeIf { it.generation == before.generation }?.lookups.orEmpty()
-                            val pending = (waiting + (newWindow - oldWindow)).intersect(newWindow)
-                            pendingRefresh = PendingFlightRefresh(before.generation, pending).takeIf { pending.isNotEmpty() }
-                        }
+                    store.completeCurrentDuty(rosterGeneration, activeDutyIndex)?.let { completion ->
+                        val waiting = pendingRefresh
+                            ?.takeIf { it.generation == completion.snapshot.generation }
+                            ?.lookups
+                            .orEmpty()
+                        val currentWindow = completion.snapshot.assignments.dutyWindowLookups(
+                            completion.snapshot.manuallyCompletedCount,
+                        )
+                        val pending = (waiting + completion.newlyTrackedFlights).intersect(currentWindow)
+                        pendingRefresh = PendingFlightRefresh(completion.snapshot.generation, pending)
+                            .takeIf { pending.isNotEmpty() }
                     }
                     syncSavedRoster(rosterGeneration)
                 },

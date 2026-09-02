@@ -5,5 +5,7 @@
     <string name="notification_channel_description">根据排班与实时航班动态发送保障提醒</string>
     <string name="muc_notification_listener_name">MUC 特服消息识别</string>
     <string name="duty_widget_name">当前执勤</string>
-    <string name="duty_widget_description">显示当前执勤的航班、登机口与到位倒计时，左右滑动翻看其他执勤</string>
+    <string name="duty_widget_description">显示当前执勤的航班、登机口、倒计时与完成按钮</string>
+    <string name="duty_widget_complete">完成</string>
+    <string name="duty_widget_complete_content_description">完成当前执勤</string>
 </resources>

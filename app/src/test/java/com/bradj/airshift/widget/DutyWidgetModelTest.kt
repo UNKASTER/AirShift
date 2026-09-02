@@ -24,6 +24,8 @@ class DutyWidgetModelTest {
         actualDeparture: LocalDateTime? = null,
         inboundBoardingGate: String? = null,
         boardingGate: String? = null,
+        arrivalStand: String? = null,
+        departureStand: String? = null,
         inboundHasVip: Boolean = false,
     ) = RosterAssignment(
         aircraftRegistration = registration,
@@ -39,6 +41,8 @@ class DutyWidgetModelTest {
         actualDeparture = actualDeparture,
         inboundBoardingGate = inboundBoardingGate,
         boardingGate = boardingGate,
+        arrivalStand = arrivalStand,
+        departureStand = departureStand,
         originCode = originCode,
         destinationCode = destinationCode,
         inboundHasVip = inboundHasVip,
@@ -91,6 +95,26 @@ class DutyWidgetModelTest {
     }
 
     @Test
+    fun `fixed widget selects current duty instead of completed duty`() {
+        val completed = assignment(
+            registration = "B-0001",
+            inboundFlight = "MU5101",
+            scheduledArrival = now.minusHours(2),
+            actualArrival = now.minusHours(2),
+        )
+        val current = assignment(
+            registration = "B-0002",
+            outboundFlight = "MU5102",
+            scheduledDeparture = now.plusHours(3),
+        )
+
+        val page = listOf(completed, current).toCurrentWidgetPage(manuallyCompletedCount = 0, now = now)
+
+        assertEquals("执勤 2/2 · 出港保障 · B-0002", (page as WidgetPage.Duty).header)
+        assertEquals(WidgetDutyStatus.COUNTDOWN, page.status)
+    }
+
+    @Test
     fun `current duty past gate arrival shows overdue`() {
         val overdue = assignment(
             outboundFlight = "MU5102",
@@ -137,7 +161,7 @@ class DutyWidgetModelTest {
     }
 
     @Test
-    fun `turnaround legs expose origin gate and destination gate`() {
+    fun `turnaround legs expose origin and destination airport with arrival stand and departure gate`() {
         val target = assignment(
             inboundFlight = "MU5101",
             origin = "北京首都",
@@ -148,6 +172,7 @@ class DutyWidgetModelTest {
             destinationCode = "CAN",
             scheduledDeparture = now.plusHours(3),
             inboundBoardingGate = "A08",
+            arrivalStand = "105",
             boardingGate = "B12",
         )
         val page = (listOf(target).toWidgetPages(manuallyCompletedCount = 0, now = now).single() as WidgetPage.Duty)
@@ -157,12 +182,30 @@ class DutyWidgetModelTest {
         val inbound = page.legs[0]
         assertEquals("进港", inbound.directionLabel)
         assertEquals("MU5101", inbound.flight)
-        assertEquals("北京首都", inbound.place)
-        assertEquals("A08", inbound.gate)
+        // 进港：始发地中文名 + 三字码，行尾为到达站机位。
+        assertEquals("北京首都 PEK", inbound.place)
+        assertEquals("机位 105", inbound.gate)
         val outbound = page.legs[1]
         assertEquals("出港", outbound.directionLabel)
-        assertEquals("广州白云", outbound.place)
+        // 出港：目的地中文名 + 三字码，行尾为出发地登机口。
+        assertEquals("广州白云 CAN", outbound.place)
         assertEquals("B12", outbound.gate)
+    }
+
+    @Test
+    fun `outbound leg falls back to departure stand when boarding gate missing`() {
+        val target = assignment(
+            outboundFlight = "MU5102",
+            destination = "广州白云",
+            destinationCode = "CAN",
+            scheduledDeparture = now.plusHours(3),
+            departureStand = "358",
+        )
+        val page = (listOf(target).toWidgetPages(manuallyCompletedCount = 0, now = now).single() as WidgetPage.Duty)
+
+        val outbound = page.legs.single()
+        assertEquals("出港", outbound.directionLabel)
+        assertEquals("机位 358", outbound.gate)
     }
 
     @Test

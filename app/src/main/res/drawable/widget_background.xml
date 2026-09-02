@@ -1,7 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <!-- 跟随系统挂件圆角（API 31+），与 OriginOS 桌面挂件风格一致。 -->
-    <corners android:radius="@android:dimen/system_app_widget_background_radius" />
-    <solid android:color="@color/card_white" />
-</shape>
+<!-- 卡片背景：白卡 + 左缘 4dp 东航红竖条（呼应 App 内任务卡类型色条）+ 系统挂件圆角 + 点击涟漪。 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?android:attr/colorControlHighlight">
+    <item>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="@android:dimen/system_app_widget_background_radius" />
+                    <solid android:color="@color/card_white" />
+                </shape>
+            </item>
+            <!-- 左缘竖条：贴合容器左缘、纵向贯通，左侧圆角与容器一致 -->
+            <item
+                android:width="4dp"
+                android:gravity="start|fill_vertical">
+                <shape android:shape="rectangle">
+                    <corners
+                        android:topLeftRadius="@android:dimen/system_app_widget_background_radius"
+                        android:bottomLeftRadius="@android:dimen/system_app_widget_background_radius" />
+                    <solid android:color="@color/cea_red" />
+                </shape>
+            </item>
+            <!-- 顶边短横：与左竖条合成红色 L 形拐角，压住左上角 -->
+            <item
+                android:width="36dp"
+                android:height="4dp"
+                android:gravity="top|start">
+                <shape android:shape="rectangle">
+                    <corners android:topLeftRadius="@android:dimen/system_app_widget_background_radius" />
+                    <solid android:color="@color/cea_red" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <corners android:radius="@android:dimen/system_app_widget_background_radius" />
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+</ripple>

@@ -394,15 +394,15 @@ CEA 分支为 `RosterAssignment` 增加：
 
 ### 6.10 安卓桌面小组件
 
-1. `widget/DutyWidgetProvider` 注册 `APPWIDGET_UPDATE`（exported，供桌面 launcher 绑定）；`widget/DutyWidgetService` 以 `BIND_REMOTEVIEWS` 保护提供 `RemoteViewsFactory`。数据直接读 `RosterStore`，不新建存储。
-2. 集合容器为 `ListView`（垂直自由滚动，每个 item 占满视口高，单卡片观感；`StackView` 的卡片堆叠边缘、`AdapterViewFlipper` 无触摸手势均被否），每页一个执勤，上下滑动翻看；`onUpdate` 用 `setScrollPosition` 定位到 `nextIncompleteDutyIndex` 给出的当前执勤。
-3. 页面状态：当前执勤之前（或按 6.9 完成规则已完成）的执勤显示“已完成”；当前及之后的执勤显示到位倒计时——已过点显示“应立即到位”，无法计算到位时间显示“暂无到位时间信息”。视觉沿用 CEA 设计令牌：左侧东航红竖条、蓝/红圆角方向标签（进/出）、VIP 琥珀徽章、登机口大号粗体值；结构为标题行（执勤序号/任务类型/机号，机型置尾随宽度省略）、Hero 区（倒计时或状态文字 + 右侧“到位时间”标签与时刻，`weight=1` 吸收多余高度避免留白）、每个航段一行（方向标签+航班号+地点紧跟航班号填充中段，“登机口”标签与值贴右缘、逐列对齐，无数据 `--` 亦对齐；进港地点为出发地、出港地点为目的地，地点优先城市名、回退三字码）。
+1. `widget/DutyWidgetProvider` 注册 `APPWIDGET_UPDATE`（exported，供桌面 launcher 绑定）。数据直接读 `RosterStore`，不新建存储；小组件不再使用集合容器、`RemoteViewsService` 或 `BIND_REMOTEVIEWS` 服务。
+2. 小组件以 `widget_duty_item` 单个完整大卡片固定显示 `nextIncompleteDutyIndex` 给出的当前未完成执勤，不提供滑动、翻页、自动轮播或历史/后续执勤浏览。
+3. 当前执勤显示到位倒计时——已过点显示“应立即到位”，无法计算到位时间显示“暂无到位时间信息”；无排班或全部完成显示对应整卡提示。视觉沿用 CEA 设计令牌（#C8102E / #14284B / #4A5568 / #8A94A6）：VIP 琥珀徽章保留；布局为自上而下三区——meta 行（执勤进度 · 类型 · 机号 · 机型，13sp）、hero 区（左列 12sp 状态标签 + 36sp Heavy 红色倒计时 + 14sp 到位时间，右列纵向占满的红色“完成”大按钮，最小 96×56dp、16dp 圆角、2dp 投影，背景为 ripple drawable，按压时水波纹扩散并叠加 12% 黑色遮罩压暗）、登机牌撕线式虚线分隔（#E2E6EC）与底部航班信息行（浅红/浅蓝底 tonal 方向 chip，999dp 圆角，文字色随方向配套 + 17sp 航班号 + 登机口图标与值）；倒计时等数字统一 `tnum` 等宽，逐秒刷新不抖动；整卡背景叠加系统涟漪，点按卡片打开 App 有按压反馈。
 4. 倒计时使用 RemoteViews 支持的 `Chronometer`（countDown 模式），由桌面 launcher 渲染逐秒跳动，小组件进程零唤醒；计时到 00:00 停住，“应立即到位”的翻转依赖下一次数据刷新或 30 分钟 `updatePeriodMillis` 兜底更新。
-5. 登机口取 `inboundBoardingGate` / `boardingGate` 字段（已含飞常准实时值），不叠加 MUC 变更提醒。
-6. 刷新挂接：`syncSavedRoster`（导入/执勤完成/前台合并共用）、`FlightRefreshWorker` 后台合并成功、`ReminderReceiver.onReceive`（置于通知权限检查之前）、`BootReceiver`；统一经 `DutyWidgetUpdater.notifyRosterChanged` 调 `notifyAppWidgetViewDataChanged`，不重置用户正在浏览的页码。
-7. 页面模型 `DutyWidgetModel.toWidgetPages` 为纯 Kotlin 函数，单元测试覆盖空排班、全部完成、已完成/倒计时/过点/无时间各分支与进出港字段。
-8. 点击任意页通过 PendingIntent 模板 + 空 fillInIntent 打开 `MainActivity`。
-9. OriginOS 6（vivo/iQOO）适配：圆角取 `@android:dimen/system_app_widget_background_radius` 跟随系统挂件；`targetCellWidth/Height=4x2`、`minHeight=100dp` 适配 vivo 桌面 4 列网格；颜色固定深字白卡不随主题变化。OriginOS“原子组件”为 vivo 合作方专有体系，第三方 App 无法注册，本组件按标准 AppWidget 归入“应用挂件”。
+5. 底部航段行：进港行显示航班号、始发地机场中文名 + 三字码，行尾为到达站（本站）机位（`arrivalStand`，以「机位 」前缀标识；到达侧无登机口字段）；出港行显示航班号、目的地机场中文名 + 三字码，行尾为出发地登机口（`boardingGate`），缺登机口时回退出发机位（`departureStand`，同样加「机位 」前缀）；均含飞常准实时值，不叠加 MUC 变更提醒。执勤无任何航段（如仅有机号/时刻的备份任务）时隐藏撕线虚线。
+6. 刷新挂接：`syncSavedRoster`（导入/执勤完成/前台合并共用）、`FlightRefreshWorker` 后台合并成功、`ReminderReceiver.onReceive`（置于通知权限检查之前）、`BootReceiver`；统一经 `DutyWidgetUpdater.notifyRosterChanged` 调 `updateAppWidget` 直接重绘最新当前执勤。
+7. 页面模型 `DutyWidgetModel.toCurrentWidgetPage` 为纯 Kotlin 选择入口，单元测试覆盖固定选择当前执勤，以及空排班、全部完成、倒计时/过点/无时间与进出港字段。
+8. 点击卡片非按钮区域通过 `setOnClickPendingIntent` 打开 `MainActivity`；红色“完成”按钮向非导出的 `DutyWidgetActionReceiver` 发送显式 `PendingIntent`，按与 App 相同的排班 generation 和当前索引双重校验原子推进进度。旧卡片重复点击不会完成下一项；成功后重排提醒、调整后台刷新资格、立即重绘，并只以一次性 Worker 补查新进入两项窗口的航班。
+9. OriginOS 6（vivo/iQOO）适配：圆角取 `@android:dimen/system_app_widget_background_radius` 跟随系统挂件；`targetCellWidth/Height=4x3`、`minHeight=160dp` 适配 vivo 桌面 4 列网格；launcher 对超出格子高度的内容做底部裁剪（不居中裁），故三区内容按默认 4x3 尺寸压距适配（区间距 10dp），保证默认尺寸下 meta/hero/航段行完整可见；颜色固定深字白卡不随主题变化。OriginOS“原子组件”为 vivo 合作方专有体系，第三方 App 无法注册，本组件按标准 AppWidget 归入“应用挂件”。
 
 ### 6.11 视觉层重构（0.6.0 / code 16）
 
@@ -427,6 +427,28 @@ CEA 分支为 `RosterAssignment` 增加：
 0.6.5 迭代修订：修复时间块对齐——时间块内部改为竖排两行且顺序对调（上「计划 HH:mm」12sp 灰、下实时 28sp Heavy 大字），主信息行 flex-end 底边对齐（数字无下伸部，底边对齐即视觉基线对齐）；卡片上下内边距 16→20dp，主信息行与航线区间距 16→20dp。
 
 0.6.6 迭代修订：修复跨午夜航班实时时间误标延误——延误判定由完整时间戳 `isAfter` 改为分钟差区间，仅 15 分钟～12 小时的正差判延误（琥珀），≥12 小时视为跨日数据不可比，与正点/提前一样显示墨绿。
+
+0.6.7 迭代修订：桌面小组件集合容器由 ListView 改为系统 StackView，上下拨动一次切换一个完整执勤页，首尾不循环、不自动播放；初始页改用 `setDisplayedChild` 定位，卡片内容与视觉样式保持不变。
+
+0.6.8 迭代修订：桌面小组件取消翻页与历史/后续执勤浏览，移除 StackView、RemoteViewsService 与集合适配链路；改为单个完整大卡片固定显示当前未完成执勤，数据变化时直接重绘。
+
+0.6.9 迭代修订：桌面小组件取消 Hero 区弹性撑高，改为紧凑主信息区、浅灰分隔线和均衡留白；新增红色“完成”按钮，与 App 共用防重复完成的原子进度操作，并仅补查新进入当前窗口的航班。
+
+0.7.0 迭代修订：桌面小组件视觉重构，仅调整布局与样式（RemoteViews），数据逻辑与 PendingIntent 行为不变——改为 meta 行 / hero 区 / 撕线虚线 + 底部信息行的三区结构，消灭大片留白；倒计时放大为全件最大元素（36sp Heavy + `tnum`），到位时间紧跟其下；方向标签改为浅红/浅蓝底 tonal chip（999dp 圆角，文字色随方向配套）；细分隔线改登机牌撕线式虚线（#E2E6EC；注意 RemoteViews 白名单不允许裸 `android.view.View`，虚线由 1dp 高 TextView 承载并置 software 层保证虚线渲染）；“完成”按钮加大至最小 96×56dp、16dp 圆角、2dp 投影，背景改 ripple drawable（按压叠加 12% 黑色遮罩压暗）；整卡背景叠加系统涟漪；登机口改为图标 + 值；小组件用色全面对齐 App 设计令牌；移除左侧东航红竖条。
+
+0.7.1 迭代修订：修复小组件整卡空白——撕线虚线误用 RemoteViews inflate 白名单之外的裸 `android.view.View`，launcher 进程加载布局失败；改由 1dp 高 TextView 承载虚线。
+
+0.7.2 迭代修订：小组件底部航段行信息增强——机场显示改为中文名 + 三字码并列；进港行尾改为到达站（本站）机位，出港行尾在登机口缺失时回退出发机位（机位值加「机位 」前缀与登机口区分）；无航段的执勤隐藏悬空虚线。
+
+0.7.3 迭代修订：修复小组件底部虚线与航段行在 vivo 桌面不显示——根因不是渲染失败而是格子高度不足，launcher 对超出格子的内容自顶向下布局并裁剪底部（虚线与航段行恰好位于裁剪区）；三区间距 12→10dp、主次航段行距 8→6dp、虚线 1→2dp，小组件默认尺寸由 4x2 调整为 4x3（`targetCellHeight=3`、`minHeight=160dp`），保证默认尺寸下三区完整可见。已有 4x2 实例需调整高度或重新添加方可完整显示。
+
+0.7.4 迭代修订：小组件叠加品牌装饰层，布局结构、字号与按钮保持不变——左缘 4dp 东航红竖条并入卡片背景 layer-list（左侧圆角随系统挂件，z 序天然最低）；右下角藏青燕尾双弧线水印（6% 不透明，`clipToOutline` 随卡片圆角裁剪出血边缘）；hero 与航班行之间的穿孔虚线上叠加起飞姿态小飞机（14% 不透明藏青灰、白底圆形 halo 在虚线上打出镂空、机头上仰 30°、定位于「左 padding → 完成按钮左缘前 16dp」区间中点），虚线带高度仍为 2dp，飞机经 `clipChildren=false` 溢出到上下留白，不增加内容高度，并随虚线一同在无航段时隐藏；meta 行下方新增 #EEF0F4 撕线虚线；根容器由 LinearLayout 改为 FrameLayout 以承载装饰层，装饰元素均位于内容层之下。小组件固定浅色白卡不随深色模式变化（见 6.10-9），故装饰透明度深色减半规则不适用。
+
+0.7.5 迭代修订：装饰层加料（航空票据主题，全部为覆盖层/背景 drawable，不占布局高度）——底边全宽红蓝航空邮件斜纹条（纯色对撞，让开左缘红竖条）；右上角藏青/东航红双三角撞色块，出血随卡片圆角裁剪；左下角装饰性条码纹理（12% 藏青，登机牌肌理）；倒计时数字加 5% 浅红圆角 wash 锚定 hero 视觉重心；燕尾水印增为三线并加入红色 accent 细弧，不透明度 6%→8%。
+
+0.7.6 迭代修订：按反馈移除倒计时浅红 wash；上半部分补充结构感元素（均不增加内容高度）——「距离到位」标签行升级为 时钟小图标 + 标签 + 红刻度段（2dp）+ 细引导线（1dp，weight=1 延伸至按钮前），hero 区与「完成」按钮之间加 1dp 竖向细分隔线划出操作区，右上撞色角块加大至 108×84dp 并提高不透明度（藏青 17% / 红 20%）。
+
+0.7.7 迭代修订：按反馈移除标签行红刻度段、细引导线与按钮前竖线；顶部与中部装饰重设计——meta 行升级为浅灰（#F0F2F5）圆角头带（右端 mini 票据码纹理），卡片背景加红色 L 形拐角（左竖条向顶边延伸 36dp），hero 区衬底改为藏青/红双弧线条对撞（背景 drawable，零高度成本），航线带加两端锚点（左端藏青实心圆点、右端红色空心环收笔于按钮左缘前 16dp）且小飞机不透明度 14%→20%；行距微调补偿头带高度，内容总高不变（两段航段 222dp），无裁剪风险。
 
 ## 7. 数据、持久化与安全
 
@@ -465,8 +487,8 @@ CEA 分支为 `RosterAssignment` 增加：
 - 非导出的 `MucNotificationListenerService`，受 `BIND_NOTIFICATION_LISTENER_SERVICE` 保护；
 - 非导出的 `ReminderReceiver`；
 - 非导出的、监听 `BOOT_COMPLETED` 的 `BootReceiver`；
-- 导出的 `widget/DutyWidgetProvider`（仅 `APPWIDGET_UPDATE`，供桌面 launcher 绑定）；
-- 非导出的 `widget/DutyWidgetService`，受 `BIND_REMOTEVIEWS` 保护。
+- 非导出的 `widget/DutyWidgetActionReceiver`，仅接收小组件显式 `PendingIntent` 的完成动作；
+- 导出的 `widget/DutyWidgetProvider`（仅 `APPWIDGET_UPDATE`，供桌面 launcher 绑定）。
 
 WPS 分支让 `MainActivity` 同时成为 Excel `ACTION_SEND` 分享目标，因此所有外部 Intent 都必须经过 MIME、action、项目数和 URI scheme 校验。
 

@@ -44,10 +44,17 @@ data class WidgetFlightLeg(
     val gate: String,
 )
 
-/**
- * 小组件翻页数据：全部执勤各一页，初始定位由 Provider 用
- * [com.bradj.airshift.model.nextIncompleteDutyIndex] 的结果设置。
- */
+/** 固定小组件只选择当前未完成执勤；无排班或全部完成时返回对应提示页。 */
+fun List<RosterAssignment>.toCurrentWidgetPage(
+    manuallyCompletedCount: Int,
+    now: LocalDateTime = LocalDateTime.now(),
+): WidgetPage {
+    val currentIndex = nextIncompleteDutyIndex(manuallyCompletedCount, now)
+    val pages = toWidgetPages(manuallyCompletedCount, now)
+    return pages.getOrElse(currentIndex) { pages.single() }
+}
+
+/** 构建完整执勤页面模型；固定小组件从中选择当前未完成执勤。 */
 fun List<RosterAssignment>.toWidgetPages(
     manuallyCompletedCount: Int,
     now: LocalDateTime = LocalDateTime.now(),
@@ -98,8 +105,9 @@ private fun RosterAssignment.toWidgetPage(
                     WidgetFlightLeg(
                         directionLabel = "进港",
                         flight = flight,
-                        place = placeDisplay(originCode, origin),
-                        gate = inboundBoardingGate ?: "--",
+                        place = airportDisplay(origin, originCode),
+                        // 进港行尾显示到达站（本站）机位；到达侧无登机口字段。
+                        gate = arrivalStand?.let { "机位 $it" } ?: "--",
                     ),
                 )
             }
@@ -108,8 +116,9 @@ private fun RosterAssignment.toWidgetPage(
                     WidgetFlightLeg(
                         directionLabel = "出港",
                         flight = flight,
-                        place = placeDisplay(destinationCode, destination),
-                        gate = boardingGate ?: "--",
+                        place = airportDisplay(destination, destinationCode),
+                        // 出港行尾显示出发地（本站）登机口，缺省回退出发机位。
+                        gate = boardingGate ?: departureStand?.let { "机位 $it" } ?: "--",
                     ),
                 )
             }
@@ -117,5 +126,9 @@ private fun RosterAssignment.toWidgetPage(
     )
 }
 
-private fun placeDisplay(code: String?, name: String?): String =
-    name ?: (code ?: "--")
+/** 航段机场显示：中文名 + 三字码并列，缺一则降级显示现有项。 */
+private fun airportDisplay(name: String?, code: String?): String = when {
+    name != null && code != null -> "$name $code"
+    name != null -> name
+    else -> code ?: "--"
+}

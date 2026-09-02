@@ -5,10 +5,12 @@ import androidx.core.content.edit
 import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.api.dutyWindowLookups
 import com.bradj.airshift.api.refreshIndices
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.dutyWindowIndices
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -18,6 +20,11 @@ data class RosterSnapshot(
     val assignments: List<RosterAssignment>,
     val generation: Long,
     val manuallyCompletedCount: Int,
+)
+
+internal data class DutyCompletion(
+    val snapshot: RosterSnapshot,
+    val newlyTrackedFlights: Set<FlightLookup>,
 )
 
 class RosterStore(context: Context) {
@@ -85,6 +92,32 @@ class RosterStore(context: Context) {
                 putInt(KEY_DUTY_INDEX, index.coerceIn(0, loadAssignments().size))
             }
         }
+    }
+
+    /**
+     * Completes exactly the duty shown by the caller. The generation and index guards make a
+     * repeated tap from stale UI a no-op instead of completing the following duty.
+     */
+    internal fun completeCurrentDuty(
+        expectedGeneration: Long,
+        expectedDutyIndex: Int,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): DutyCompletion? = synchronized(rosterLock) {
+        if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized null
+        val before = loadSnapshot()
+        val currentIndex = before.assignments
+            .dutyWindowIndices(before.manuallyCompletedCount, now)
+            .firstOrNull()
+        if (currentIndex != expectedDutyIndex) return@synchronized null
+
+        val oldWindow = before.assignments.dutyWindowLookups(before.manuallyCompletedCount, now)
+        setCurrentDutyIndex(currentIndex + 1)
+        val after = loadSnapshot()
+        val newWindow = after.assignments.dutyWindowLookups(after.manuallyCompletedCount, now)
+        DutyCompletion(
+            snapshot = after,
+            newlyTrackedFlights = newWindow - oldWindow,
+        )
     }
 
     fun loadSnapshot(): RosterSnapshot = synchronized(rosterLock) {

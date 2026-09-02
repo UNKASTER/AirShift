@@ -13,6 +13,7 @@ import com.bradj.airshift.model.allDutiesComplete
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -103,6 +104,26 @@ class RosterStoreInstrumentedTest {
         store.setCurrentDutyIndex(-1)
         assertEquals(0, store.currentDutyIndex)
         assertEquals(LocalDate.now().toString(), preferences.getString("duty_progress_date", null))
+    }
+
+    @Test
+    fun completingShownDutyIsAtomicAndReturnsOnlyNewlyTrackedFlights() {
+        val duties = (1..3).map { upcomingAssignment("B000$it", "MU100$it") }
+        val generation = store.replaceAssignments(duties)
+        val now = LocalDateTime.now()
+
+        val completion = store.completeCurrentDuty(generation, expectedDutyIndex = 0, now = now)
+
+        assertNotNull(completion)
+        assertEquals(1, store.currentDutyIndex)
+        assertEquals(
+            setOf(FlightLookup.of("MU1003", duties[2].scheduledArrival!!.toLocalDate())),
+            completion!!.newlyTrackedFlights,
+        )
+        assertNull(store.completeCurrentDuty(generation, expectedDutyIndex = 0, now = now))
+        assertEquals(1, store.currentDutyIndex)
+        assertNull(store.completeCurrentDuty(generation - 1, expectedDutyIndex = 1, now = now))
+        assertEquals(1, store.currentDutyIndex)
     }
 
     @Test
