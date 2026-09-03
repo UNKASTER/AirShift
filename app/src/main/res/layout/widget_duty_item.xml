@@ -9,12 +9,11 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background">
 
-    <!-- 装饰层：底边航空邮件红蓝斜纹条（颜色对撞锚点，仅底部出血裁圆角，让开左缘红竖条） -->
+    <!-- 装饰层：底边航空邮件红蓝斜纹条（颜色对撞锚点，全宽出血、底部裁圆角） -->
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="6dp"
         android:layout_gravity="bottom"
-        android:layout_marginStart="4dp"
         android:background="@drawable/widget_watermark_clip"
         android:clipToOutline="true"
         android:importantForAccessibility="no"
@@ -31,10 +30,10 @@
         android:importantForAccessibility="no"
         android:src="@drawable/widget_barcode" />
 
-    <!-- 装饰层：右上角藏青×红撞色双三角，出血随卡片圆角裁剪 -->
+    <!-- 装饰层：右上角藏青×红撞色双三角，右缘向下延伸补缺，出血随卡片圆角裁剪 -->
     <ImageView
-        android:layout_width="108dp"
-        android:layout_height="84dp"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
         android:layout_gravity="top|end"
         android:background="@drawable/widget_watermark_clip"
         android:clipToOutline="true"
