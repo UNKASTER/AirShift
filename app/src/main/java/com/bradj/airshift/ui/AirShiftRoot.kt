@@ -48,6 +48,7 @@ import com.bradj.airshift.ui.theme.heroShadow
 
 enum class DutySection {
     ALL,
+    CALENDAR,
     CURRENT,
     SETTINGS,
 }
@@ -65,6 +66,12 @@ private val IconDutyList = linearIcon(
 private val IconDutyCurrent = linearIcon(
     "DutyCurrent",
     "M22 2L11 13 M22 2L15 22L11 13L2 9Z",
+)
+
+/** 排班日历：日历。 */
+private val IconShiftCalendar = linearIcon(
+    "ShiftCalendar",
+    "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
 )
 
 /** 设置：滑杆。 */
@@ -128,10 +135,18 @@ private fun DutyBottomBar(
                         selected = section == DutySection.ALL,
                         onClick = { onSectionSelected(DutySection.ALL) },
                     )
-                    // 中央浮动按钮占位
-                    Spacer(modifier = Modifier.width(88.dp))
                     BottomBarItem(
                         modifier = Modifier.weight(1f),
+                        icon = IconShiftCalendar,
+                        label = "排班日历",
+                        selected = section == DutySection.CALENDAR,
+                        onClick = { onSectionSelected(DutySection.CALENDAR) },
+                    )
+                    // 中央浮动按钮占位
+                    Spacer(modifier = Modifier.width(88.dp))
+                    // 左右各 2 份权重，浮动按钮的 88dp 缺口才落在正中；设置在自己的双宽格内居中。
+                    BottomBarItem(
+                        modifier = Modifier.weight(2f),
                         icon = IconSettings,
                         label = "设置",
                         selected = section == DutySection.SETTINGS,

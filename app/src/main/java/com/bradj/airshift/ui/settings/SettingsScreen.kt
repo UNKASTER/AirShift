@@ -1,5 +1,6 @@
 package com.bradj.airshift.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -32,12 +35,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Surface
+import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.ui.components.QuietCard
 import com.bradj.airshift.ui.components.StatusDot
 import com.bradj.airshift.ui.components.formatEpoch
 import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
+import com.bradj.airshift.ui.theme.CeaRedSoft
+import com.bradj.airshift.ui.theme.OnCeaRedSoft
 import com.bradj.airshift.ui.theme.SuccessGreen
+import com.bradj.airshift.ui.theme.TextHint
 
 /** 设置页：卡片化分区；保存为东航红主按钮，清除 API Key 降级为红色文字按钮。 */
 @Composable
@@ -48,6 +56,12 @@ fun SettingsScreen(
     notificationAccessGranted: Boolean,
     lastSuccessfulRecognitionEpochMillis: Long?,
     lastProcessingResult: String?,
+    shiftGroupId: Int?,
+    shiftGroupAutoDetected: Boolean,
+    shiftGroupOptions: List<Int>,
+    shiftReportMarginMinutes: Int,
+    onShiftGroupSelected: (Int?) -> Unit,
+    onShiftReportMarginSelected: (Int) -> Unit,
     onOpenNotificationAccessSettings: () -> Unit,
     onSave: (String, String) -> Unit,
     onClearApiKey: () -> Unit,
@@ -78,6 +92,16 @@ fun SettingsScreen(
                 lastSuccessfulRecognitionEpochMillis = lastSuccessfulRecognitionEpochMillis,
                 lastProcessingResult = lastProcessingResult,
                 onOpenNotificationAccessSettings = onOpenNotificationAccessSettings,
+            )
+        }
+        item {
+            ShiftCalendarSection(
+                shiftGroupId = shiftGroupId,
+                autoDetected = shiftGroupAutoDetected,
+                options = shiftGroupOptions,
+                reportMarginMinutes = shiftReportMarginMinutes,
+                onGroupSelected = onShiftGroupSelected,
+                onMarginSelected = onShiftReportMarginSelected,
             )
         }
         item {
@@ -157,6 +181,91 @@ fun SettingsScreen(
             ) { Text("保存", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         }
         item { Spacer(Modifier.height(AirShiftSpacing.L)) }
+    }
+}
+
+/**
+ * 排班日历分区：显示生效的班组，姓名匹配不到时提供手动指定；到位余量可调。
+ * 到位要求（出港提前 1 小时、进港提前 10 分钟）是硬规定，这里只调富余量。
+ */
+@Composable
+private fun ShiftCalendarSection(
+    shiftGroupId: Int?,
+    autoDetected: Boolean,
+    options: List<Int>,
+    reportMarginMinutes: Int,
+    onGroupSelected: (Int?) -> Unit,
+    onMarginSelected: (Int) -> Unit,
+) {
+    SettingsSection(title = "排班日历") {
+        Text(
+            when {
+                shiftGroupId == null -> "未匹配到班组，请在下方手动指定"
+                autoDetected -> "我的班组：第 $shiftGroupId 组（按姓名自动识别）"
+                else -> "我的班组：第 $shiftGroupId 组（手动指定）"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (!autoDetected) {
+            Spacer(Modifier.height(AirShiftSpacing.S))
+            Text(
+                "导入一份带“候机早班/中班/夜班”的 Excel 后，应用会自动校正班组表。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(AirShiftSpacing.S))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(AirShiftSpacing.S)) {
+                options.forEach { option ->
+                    ChoiceChip(
+                        text = "第 $option 组",
+                        selected = option == shiftGroupId,
+                        onClick = { onGroupSelected(option.takeIf { it != shiftGroupId }) },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(AirShiftSpacing.M))
+        Text(
+            "到位余量",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            "在“最晚到位时间”之前再留出的富余，越大则推荐更早一班班车。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(AirShiftSpacing.S))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(AirShiftSpacing.S)) {
+            ShiftBusPlan.REPORT_MARGIN_OPTIONS.forEach { minutes ->
+                ChoiceChip(
+                    text = if (minutes == 0) "不留余量" else "$minutes 分钟",
+                    selected = minutes == reportMarginMinutes,
+                    onClick = { onMarginSelected(minutes) },
+                )
+            }
+        }
+    }
+}
+
+/** 可选中小胶囊：与 DirectionTag 同规格，选中态用浅红底深红字。 */
+@Composable
+private fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        color = if (selected) CeaRedSoft else MaterialTheme.colorScheme.surfaceVariant,
+        shape = CircleShape,
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            color = if (selected) OnCeaRedSoft else TextHint,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

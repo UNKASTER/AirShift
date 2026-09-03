@@ -1,6 +1,7 @@
 package com.bradj.airshift.parser
 
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.ObservedShiftGroups
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -22,6 +23,11 @@ data class RosterParseResult(
     val assignments: List<RosterAssignment>,
     val rosterDate: LocalDate,
     val warnings: List<String>,
+    /**
+     * Excel 右侧“候机早班/中班/夜班”行读出的当天真实分组顺序，用于校正排班日历的班组表与轮转相位。
+     * 图片 OCR 导入以及没有该行的表格（如交接班日）为 null，此时排班日历继续使用内置表。
+     */
+    val observedShiftGroups: ObservedShiftGroups? = null,
 )
 
 object RosterTableParser {

@@ -2,6 +2,7 @@ package com.bradj.airshift.parser
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -175,6 +176,121 @@ class ExcelRosterParserTest {
         text("H", "计离"),
         text("I", "接送机人员"),
     )
+
+    @Test
+    fun readsTheThreeShiftLinesIntoAnOrderedGroupSequence() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                rosterWithExtraRows(
+                    row(21, text("L", "候机早班：1甲子 甲丑5乙子 乙丑 乙寅11丙子 丙丑 丙寅")),
+                    row(22, text("L", "候机中班：8丁子明 丁丑明 丁寅明9戊子 戊丑2己子 己丑6庚子 庚丑")),
+                    row(23, text("L", "候机夜班：4辛子 辛丑10壬子 壬丑3癸子 癸丑 癸寅")),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "辛子",
+        )
+
+        val observed = requireNotNull(result.observedShiftGroups)
+        assertEquals(listOf(1, 5, 11), observed.early)
+        assertEquals(listOf(8, 9, 2, 6), observed.mid)
+        assertEquals(listOf(4, 10, 3), observed.night)
+        assertEquals(listOf(1, 5, 11, 8, 9, 2, 6, 4, 10, 3), observed.orderedGroupIds)
+        assertTrue(observed.isUsable)
+        assertEquals(listOf("乙子", "乙丑", "乙寅"), observed.members[5])
+        assertEquals(listOf("壬子", "壬丑"), observed.members[10])
+    }
+
+    @Test
+    fun aSheetWithoutShiftLinesLeavesTheCalendarOnTheBuiltInTable() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(rosterWithExtraRows(), useSharedStrings = false),
+            userName = "辛子",
+        )
+
+        assertEquals(1, result.assignments.size)
+        assertNull(result.observedShiftGroups)
+    }
+
+    @Test
+    fun theNeighbouringDutyNotesAreNotMistakenForShiftLines() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                rosterWithExtraRows(
+                    row(24, text("L", "夜班拉不开依次留中班  上下班打卡！！！")),
+                    row(25, text("L", "病假：癸卯   早班柜台：癸丑 5：30-7:00")),
+                    row(26, text("L", "候机主任：甲寅 甲卯 代班：乙卯")),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "辛子",
+        )
+
+        assertNull(result.observedShiftGroups)
+    }
+
+    @Test
+    fun aShiftBlockMissingTheNightLineIsDiscarded() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                rosterWithExtraRows(
+                    row(21, text("L", "候机早班：6庚子 庚丑4辛子 辛丑10壬子 壬丑 壬寅")),
+                    row(22, text("L", "候机中班：3癸丑 癸寅1甲子 甲丑5乙子 乙丑 乙寅11丙子 丙丑 丙寅")),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "辛子",
+        )
+
+        assertNull(result.observedShiftGroups)
+    }
+
+    @Test
+    fun aGroupShortenedBySickLeaveAndBracketNotesStillParses() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                rosterWithExtraRows(
+                    row(22, text("L", "候机早班：6庚子 庚丑4辛子 辛丑（关封）10壬子 壬丑 壬寅")),
+                    row(23, text("L", "候机中班：3癸丑 癸寅1甲子 甲丑5乙子 乙丑 乙寅11丙子 丙丑 丙寅")),
+                    row(24, text("L", "候机夜班：8丁子明 丁丑明 丁寅明9戊子 戊丑2己子 己丑")),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "辛子",
+        )
+
+        val observed = requireNotNull(result.observedShiftGroups)
+        assertEquals(listOf(6, 4, 10, 3, 1, 5, 11, 8, 9, 2), observed.orderedGroupIds)
+        // 癸子病假，当天组 3 只剩两人；括号备注不进入姓名。
+        assertEquals(listOf("癸丑", "癸寅"), observed.members[3])
+        assertEquals(listOf("辛子", "辛丑"), observed.members[4])
+    }
+
+    /** 最小可识别排班（表头 + 一行任务），再拼上表格右侧的附加行。 */
+    private fun rosterWithExtraRows(vararg extra: RowDef): List<RowDef> = listOf(
+        row(1, text("A", "2026/8/24")),
+        row(
+            2,
+            text("A", "机号"),
+            text("B", "机型"),
+            text("C", "进港航班"),
+            text("D", "前站"),
+            text("E", "预落"),
+            text("G", "出港航班"),
+            text("H", "到站"),
+            text("I", "计离"),
+            text("J", "接送机人员"),
+        ),
+        row(
+            3,
+            text("A", "B6560"),
+            text("B", "320"),
+            text("G", "MU6771"),
+            text("H", "大连"),
+            text("I", "0710"),
+            text("J", "辛子 辛丑 壬丑"),
+        ),
+    ) + extra
 
     private fun workbook(rows: List<RowDef>, useSharedStrings: Boolean): ByteArrayInputStream {
         val textValues = rows.flatMap { row -> row.cells.filterNot(CellDef::numeric).map(CellDef::value) }

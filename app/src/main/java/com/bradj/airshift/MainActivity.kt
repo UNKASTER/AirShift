@@ -49,6 +49,8 @@ import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.model.dutyWindowIndices
+import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.parser.RosterParseResult
@@ -60,6 +62,7 @@ import com.bradj.airshift.ui.AirShiftRoot
 import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.DutySection
 import com.bradj.airshift.ui.all.AllDutyScreen
+import com.bradj.airshift.ui.calendar.ShiftCalendarScreen
 import com.bradj.airshift.ui.current.CurrentDutyScreen
 import com.bradj.airshift.ui.onboarding.OnboardingScreen
 import com.bradj.airshift.ui.settings.SettingsScreen
@@ -239,6 +242,14 @@ internal fun AirShiftApp(
     var dutyNow by remember { mutableStateOf(LocalDateTime.now()) }
     var locationCandidates by remember { mutableStateOf(emptyList<AirportPoint>()) }
     var hasVariFlightApiKey by remember { mutableStateOf(store.hasVariFlightApiKey) }
+    // 排班日历：班组表与轮转相位随最近一次 Excel 班次行校正；解析不到时保持内置表。
+    var shiftCalibration by remember { mutableStateOf(store.shiftCalibration) }
+    var manualShiftGroupId by remember { mutableStateOf(store.manualShiftGroupId) }
+    var shiftReportMargin by remember { mutableIntStateOf(store.shiftReportMarginMinutes) }
+    val shiftSchedule = remember(shiftCalibration) { ShiftSchedule(shiftCalibration) }
+    val autoShiftGroupId = remember(shiftSchedule, userName) {
+        shiftSchedule.findGroupIdForName(userName.orEmpty())
+    }
     var notificationAccessGranted by remember { mutableStateOf(NotificationAccess.isGranted(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val operationOwner = remember { AtomicBoolean(true) }
@@ -366,6 +377,14 @@ internal fun AirShiftApp(
         if (!isOperationOwnerActive() || !isCurrentAttempt()) return
         val parsed = result.assignments
         warnings = result.warnings
+        // 班次行只出现在整班工作日的表格里；解析不到时不动已保存的校准值。
+        result.observedShiftGroups
+            ?.let { ShiftCalibration(result.rosterDate, it) }
+            ?.takeIf { it.isUsable }
+            ?.let {
+                store.shiftCalibration = it
+                shiftCalibration = it
+            }
         val previousAssignments = store.loadAssignments()
         val importGeneration = store.replaceAssignments(parsed)
         pendingRefresh = null
@@ -663,6 +682,18 @@ internal fun AirShiftApp(
                 onGoToAllDuty = { dutyNavigation.selectSection(DutySection.ALL) },
                 modifier = Modifier.padding(padding),
             )
+            DutySection.CALENDAR -> {
+                ShiftCalendarScreen(
+                    userName = userName.orEmpty(),
+                    schedule = shiftSchedule,
+                    groupId = autoShiftGroupId ?: manualShiftGroupId,
+                    assignments = assignments,
+                    reportMarginMinutes = shiftReportMargin,
+                    today = dutyNow.toLocalDate(),
+                    onGoToSettings = { dutyNavigation.selectSection(DutySection.SETTINGS) },
+                    modifier = Modifier.padding(padding),
+                )
+            }
             DutySection.SETTINGS -> SettingsScreen(
                 currentName = userName.orEmpty(),
                 currentApiKey = store.variFlightApiKey.orEmpty(),
@@ -670,6 +701,18 @@ internal fun AirShiftApp(
                 notificationAccessGranted = notificationAccessGranted,
                 lastSuccessfulRecognitionEpochMillis = specialServiceState.lastSuccessfulRecognitionEpochMillis,
                 lastProcessingResult = specialServiceState.lastProcessingResult,
+                shiftGroupId = autoShiftGroupId ?: manualShiftGroupId,
+                shiftGroupAutoDetected = autoShiftGroupId != null,
+                shiftGroupOptions = shiftSchedule.table.cycleOrder.sorted(),
+                shiftReportMarginMinutes = shiftReportMargin,
+                onShiftGroupSelected = { selected ->
+                    store.manualShiftGroupId = selected
+                    manualShiftGroupId = selected
+                },
+                onShiftReportMarginSelected = { minutes ->
+                    store.shiftReportMarginMinutes = minutes
+                    shiftReportMargin = store.shiftReportMarginMinutes
+                },
                 onOpenNotificationAccessSettings = openNotificationAccessSettings,
                 onSave = { name, apiKey ->
                     runCatching {

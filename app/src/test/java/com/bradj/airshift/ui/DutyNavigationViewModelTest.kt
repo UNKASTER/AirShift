@@ -44,6 +44,40 @@ class DutyNavigationViewModelTest {
     }
 
     @Test
+    fun `the shift calendar section can be selected like any other tab`() {
+        val viewModel = DutyNavigationViewModel()
+        viewModel.onActivityForegrounded()
+
+        viewModel.selectSection(DutySection.CALENDAR)
+
+        assertEquals(DutySection.CALENDAR, viewModel.section.value)
+    }
+
+    @Test
+    fun `a configuration change keeps the shift calendar selected`() {
+        val viewModel = DutyNavigationViewModel()
+        viewModel.onActivityForegrounded()
+        viewModel.selectSection(DutySection.CALENDAR)
+        viewModel.onActivityBackgrounded(isChangingConfigurations = true)
+
+        viewModel.onActivityForegrounded()
+
+        assertEquals(DutySection.CALENDAR, viewModel.section.value)
+    }
+
+    @Test
+    fun `returning from the background leaves the shift calendar for the current duty`() {
+        val viewModel = DutyNavigationViewModel()
+        viewModel.onActivityForegrounded()
+        viewModel.selectSection(DutySection.CALENDAR)
+        viewModel.onActivityBackgrounded(isChangingConfigurations = false)
+
+        viewModel.onActivityForegrounded()
+
+        assertEquals(DutySection.CURRENT, viewModel.section.value)
+    }
+
+    @Test
     fun `repeated foreground transitions without a background stop keep the selected section`() {
         val viewModel = DutyNavigationViewModel()
         viewModel.onActivityForegrounded()

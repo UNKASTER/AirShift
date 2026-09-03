@@ -6,6 +6,11 @@ import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.ObservedShiftGroups
+import com.bradj.airshift.model.shift.ShiftBusPlan
+import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftSchedule
+import java.time.LocalDate
 import org.json.JSONArray
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -100,6 +105,82 @@ class RosterStorePersistenceInstrumentedTest {
         assertTrue(encoded.isNull("inboundDepartureStand"))
         assertTrue(encoded.isNull("outboundArrivalStand"))
         assertEquals(original, RosterStore(isolatedContext).loadAssignments())
+    }
+
+    @Test
+    fun shiftCalibrationSurvivesAJsonRoundTrip() {
+        val calibration = ShiftCalibration(
+            date = LocalDate.of(2026, 8, 25),
+            observed = ObservedShiftGroups(
+                early = listOf(8, 9, 2),
+                mid = listOf(6, 4, 10, 3),
+                night = listOf(1, 5, 11),
+                members = mapOf(
+                    3 to listOf("癸丑", "癸寅"),
+                    11 to listOf("丙丑", "丙寅"),
+                ),
+            ),
+        )
+
+        RosterStore(isolatedContext).shiftCalibration = calibration
+        val restored = RosterStore(isolatedContext).shiftCalibration
+
+        assertEquals(calibration, restored)
+        // 还原后必须仍能复现观测当天的顺序，否则相位就丢了。
+        assertEquals(
+            listOf(8, 9, 2, 6, 4, 10, 3, 1, 5, 11),
+            ShiftSchedule(restored).orderFor(LocalDate.of(2026, 8, 25)),
+        )
+    }
+
+    @Test
+    fun shiftCalibrationDefaultsToNothingAndCanBeCleared() {
+        val store = RosterStore(isolatedContext)
+        assertEquals(null, store.shiftCalibration)
+
+        store.shiftCalibration = ShiftCalibration(
+            date = LocalDate.of(2026, 8, 24),
+            observed = ObservedShiftGroups(listOf(1, 5, 11), listOf(8, 9, 2, 6), listOf(4, 10, 3), emptyMap()),
+        )
+        assertTrue(store.shiftCalibration != null)
+
+        store.shiftCalibration = null
+        assertEquals(null, RosterStore(isolatedContext).shiftCalibration)
+    }
+
+    @Test
+    fun corruptShiftCalibrationJsonFallsBackToTheBuiltInTable() {
+        preferences.edit().putString("shift_group_calibration", "{ not json").commit()
+
+        assertEquals(null, RosterStore(isolatedContext).shiftCalibration)
+        assertFalse(ShiftSchedule(RosterStore(isolatedContext).shiftCalibration).isCalibrated)
+    }
+
+    @Test
+    fun reportMarginDefaultsAndClampsWhenStored() {
+        val store = RosterStore(isolatedContext)
+        assertEquals(ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES, store.shiftReportMarginMinutes)
+
+        store.shiftReportMarginMinutes = 30
+        assertEquals(30, RosterStore(isolatedContext).shiftReportMarginMinutes)
+
+        store.shiftReportMarginMinutes = -5
+        assertEquals(0, RosterStore(isolatedContext).shiftReportMarginMinutes)
+
+        store.shiftReportMarginMinutes = 9_999
+        assertEquals(120, RosterStore(isolatedContext).shiftReportMarginMinutes)
+    }
+
+    @Test
+    fun manualShiftGroupIsStoredAndCleared() {
+        val store = RosterStore(isolatedContext)
+        assertEquals(null, store.manualShiftGroupId)
+
+        store.manualShiftGroupId = 8
+        assertEquals(8, RosterStore(isolatedContext).manualShiftGroupId)
+
+        store.manualShiftGroupId = null
+        assertEquals(null, RosterStore(isolatedContext).manualShiftGroupId)
     }
 
     private fun assignment() = RosterAssignment(

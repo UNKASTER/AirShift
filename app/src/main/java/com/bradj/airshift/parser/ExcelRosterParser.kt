@@ -1,6 +1,7 @@
 package com.bradj.airshift.parser
 
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.ObservedShiftGroups
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.helpers.DefaultHandler
@@ -35,6 +36,7 @@ internal object ExcelRosterParser {
     )
     private val assigneeDelimiterRegex = Regex("[\\s\\u00A0,，、;；/|]+")
     private val parentheticalNoteRegex = Regex("[（(][^）)]*[）)]")
+    private val shiftGroupEntryRegex = Regex("(\\d{1,2})\\s*([^\\d]+)")
 
     fun parse(
         input: InputStream,
@@ -118,6 +120,9 @@ internal object ExcelRosterParser {
             assignments = assignments,
             rosterDate = parsedDates.firstOrNull() ?: workbookDate ?: today,
             warnings = warnings,
+            observedShiftGroups = recognizedSheets.asSequence()
+                .mapNotNull { parseObservedShiftGroups(it.sheet.rows) }
+                .firstOrNull(),
         )
     }
 
@@ -266,6 +271,64 @@ internal object ExcelRosterParser {
         val epoch = if (uses1904DateSystem) LocalDate.of(1904, 1, 1) else LocalDate.of(1899, 12, 30)
         return runCatching { epoch.plusDays(floor(serial).toLong()) }.getOrNull()
     }
+
+    /**
+     * 读取表格右侧“候机早班 / 候机中班 / 候机夜班”三行，得到当天真实的班组顺序与成员，
+     * 供排班日历校正内置班组表与轮转相位。
+     *
+     * 与 [parseVipFlightNumbers] 一样只扫描正表之外的附加区域，不影响任务行解析。
+     * 三行缺任意一行时返回 null——交接班日的半天表格本就没有这些行。
+     */
+    private fun parseObservedShiftGroups(rows: List<ExcelRow>): ObservedShiftGroups? {
+        val lines = mutableMapOf<ShiftLineKind, List<Pair<Int, List<String>>>>()
+        for (row in rows) {
+            for (cell in row.cells.values) {
+                val kind = shiftLineKind(cell.text) ?: continue
+                if (lines.containsKey(kind)) continue
+                val entries = parseShiftGroupEntries(cell.text)
+                if (entries.isNotEmpty()) lines[kind] = entries
+            }
+        }
+        val early = lines[ShiftLineKind.EARLY] ?: return null
+        val mid = lines[ShiftLineKind.MID] ?: return null
+        val night = lines[ShiftLineKind.NIGHT] ?: return null
+        return ObservedShiftGroups(
+            early = early.map { it.first },
+            mid = mid.map { it.first },
+            night = night.map { it.first },
+            members = (early + mid + night).toMap(),
+        ).takeIf(ObservedShiftGroups::isUsable)
+    }
+
+    private fun shiftLineKind(raw: String): ShiftLineKind? {
+        val normalized = normalizeHeader(raw)
+        return when {
+            normalized.startsWith("候机早班") || normalized.startsWith("早班人员") -> ShiftLineKind.EARLY
+            normalized.startsWith("候机中班") || normalized.startsWith("中班人员") -> ShiftLineKind.MID
+            normalized.startsWith("候机夜班") || normalized.startsWith("候机晚班") ||
+                normalized.startsWith("夜班人员") || normalized.startsWith("晚班人员") -> ShiftLineKind.NIGHT
+            else -> null
+        }
+    }
+
+    /**
+     * 把“候机早班：1甲子 甲丑5乙子 乙丑 乙寅”解析为有序的 (组号, 成员) 列表。
+     * 组号只起分隔作用，出现顺序才决定早几 / 中几 / 晚几。
+     */
+    private fun parseShiftGroupEntries(raw: String): List<Pair<Int, List<String>>> {
+        val firstDigit = raw.indexOfFirst(Char::isDigit)
+        if (firstDigit < 0) return emptyList()
+        return shiftGroupEntryRegex.findAll(raw.substring(firstDigit)).mapNotNull { match ->
+            val id = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+            val names = match.groupValues[2]
+                .replace(parentheticalNoteRegex, " ")
+                .split(assigneeDelimiterRegex)
+                .filter(String::isNotBlank)
+            names.takeIf { it.isNotEmpty() }?.let { id to it }
+        }.toList()
+    }
+
+    private enum class ShiftLineKind { EARLY, MID, NIGHT }
 
     private fun parseVipFlightNumbers(rows: List<ExcelRow>): Set<String> {
         val flights = mutableSetOf<String>()
