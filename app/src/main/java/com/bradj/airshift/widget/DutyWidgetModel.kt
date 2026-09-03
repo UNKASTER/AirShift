@@ -117,8 +117,8 @@ private fun RosterAssignment.toWidgetPage(
                         directionLabel = "出港",
                         flight = flight,
                         place = airportDisplay(destination, destinationCode),
-                        // 出港行尾显示出发地（本站）登机口，缺省回退出发机位。
-                        gate = boardingGate ?: departureStand?.let { "机位 $it" } ?: "--",
+                        // 出港行尾同样显示本站机位（出发机位），与进港行保持一致。
+                        gate = departureStand?.let { "机位 $it" } ?: "--",
                     ),
                 )
             }

@@ -24,7 +24,7 @@ class DutyWidgetRendererInstrumentedTest {
     }
 
     @Test
-    fun dutyPageRendersLegRowsWithAirportNameCodeAndGateOrStand() {
+    fun dutyPageRendersLegRowsWithAirportNameCodeAndStands() {
         val page = listOf(
             RosterAssignment(
                 aircraftRegistration = "B-1234",
@@ -40,6 +40,7 @@ class DutyWidgetRendererInstrumentedTest {
                 destinationCode = "NGB",
                 arrivalStand = "105",
                 boardingGate = "B12",
+                departureStand = "352",
             ),
         ).toCurrentWidgetPage(manuallyCompletedCount = 0, now = now)
         val root = render(page)
@@ -50,11 +51,11 @@ class DutyWidgetRendererInstrumentedTest {
         assertEquals("成都天府 TFU", root.findViewById<TextView>(R.id.widget_leg_primary_place).text.toString())
         assertEquals("机位 105", root.findViewById<TextView>(R.id.widget_leg_primary_gate).text.toString())
 
-        // 出港行：航班号 + 目的地中文名三字码 + 出发地登机口。
+        // 出港行：航班号 + 目的地中文名三字码 + 出发机位（与进港行一致，不用登机口）。
         assertEquals(View.VISIBLE, root.findViewById<LinearLayout>(R.id.widget_leg_secondary).visibility)
         assertEquals("MU2473", root.findViewById<TextView>(R.id.widget_leg_secondary_flight).text.toString())
         assertEquals("宁波栎社 NGB", root.findViewById<TextView>(R.id.widget_leg_secondary_place).text.toString())
-        assertEquals("B12", root.findViewById<TextView>(R.id.widget_leg_secondary_gate).text.toString())
+        assertEquals("机位 352", root.findViewById<TextView>(R.id.widget_leg_secondary_gate).text.toString())
 
         assertEquals(View.VISIBLE, root.findViewById<View>(R.id.widget_divider).visibility)
     }

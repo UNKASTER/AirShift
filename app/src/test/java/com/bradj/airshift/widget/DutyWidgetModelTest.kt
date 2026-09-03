@@ -161,7 +161,7 @@ class DutyWidgetModelTest {
     }
 
     @Test
-    fun `turnaround legs expose origin and destination airport with arrival stand and departure gate`() {
+    fun `turnaround legs expose origin and destination airport with arrival and departure stands`() {
         val target = assignment(
             inboundFlight = "MU5101",
             origin = "北京首都",
@@ -174,6 +174,7 @@ class DutyWidgetModelTest {
             inboundBoardingGate = "A08",
             arrivalStand = "105",
             boardingGate = "B12",
+            departureStand = "358",
         )
         val page = (listOf(target).toWidgetPages(manuallyCompletedCount = 0, now = now).single() as WidgetPage.Duty)
 
@@ -187,13 +188,13 @@ class DutyWidgetModelTest {
         assertEquals("机位 105", inbound.gate)
         val outbound = page.legs[1]
         assertEquals("出港", outbound.directionLabel)
-        // 出港：目的地中文名 + 三字码，行尾为出发地登机口。
+        // 出港：目的地中文名 + 三字码，行尾为出发机位（即使有登机口也用机位）。
         assertEquals("广州白云 CAN", outbound.place)
-        assertEquals("B12", outbound.gate)
+        assertEquals("机位 358", outbound.gate)
     }
 
     @Test
-    fun `outbound leg falls back to departure stand when boarding gate missing`() {
+    fun `outbound leg shows departure stand`() {
         val target = assignment(
             outboundFlight = "MU5102",
             destination = "广州白云",
