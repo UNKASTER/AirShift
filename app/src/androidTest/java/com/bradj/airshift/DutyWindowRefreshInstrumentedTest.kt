@@ -12,11 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.lifecycle.SavedStateHandle
@@ -419,7 +417,6 @@ class DutyWindowRefreshInstrumentedTest {
     }
 
     private fun completeCurrentDuty() {
-        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("执勤完成"))
         composeRule.onNodeWithText("执勤完成").performClick()
         composeRule.mainClock.advanceTimeBy(100L)
         composeRule.waitForIdle()

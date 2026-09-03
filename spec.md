@@ -1,232 +1,365 @@
-# 航勤智排（AirShift）项目规格
+# 航勤智排（AirShift）当前实现规格
 
-> 文档类型：分支扫描规格及合并验证记录（as-built specification）  
-> 扫描日期：2026-08-30（Asia/Shanghai）  
-> 基准分支：`main`  
-> 扫描范围：原始扫描为只读；同日合并阶段已 fetch 远端并在本地 main 完成集成。当前结果见第 2.5、10 节。
+> - 文档类型：当前 `main` 的 as-built specification
+> - 审查日期：2026-09-03（Asia/Shanghai）
+> - 源码基线：`fd26ddfb6d815dd3dccea721796548857e846ed9`，以及本次文档/版本迭代
+> - 应用版本：`0.8.1` / version code `37`
+> - 支持平台：Android 13（API 33）及以上
 
-## 1. 文档定位与解释规则
+## 1. 文档定位
 
-本规格描述仓库中已经存在的实现，而不是把 README、PLAN 或提交说明中的声明直接当作事实。第 2.1–2.4、3–9、12 节保留原始分支扫描记录，其中 `main` 指合并前的 `ea0b8df`；合并后的行为选择和验证状态以第 2.5、10 节为准。
+本规格描述当前主线代码已经实现的行为、状态所有权、外部边界、验证覆盖和已知风险。它不再要求读者理解早期 `feat/cea-ui-rewrite` 或 `feat/wps-excel-share-import` 的分叉历史；这些能力已经进入 `main`，简要演进记录见第 16 节。
 
-本文使用以下范围标记：
+- [README.md](README.md) 面向使用者和首次接触项目的开发者，回答“它做什么、如何使用、如何构建”。
+- 本文面向维护者，回答“规则到底是什么、状态在哪里、调用如何流转、哪些边界尚未验证”。
+- 当文档与代码冲突时，以当前代码和实际测试结果为准，并应在同一次迭代中修正文档。
+- “当前实现”不等于“理想需求”。第 13 节明确列出代码中已经存在但可能需要后续产品决策的限制。
 
-- **共同基线**：`main` 以及两条功能分支共同具有的行为。
-- **main**：在历史扫描段落中说明合并前主分支的实现状态。
-- **CEA 分支**：`feat/cea-ui-rewrite` 相对 `main` 的增量或行为替换。
-- **WPS 分支**：`feat/wps-excel-share-import` 相对 `main` 的增量。
-- **待决策**：不同分支存在互斥或尚未统一的产品行为，不能视为任一分支已经完成的合并结果。
+## 2. 产品定义与边界
 
-当前状态：本地 `main` 已同时包含 CEA UI、WPS 分享导入和自动停止刷新；原始分支差异保留为溯源资料，不再表示待合并状态。
+### 2.1 目标
 
-## 2. 扫描基线
+AirShift 是航司地面服务保障人员的单用户日排班助手，核心目标是：
 
-### 2.1 原始扫描的本地引用与规模
+1. 从多人排班图片或 Excel 中只生成与当前姓名匹配的保障任务；
+2. 把进港、出港或过站任务按时间组织成可执行序列；
+3. 以当前和下一项未完成执勤为实时跟踪窗口，限制付费航班查询；
+4. 在设备本机完成 OCR、排班解析、进度保存、提醒和 MUC 通知识别；
+5. 由手机直接调用飞常准 Aviation MCP，不建设自有中转服务。
 
-| 分支 | HEAD | 版本 | 跟踪文件 | Kotlin 文件 | Kotlin 行数 | 测试方法 | 相对 `main` |
-|---|---|---|---:|---:|---:|---:|---|
-| `main` | `ea0b8df57a89` | `0.1.0` / code 1 | 86 | 62 | 9,359 | 55 | 基线 |
-| `feat/cea-ui-rewrite` | `28758a5fe843` | `0.3.0` / code 3 | 100 | 76 | 10,976 | 63 | 27 文件，`+2727/-1082` |
-| `feat/wps-excel-share-import` | `c30c60f2f369` | `0.1.0` / code 1 | 89 | 65 | 9,734 | 69 | 8 文件，`+398/-15` |
+### 2.2 运行前提与降级能力
 
-测试方法数量按跟踪代码中的 `@Test` 统计；不等于本次已执行或已通过的测试数量。
-
-本地还有两个 remote-tracking ref：
-
-- `origin/main` 与本地 `main` 指向同一提交。
-- `origin/feat/cea-ui-rewrite` 与本地 CEA 分支指向同一提交。
-
-它们没有提供额外代码状态。仓库无 tag、无 submodule。
-
-### 2.2 提交关系
-
-```text
-36b86c1  Initial open-source release
-  └─ 8514912  PP-OCRv6 ONNX
-      └─ 3d15ec5  飞常准直连与 OCR 加固
-          └─ ea0b8df  main：Excel 与 MUC 更新
-              ├─ 56b5241 ─ 62fb512 ─ 28758a5  feat/cea-ui-rewrite
-              └─ 9463d7b ─ c30c60f              feat/wps-excel-share-import
-```
-
-本地分支合计覆盖 9 个可达提交。两条功能分支的 merge-base 均为 `ea0b8df`。
-
-### 2.3 对象与工作树状态
-
-- 扫描前工作树位于干净的 `main`，没有已跟踪或未跟踪改动。
-- `git fsck --full` 没有报告缺失或损坏对象。
-- Git 对象库存在 2 个悬空提交和若干悬空树。两个悬空提交具有相同树，且该树与可达提交 `8514912` 完全一致，不包含独有产品状态；悬空树不属于任何分支，因此不纳入分支规格。
-- 三个分支均未发现高置信私钥或常见访问令牌特征。
-- `feat/wps-excel-share-import` 的 `git diff --check` 无问题；CEA 分支仅发现 `ui/components/FlightRow.kt` 文件末尾多一个空行。
-
-### 2.4 原始只读扫描的验证边界
-
-本次完成了对象级静态扫描、分支树对比、提交图、文本差异、合并热点、配置、依赖、测试代码和高置信秘密模式检查。为保持分支扫描只读且不生成构建产物，本次没有运行 Gradle 测试、lint、assemble 或设备测试。因此本文不会声称任一分支当前“测试通过”或“构建成功”。README/PLAN 中的通过记录只视为历史声明。
-
-### 2.5 2026-08-30 合并结果与验证
-
-- 本地 `main`：`92cf8a3`，版本 `0.4.0` / code 4。`f5e2a75` 整合两个本地 feat；`92cf8a3` 纳入远端 WPS 重复提交的历史。
-- 已纳入 `feat/cea-ui-rewrite`（`28758a5`）、`feat/wps-excel-share-import`（`c30c60f`）及 `origin/feat/wps-excel-share-import`（`cbd39ce`）。远端 `cbd39ce` 与本地 `9463d7b` 的父提交和文件树完全相同，故记录 ancestry 时保留已经验证的集成树，没有丢弃远端独有代码。
-- 已执行 `test lintDebug assembleDebug connectedDebugAndroidTest`：构建成功；JVM 77 项中 76 项通过，1 项真实 XLS 外部样本测试因未配置样本路径而跳过；API 37 模拟器 24 项仪器测试全部通过。
-- 同一 APK 和测试 APK 在 API 33 模拟器通过全部 24 项仪器测试，覆盖最低支持版本；包含 OCR、分享解析与 saved-state 恢复、旧页面回调隔离、存储兼容、刷新恢复及当前执勤页面。
-- lint 无错误，保留 4 个既有警告（3 个依赖新版本提示、1 个第三方 OCR KTX 建议）；新增 Compose 测试采用现有兼容测试入口，编译有 3 个弃用提示，未升级依赖。
-- 此次没有物理设备、真实 WPS/MUC 环境或飞常准凭据；未证明真实应用 URI 授权、完整进程死亡链路、后台调度时序和系统权限/定位/闹钟端到端行为。模拟器通过不等于第 10.4 节真机验收通过。
-- 普通图片/文件选择器的正在进行导入在页面重建后会安全取消，需重新选择文件；WPS 分享保留待处理队列并重试。SavedStateHandle 恢复依赖 Android 保存状态和来源 URI 授权，不承诺任意崩溃或强制停止下的 exactly-once 导入。
-- 本地合并未 push，未删除功能分支。原有 `spec.md` 未跟踪状态、`PLAN.md` 本地删除状态不纳入代码合并提交；合并前文档另有命名 stash 备份。
-
-## 3. 产品定义
-
-### 3.1 产品目标
-
-AirShift 是面向航司地面服务保障人员的 Android 单用户排班助手。它应在手机本机完成排班识别、个人任务筛选、状态保存和 MUC 通知结构化处理，并直接向飞常准 Aviation MCP 查询相关航班动态。
-
-核心价值是：
-
-1. 从完整排班中只提取当前用户负责的航班。
-2. 将计划、预计、实际航班时间和机位信息集中到任务卡。
-3. 根据任务类型安排本地保障提醒。
-4. 将 MUC 通知中的特服、登机口/机位变更和取消事件关联到对应航段。
-5. 不建设自有服务器，不上传原始排班、图片、Excel 或 MUC 正文。
-
-### 3.2 目标用户与运行前提
-
-- 目标用户：需要执行接机、送机或过站保障的单个地服人员。
-- 设备：Android 13（API 33）及以上。
-- 可离线能力：姓名、已保存排班、图片 OCR、Excel 解析、MUC 文本解析和已安排提醒。
-- 联网能力：飞常准实时航班刷新。
-- 可选系统授权：通知、精确闹钟、定位、通知读取权限。
-- 外部应用：MUC 包名固定为 `com.ceair.im.muc`；WPS 分支通过标准 Android 分享协议接收文件，不依赖 WPS SDK。
-
-### 3.3 明确不在范围内
-
-- 自建后端、云函数、数据库、账号体系或跨设备同步。
-- 读取 MUC 数据库、历史聊天、图片附件或使用无障碍抓屏。
-- 上传排班原文件或 MUC 原文进行云端 AI 处理。
-- 自动提供或共享飞常准 API Key。
-- iOS、Web 或 API 33 以下 Android 设备。
-- 多用户、多排班账户、团队调度和管理员功能。
-- 发布签名、应用商店发布流程和生产分发基础设施。
-
-## 4. 系统架构
-
-### 4.1 总体数据流
-
-```text
-姓名 + 排班来源
-  ├─ 图片 URI → ImageDecoder → PP-OCRv6 / ONNX Runtime / OpenCV
-  │                         → OcrToken → RosterTableParser
-  └─ Excel URI → 文件签名
-               ├─ OLE / .xls  → 私有缓存临时文件 → POI HSSF 事件流
-               └─ ZIP / .xlsx → 受限 ZIP 读取 → SAX XML 解析
-                            ↓
-                    RosterParseResult
-                            ↓
-                    RosterAssignment 列表
-           ┌────────────────┼────────────────┐
-           ↓                ↓                ↓
-      RosterStore       飞常准刷新       MUC 航段重匹配
-           ↓                ↓                ↓
-      Compose UI       AlarmManager      脱敏 StateFlow
-                           +
-                    WorkManager 后台刷新
-```
-
-### 4.2 模块职责
-
-| 模块 | 路径 | 职责 |
+| 能力 | 前提 | 缺失时的行为 |
 |---|---|---|
-| 应用编排 | `app/src/main/java/com/bradj/airshift/MainActivity.kt` | 启动、依赖构造、导入、刷新、权限、定位、提醒、设置和 Compose 状态编排 |
-| 核心模型 | `model/` | 排班任务、任务类型；分支扩展执勤时间线或完成判断 |
-| 排班解析 | `parser/` | 图片 OCR 后处理、`.xls`/`.xlsx` 读取、日期/姓名/航班/VIP 提取 |
-| 实时航班 | `api/` | 飞常准请求、响应解析、缓存、限流、数据合并和 WorkManager |
-| 本地数据 | `data/` | 排班/姓名 JSON、刷新状态和 Keystore API Key |
-| 定位 | `location/` | 当前定位与排班机场匹配 |
-| 提醒 | `reminder/` | 提醒规则、AlarmManager 调度、通知和开机恢复 |
-| MUC 特服 | `specialservice/` | 通知提取、解析、匹配、时序归并、去重、持久化和 UI 状态 |
-| OCR 引擎 | `com/paddle/ocr/` | 内嵌 PaddleOCR Android 推理流水线 |
-| CEA UI | `ui/`，仅 CEA 分支 | 主题、底部导航、全部执勤、当前执勤、设置和可复用组件 |
-| Android 资源 | `app/src/main/res/` | 图标、主题、字符串、数据提取规则 |
-| 模型资产 | `app/src/main/assets/models/` | PP-OCRv6 tiny 检测、识别 ONNX 模型及字符表 |
-| 测试 | `app/src/test/`、`app/src/androidTest/` | JVM 规则测试和 Android 设备集成测试 |
-| 回归样本与工具 | `testdata/`、`tools/` | 合成排班图和可重复生成脚本 |
+| 排班导入与离线查看 | Android 13+、已设置姓名 | 核心功能不可用 |
+| 图片识别 | 系统图片选择器返回可读 URI | 可改用 Excel |
+| 实时航班 | 用户自己的飞常准 API Key、网络 | 保留导入或上次保存的数据 |
+| 系统通知提醒 | 通知运行时权限 | 闹钟可安排，但不会显示通知 |
+| 精确提醒 | 精确闹钟特殊访问 | 使用非精确 `setAndAllowWhileIdle` |
+| 自动机场判断 | 粗略或精确定位权限、刷新结果含坐标 | 不影响排班和提醒 |
+| MUC 识别 | 通知读取特殊访问、MUC 发出可读新通知 | 其他功能不受影响 |
+| 后台刷新 | API Key、未完成排班、系统允许 WorkManager 运行 | 前台或手动刷新仍可用 |
 
-## 5. 共同基线功能规格
+### 2.3 明确不在范围内
 
-### 5.1 首次启动与个人信息
+- 自建后端、云函数、数据库、账号体系、跨设备同步或团队调度；
+- iOS、Web、Android 12 及以下；
+- 读取 MUC 数据库、历史聊天、通知移除事件、附件或无障碍页面；
+- 上传原始排班、图片、Excel 或 MUC 正文到自建服务；
+- 预置、共享或代管飞常准 API Key；
+- 发布签名、应用商店上架、生产遥测或 CI/CD 基础设施；
+- 自动撤销人工完成、多份排班并存、多人账户切换。
 
-1. 首次启动没有本地姓名时，应用必须显示姓名录入页。
-2. UI 接受 2–20 个字符；保存前去除首尾空白。
-3. 姓名保存在应用私有 SharedPreferences，并可在设置中修改。
-4. 修改姓名不会自动重新解析旧原文件；后续导入使用新姓名。
-5. 没有姓名时不得开始排班筛选。
+### 2.4 完整用户流程
 
-### 5.2 图片排班导入
+1. `MainActivity` 初始化提醒频道、存储、MUC Repository 和后台刷新资格。
+2. 如果没有姓名，先显示 Onboarding；WPS 分享事件会等待姓名保存。
+3. 用户在“全部执勤”选择图片/Excel，或从外部应用分享 Excel。
+4. Reader 在后台读取，Parser 返回 `RosterParseResult`。
+5. 解析成功后整体替换排班、generation 加一、人工进度归零，并扇出提醒、MUC 重匹配、WorkManager 配置和小组件重绘。
+6. 如果有 API Key 且当前执勤窗非空，立即刷新当前和下一项未完成执勤。
+7. 用户在“当前执勤”执行任务；自动完成规则与人工完成前缀共同决定当前/下一项。
+8. 全部完成后自动刷新停止；用户仍可在“全部执勤”显式下拉，查询全排班并修正数据。
 
-1. 应用通过 Android 系统图片选择器取得单张图片 URI，不申请全相册读取权限。
-2. 图片必须以软件 Bitmap 解码，并在使用完成后回收。
-3. OCR 必须在本机使用 PP-OCRv6 tiny、ONNX Runtime 和 OpenCV 执行。
-4. OCR 引擎在进程内复用；初始化和推理分别串行保护。
-5. OCR 结果转换为包含文字及四边界坐标的 `OcrToken`。
-6. 表格解析使用 9 列模板：机号、机型、进港航班、前站、预落、出港航班、到站、计离、接送机人员。
-7. 表头足够时应拟合实际列位置；表头不足时回退固定比例模板并产生警告。
-8. 数据行按机号锚点和 Y 坐标聚类，避免将相邻人员或航班串行合并。
-9. 只保留人员栏规范化后包含完整当前姓名的行，不使用编辑距离或“一字模糊”算法。
-10. 如果无法识别日期，应使用设备当天日期并产生警告；月日不含年份时选择距今天最近的前一年、当年或后一年。
-11. 图片右侧附加区域只提取 VIP 航班号集合，并仅在用户任务上保存进港/出港 VIP 布尔值；不得保存附加区域原文或人员信息。
-12. 没有匹配任务时返回空列表并显示可理解的警告，不得伪造任务。
+## 3. 技术架构
 
-当前图片路径没有文件大小、像素数或解码内存上限；这是已知风险，不是期望的安全保证。
+### 3.1 总体数据流
 
-### 5.3 Excel 排班导入
+```text
+系统图片选择器
+  └─ ImageDecoder → PP-OCRv6 / ONNX Runtime / OpenCV → OcrToken → RosterTableParser ┐
+系统文件选择器 / ACTION_SEND                                                        │
+  └─ 文件签名 → OLE/XLS 事件流 或 ZIP/XLSX SAX → ExcelRosterParser ────────────────┤
+                                                                                   ↓
+                                                                        RosterParseResult
+                                                                                   ↓
+                                                               RosterStore.replaceAssignments
+                                                                 generation++ / duty_index=0
+                                                          ┌────────┬────────┬────────┬────────┐
+                                                          ↓        ↓        ↓        ↓        ↓
+                                                      Compose   MUC重匹配  Reminder  Worker   Widget
 
-1. 应用通过系统文档选择器接受 `.xls` 和 `.xlsx`。
-2. 实际格式必须由文件签名判断，而不是只信任扩展名或 MIME：
-   - OLE 复合文档签名进入 `.xls` 路径；
-   - ZIP 签名进入 `.xlsx` 路径；
-   - 其他签名必须拒绝。
-3. `.xlsx` 使用受限 ZIP 读取和 SAX 解析，不引入完整工作簿内存模型。
-4. `.xlsx` 安全限制：单个相关 XML 最多 16 MiB、相关 XML 合计最多 32 MiB、工作表最多 64 个；DOCTYPE 和外部实体必须禁用。
-5. `.xls` 先复制到应用私有缓存，再用 POI HSSF 事件模型读取；临时文件必须在 `finally` 中删除。
-6. `.xls` 文件最多 256 MiB；每个工作表最多 10,000 行、100,000 个单元格，工作表最多 64 个。
-7. 支持 1900/1904 Excel 日期系统、完整日期、月日、日期序列、时间小数、HHmm 数值/文本和 `+` 次日标记。
-8. 工作表必须识别至少 6 个语义列，并包含机号、人员及至少一个进/出港航班列。
-9. 表头别名包括机号/机尾号/飞机注册号，进出港航班变体，前站/到站变体，计划/预计时间变体，以及接送机人员/送机人员/保障人员等。
-10. 有分隔符的人员名单执行规范化后的逐项精确匹配；无分隔符的长组合签名只有在长度至少为用户名两倍且包含完整用户名时才匹配。
-11. 解析多张有效工作表，按 `stableId` 去重并按任务时间排序。
-12. 加密、损坏、格式错误或没有可识别表头的工作簿必须返回安全错误，不得静默生成数据。
+飞常准 HTTPS MCP → 进程级限流/缓存 → batch → generation/scope 复查 → RosterStore 原子合并
+MUC 新通知 → 包白名单 → 文本提取 → parser/reducer → SpecialServiceRepository → Compose
+App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗口补查/调度/重绘
+```
 
-### 5.4 航班号、时间和任务构造
+### 3.2 模块职责
 
-1. 航班号必须规范为大写，移除 `&`、`#`、空格等非字母数字符号。
-2. 只接受 2–3 个字母加 3–4 位数字的航班号。
-3. `CES` 前缀必须转换为 `MU`。
-4. 任务类型：
-   - 只有进港：`ARRIVAL_ONLY`；
-   - 只有出港：`DEPARTURE_ONLY`；
-   - 同时进出港：`TURNAROUND`。
-5. 任务稳定 ID 由机号、进港航班、出港航班和任务日期拼接生成。
-6. 任务至少保存以下字段组：
-   - 排班：机号、机型、进出港航班、前站/到站、计划时间、人员；
-   - 实时：预计/实际进出港时间、登机口、出发/到达机位、登机口关闭观察、实际离位、廊桥；
-   - 机场：三字码、名称和本场信息；
-   - 标志：进港 VIP、出港 VIP。
+| 模块 | 主要路径 | 职责 |
+|---|---|---|
+| Composition root / 编排 | `MainActivity.kt`、`ForegroundFlightRefreshEffect.kt` | 初始化依赖、导入、权限、前台刷新、状态同步和三页组装 |
+| 外部分享队列 | `SharedExcelImport.kt` | 校验分享 Intent、FIFO、attempt ownership、saved-state 恢复 |
+| 领域模型 | `model/` | 排班字段、任务类型、自动完成、人工前缀、两项执勤窗、时间线 |
+| 导入解析 | `parser/` | OCR 表格恢复、XLS/XLSX 安全读取、姓名/日期/航班/VIP 提取 |
+| OCR 引擎 | `com/paddle/ocr/`、`assets/models/` | PaddleOCR 检测/识别、预后处理、ONNX 会话和模型资产 |
+| 实时航班 | `api/` | MCP 客户端、响应解析、多经停映射、缓存/限流、批次和 WorkManager |
+| 本地数据 | `data/` | 排班/进度 JSON、generation、Keystore API Key |
+| MUC | `specialservice/` | 通知提取、结构化解析、航班匹配、时序归并、去重和持久化 |
+| 提醒 | `reminder/` | 提醒策略、AlarmManager、通知频道和开机恢复 |
+| 定位 | `location/` | Fused Location、候选机场和 15 km 匹配 |
+| UI | `ui/` | 三页 Compose 界面、自定义底栏、组件和 design token |
+| 小组件 | `widget/`、`res/layout/widget_duty_item.xml` | 当前任务模型、RemoteViews、完成广播和重绘 |
+| 测试/样本 | `app/src/test/`、`app/src/androidTest/`、`testdata/`、`tools/` | JVM/Android 回归、合成 OCR 图片及生成脚本 |
 
-### 5.5 飞常准实时航班
+项目没有导航框架、数据库 ORM 或依赖注入框架。`MainActivity` / `AirShiftApp` 直接构造和协调各子系统，因此新增全局业务流程时必须审查这里的生命周期与副作用。
 
-1. 用户必须自行输入飞常准 API Key；仓库、BuildConfig、资源和 APK 不得预置共享密钥。
-2. 客户端固定向 `https://ai.variflight.com/servers/aviation/mcp` 发送 HTTPS POST。
-3. MCP 请求使用 JSON-RPC `tools/call`，工具名为 `searchFlightsByNumber`，参数为规范化航班号 `fnum` 和运行日期 `date`。
-4. API Key 仅作为 `X-API-Key` 请求头发送。
-5. 连接超时 5 秒，读取超时 15 秒；网络、超时、鉴权、限流和服务端错误必须映射成固定、脱敏的用户消息。
-6. 客户端接受普通 JSON-RPC 和 `data:` Server-Sent Events 外层。
-7. 航班载荷字段映射如下：
+### 3.3 状态所有权
+
+| 状态 | 所有者 | 生命周期/存储 |
+|---|---|---|
+| 姓名、排班、实时字段、刷新时间、人工进度、generation | `RosterStore` | `air_shift` SharedPreferences，跨进程重建 |
+| 飞常准 API Key | `VariFlightApiKeyStore` | `air_shift_secrets` 密文 + Android Keystore 密钥 |
+| 特服、变更、取消、指纹、处理状态 | `SpecialServiceRepository` | `air_shift_special_services` JSON + `StateFlow` |
+| 分享事件 FIFO、递增 ID、attempt token | `SharedExcelImportQueueViewModel` | `SavedStateHandle` Bundle，尽力恢复 |
+| 当前底栏页面 | `DutyNavigationViewModel` | 配置变化内保留；真正重新前台时回当前执勤 |
+| 工作中、警告、当前机场、刷新候选 | `AirShiftApp` Compose 状态 | 进程内；部分使用 `rememberSaveable` |
+| 航班成功缓存、限流时间窗 | `VariFlightClient` companion | 进程内共享，进程重启清空 |
+
+### 3.4 一致性与竞态保护
+
+- `RosterStore` 使用进程内 `rosterLock` 串行化排班、generation 和人工进度变更。
+- 新排班整体替换时 generation 加一；前台回调、Worker 和小组件完成都必须携带并复查 generation。
+- 网络响应写回时重新读取最新 snapshot，只合并当前 scope 允许的索引和 lookup，旧排班响应不能覆盖新排班。
+- 每个 HTTP 请求前复查 generation、API Key 和最新窗口；等待同 key 缓存锁之后、真正请求上游之前再次复查。
+- App 完成操作还校验“调用者看到的当前索引”，旧卡片或重复点击变为 no-op。
+- 分享队列只有队首可取得 attempt token；旧页面回调或旧 token 不能消费/提交新 attempt。
+- Compose operation owner 在页面销毁后失效，避免异步导入或刷新回调写入已销毁界面。
+- 同一 generation 的重叠刷新没有服务端事件时间排序；相同字段仍以最后一次成功写入为准。
+
+## 4. 领域模型与进度
+
+### 4.1 `RosterAssignment`
+
+一项任务保存以下字段组：
+
+- 排班身份：机号、机型、进港航班、前站、计划到达、出港航班、后站、计划出发、匹配行的人员栏；
+- 实时进港：预计/实际到达、始发登机口、始发机位、本站到达机位、登机口关闭观察、实际离位、廊桥；
+- 实时出港：预计/实际出发、本站登机口、本站出发机位、目的地到达机位、登机口关闭观察、实际离位；
+- 机场：前站/后站代码与名称、本场代码与名称；
+- 标记：进港 VIP、出港 VIP。
+
+任务类型由航段存在性派生：
+
+- `ARRIVAL_ONLY`：只有进港；
+- `DEPARTURE_ONLY`：只有出港；
+- `TURNAROUND`：同时有进港和出港。
+
+`stableId` 由机号、进港航班、出港航班以及计划到达优先/计划出发回退的日期拼接。它同时用于列表 key、提醒请求码的输入和任务身份。
+
+### 4.2 航班与时间规范化
+
+- 航班号转大写并去除非字母数字字符，再提取首个 `2–3` 个字母 + `3–4` 位数字片段。
+- `CES` 前缀转换为 `MU`。
+- 排班时间接受 3/4 位 `HHmm`；包含 `+` 时落在次日。
+- 无年份的月日从前一年、当年、后一年中选择离设备当天最近的合法日期。
+- 查实时航班时，lookup key 是规范化航班号与运行日期；没有计划日期时回退执行时当天。
+
+### 4.3 自动完成、人工完成与窗口
+
+单航段满足任一条件即自动完成：
+
+1. 已有对应实际到达/起飞时间；
+2. 当前时间不早于“预计时间优先、计划时间回退”加 3 小时；
+3. 航段完全没有实际、预计或计划时间，因无法跟踪而视为完成。
+
+不存在的方向天然完成，过站任务必须进、出港都完成。排班列表为空不算“全部执勤完成”。
+
+人工进度是一个按日保存的前缀计数 `duty_index`：
+
+- 当前有效起点为人工前缀末尾；
+- 从该位置继续跳过自动完成项，得到当前未完成任务；
+- 再从当前之后跳过自动完成项，得到下一项未完成任务；
+- 跨日读取时前缀视为 0；新排班导入显式写 0；实时刷新不改变它；
+- 自动跳过不会写大人工前缀，因此后续实时数据修正后，任务可以重新变为未完成。
+
+### 4.4 成功导入的原子语义
+
+所有导入来源共享 `finishImport`。只要 Parser 成功返回 `RosterParseResult`，即使任务列表为空，也会：
+
+1. 以新列表整体替换旧排班；
+2. generation 加一，人工进度重置为当天的 0；
+3. 取消旧排班 stable ID 对应的提醒；
+4. 重新读取已保存 snapshot 并更新 Compose；
+5. 让 MUC 状态对新排班重新匹配；
+6. 根据 API Key 与完成状态重配 WorkManager；
+7. 按新排班重排提醒并重绘小组件；
+8. 对分享导入，在排班落盘后才消费队列事件；
+9. 有 API Key 时只刷新新的两项执勤窗。
+
+文件无法打开、签名无效、工作簿损坏或 Parser 抛错时不替换旧排班。当前没有导入预览、替换确认或回滚。
+
+## 5. 排班导入规格
+
+### 5.1 姓名
+
+- Onboarding 和设置页都将输入限制为最多 20 个字符；保存按钮要求去除首尾空格后至少 2 个字符。
+- 姓名保存在应用私有 SharedPreferences，可在设置页修改。
+- 修改姓名不会重新解析已保存任务；需要重新导入原排班。
+- 没有姓名时 `AirShiftApp` 只显示 Onboarding，不启动后续导入消费流程。
+
+### 5.2 Excel 导入
+
+#### 格式分流
+
+- 系统文件选择器传入标准 `.xls/.xlsx` MIME，但 Reader 仍检查文件内容。
+- OLE 8 字节签名进入 `.xls`；`PK` ZIP 签名进入 `.xlsx`；其他签名拒绝。
+- `.xls` 复制到应用私有 cache 临时文件，最多 256 MiB，并在 `finally` 删除。
+- `.xls` 用 Apache POI HSSF 事件模型读取 SST、Label、Number、RK/MulRK、公式缓存字符串/数值/布尔值和 1904 日期标志。
+- `.xlsx` 读取 workbook、shared strings 和 worksheet XML 后用 SAX 解析，不构建 POI 完整工作簿模型；DOCTYPE 和外部实体被禁用/空解析。
+
+#### 安全边界
+
+| 路径 | 当前限制 |
+|---|---|
+| `.xls` 输入文件 | 256 MiB |
+| `.xls` 工作表 | 最多 64 张；累计唯一单元格最多 100,000/表 |
+| `.xls` 行列 | 行号 10,000 以后、列号 255 以后被静默忽略，不是整表报错 |
+| `.xlsx` 单个相关 XML | 16 MiB |
+| `.xlsx` 相关 XML 合计 | 32 MiB |
+| `.xlsx` worksheet | 最多 64 张 |
+
+#### 语义解析
+
+- 每张表搜索最佳表头行；必须包含机号、人员、至少一个进/出港航班列，并识别至少 6 个语义列。
+- 支持机号/机尾号/飞机注册号、进出港航班变体、前站/到站变体、计划/预计时间变体、接送机人员/送机人员/保障人员等别名。
+- 不可识别的 worksheet 被忽略；至少一张有效表即可继续。
+- 每张有效表优先使用自身表头之前的日期；再回退第一张有效表日期，最后回退设备当天并给出警告。
+- 支持 1900/1904 日期系统、完整日期、月日、Excel serial、时间小数、整数/文本 HHmm 和 `+` 次日。
+- 有分隔符的人员栏先移除括号备注，再按空白、逗号、顿号、分号、斜杠或竖线切分并逐项精确匹配。
+- 无分隔符时，人员栏可与姓名完全相同；组合签名只有长度至少为姓名两倍且包含完整姓名时才匹配。
+- 仅生成具有合法机号、至少一个合法航班号且匹配姓名的行。
+- 扫描 `VIP信息/要客信息` 区域；向下最多看 30 行，遇到班次标志或连续空行停止，只把航班号集合映射为任务布尔值。
+- 多表结果按 `stableId` 去重，并按计划到达优先/计划出发回退排序。
+
+### 5.3 图片 OCR 导入
+
+- 使用 `PickVisualMedia(ImageOnly)` 获取单张图片 URI，不申请通用相册/存储权限。
+- `ImageDecoder` 创建软件 Bitmap；识别结束后回收。
+- PP-OCRv6 tiny 检测和识别模型随 APK 打包，使用 ONNX Runtime 与 OpenCV；引擎进程内复用。
+- 初始化和推理分别由 `Mutex` 串行保护；DEBUG 日志只包含引擎、行数、token 数和耗时，不记录 OCR 文本。
+- OCR 结果转换为文字和四边形外接框组成的 `OcrToken`。
+- 表格模板为机号、机型、进港航班、前站、预落、出港航班、到站、计离、接送机人员 9 列。
+- 至少两个表头命中时拟合列几何；少于两个时回退固定比例模板。只有命中数为 1–4 时产生“表头不完整”警告，0 命中也会回退但当前不警告。
+- 数据行优先以机号锚点和中位行距分组；锚点不足时按 Y 坐标聚类。
+- 人员栏去除空白、标点和符号后，用 `contains(完整规范化姓名)` 匹配；不使用编辑距离或单字模糊。
+- VIP 只从表格右侧、且存在 VIP/要客 anchor 的水平或垂直附加区提取；其他附加栏目不进入任务。
+
+### 5.4 WPS/Android 分享
+
+`MainActivity` 为 `singleTop` 并对外注册两个标准 Excel MIME 的 `ACTION_SEND`。解析条件是：
+
+1. action 精确为 `ACTION_SEND`；
+2. MIME 精确为 `application/vnd.ms-excel` 或 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`；
+3. `ClipData.itemCount` 不大于 1；
+4. `EXTRA_STREAM` 中存在 `Uri`；
+5. scheme 为 `content://`。
+
+`ACTION_VIEW`、`ACTION_SEND_MULTIPLE` 不进入处理；错误 MIME、缺 stream、`file://` 或多项目产生可见拒绝消息。只放在单项 `ClipData`、未同时提供 `EXTRA_STREAM` 的来源也不会被接受。网页/文本链接被拒绝，但应用无法判断合法 ContentProvider 是否在底层按需取回云端内容。
+
+冷启动在首次 `onCreate` 入队，热启动在 `onNewIntent` 入队；随后 Activity Intent 重置为 `ACTION_MAIN`。队列语义：
+
+- FIFO，重复 URI 保留为不同事件；
+- 每个事件有递增 ID，只有队首可开始；
+- attempt token 防止旧回调消费新任务；
+- URI 字符串、错误消息、next ID 与 next token 写入 `SavedStateHandle`；
+- 恢复后旧 attempt 失效并重新处理队首；
+- 未调用 `takePersistableUriPermission`，也没有队列长度上限；恢复受 Activity saved state、Bundle 大小和来源 URI 授权约束。
+
+### 5.5 解析结果与警告
+
+`RosterParseResult` 包含任务列表、解析出的排班日期和警告。未识别日期、表头不完整、无数据行或没有匹配姓名会产生用户可见警告。空任务列表仍是成功结果，不应与格式/读取失败混淆。
+
+## 6. UI 规格
+
+### 6.1 根导航
+
+- `AirShiftRoot` 使用 Material 3 `Scaffold` 加自定义 `Surface/Row` 底栏，不使用 Navigation Component 或 Material `NavigationBar`。
+- 固定三页：全部执勤、当前执勤、设置；中央当前执勤为红色圆形主入口。
+- 新 ViewModel 默认当前执勤；冷启动、进程重建和真正从后台恢复都会回到当前执勤。
+- 旋转等 `isChangingConfigurations=true` 的停止不算离开应用，保持当前页。
+
+### 6.2 全部执勤
+
+- 显示问候、日期、当前机场、图片/Excel 导入、状态消息、解析/刷新警告和精确闹钟提示。
+- `PullToRefreshBox` 触发显式手动刷新；刷新中的视觉状态与一般工作状态分开。
+- 列出整份当前排班，而非只列刷新窗口。
+- 卡片展示任务类型、机号/机型、进出港航班、机场、计划/实时状态、登机口/机位和 VIP。
+- 特服只显示摘要角标；MUC 登机口/机位变化在该页只显示最小“变更”提示，完整新旧值在当前执勤页。
+
+### 6.3 当前执勤与时间线
+
+- 无排班时显示导入引导；没有未完成任务时显示今日完成态。
+- 页面使用第 4.3 节的窗口算法，展示当前与下一项未完成任务。
+- 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 10 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 60 分钟。
+- 出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。
+- 倒计时每分钟更新；到位点已过时显示“应立即到位”。
+- 页面展示完整特服、行程取消以及 MUC 登机口/机位新旧值。
+- “执勤完成”没有确认、撤销或回退；原子 guard 只防止旧页面和重复点击完成错误任务。
+- 尚未整体完成的过站任务始终按进港到位规则显示，即使进港已有实际时间而出港仍未完成。
+
+### 6.4 设置
+
+- 修改姓名；保存后只影响后续导入，不重新解析旧排班。
+- API Key 文本状态不使用 `rememberSaveable`，明文不进入 saved-instance-state。
+- 测试连接从现有排班中选择首个带航班号的任务；无候选时直接失败。
+- 保存非空 API Key 后清缓存并重配刷新；空文本不会隐式清除已有 Key，必须点击“清除 API Key”。
+- 显示 MUC 通知读取授权状态、最近成功识别时间和最近处理结果，并打开系统授权页。
+
+### 6.5 视觉系统
+
+- Design token 集中于 `ui/theme/AirShiftTheme.kt`；主色为东航红 `#C8102E` 和深藏青 `#14284B`。
+- App 支持随系统切换的浅/深色主题；小组件固定浅色。
+- 任务卡使用统一的方向色条、航班号、航线网格、实时/计划时间、状态 chip、meta 行和骨架占位。
+- 当前执勤 hero 正常为藏青，过点为红色并使用呼吸动效；数字采用等宽样式避免跳动。
+- 状态颜色和导航状态变化使用 200 ms ease-out token。
+
+## 7. 飞常准实时航班
+
+### 7.1 刷新 scope
+
+`FlightRefreshScope` 只有两种：
+
+- `DUTY_WINDOW`：第 4.3 节定义的当前 + 下一项未完成执勤；
+- `ALL_ROSTER`：整份排班的所有索引，包括人工或自动完成项。
+
+| 入口 | Scope | 说明 |
+|---|---|---|
+| 导入后首次刷新 | `DUTY_WINDOW` | 无旧版时间区间过滤 |
+| 前台自动刷新 | `DUTY_WINDOW` | 有排班、有 Key、在前台且未全部完成 |
+| 后台周期刷新 | `DUTY_WINDOW` | Worker 每次执行重新计算窗口 |
+| 未完成时手动下拉 | `DUTY_WINDOW` | 显式操作也不扩大付费查询范围 |
+| 窗口耗尽后手动下拉 | `ALL_ROSTER` | 唯一全排班查询路径 |
+| App 完成补查 | `DUTY_WINDOW` 的新 lookup | 忙碌时并入 pending 集合 |
+| Widget 完成补查 | `DUTY_WINDOW` 的新 lookup | 一次性联网约束 Worker |
+
+每项最多有两个航段，两项窗口最多产生 4 个不同 lookup；相同航班号与日期去重。窗口不再按计划时间相对现在的小时范围筛选。
+
+### 7.2 调度与停止
+
+- 前台 effect 在 Activity 前台、有排班和 API Key 时启动；可立即查询，之后目标间隔 5 分钟，忙碌时每 15 秒复查。
+- effect key 包含 active、generation 和完成状态；普通实时字段变化不会造成紧密重启。
+- 后台使用联网约束的 `PeriodicWorkRequest`：周期 15 分钟、首轮延迟 15 分钟、generation 专属唯一名称、`KEEP`。
+- 15 分钟是 WorkManager 的最小请求周期，不保证墙钟准点执行。
+- Scheduler 使用单线程 executor 串行配置；旧 generation 的工作按捕获 ID 取消，过期 disable 请求不能取消仍符合资格的新任务。
+- Worker 在入口和每个 HTTP 前检查 API Key、generation、停止状态、排班、完成状态和最新窗口。
+- 全部完成时前台循环退出、Worker 自取消；导入新的未完成排班或全量手动刷新修正完成状态后，可重新启用。
+- 普通前台刷新不重建后台周期任务。
+
+### 7.3 协议与字段映射
+
+- 固定端点：`https://ai.variflight.com/servers/aviation/mcp`
+- 方法：HTTPS `POST`
+- 鉴权：`X-API-Key`
+- MCP：JSON-RPC `tools/call`，工具 `searchFlightsByNumber`，参数 `fnum` 和 ISO 日期 `date`
+- 超时：连接 5 秒，读取 15 秒
 
 | 本地字段 | 飞常准字段 |
 |---|---|
-| 计划起飞/到达 | `FlightDeptimePlanDate` / `FlightArrtimePlanDate` |
-| 预计起飞 | `VeryZhunReadyDeptimeDate`，回退 `FlightDeptimeReadyDate` |
+| 计划出发/到达 | `FlightDeptimePlanDate` / `FlightArrtimePlanDate` |
+| 预计出发 | `VeryZhunReadyDeptimeDate`，回退 `FlightDeptimeReadyDate` |
 | 预计到达 | `VeryZhunReadyArrtimeDate`，回退 `FlightArrtimeReadyDate` |
-| 实际起飞/到达 | `FlightDeptimeDate` / `FlightArrtimeDate` |
+| 实际出发/到达 | `FlightDeptimeDate` / `FlightArrtimeDate` |
 | 实际离位 | `FlightOutgateTime` |
 | 登机口关闭观察 | `EstimateBoardingEndTime` |
 | 登机口 | `BoardGate` |
@@ -235,492 +368,324 @@ AirShift 是面向航司地面服务保障人员的 Android 单用户排班助�
 | 机场代码/名称 | `FlightDepcode`、`FlightDepAirport`、`FlightArrcode`、`FlightArrAirport` |
 | 机场坐标 | `DepAirportLat/Lon`、`ArrAirportLat/Lon` |
 
-8. 相同航班号和日期的成功结果缓存 120 秒；失败不得缓存；并发相同查询应合并。
-9. 进程级滑动窗口最多接受每分钟 30 次查询；当前实现中缓存命中也消耗限流容量。
-10. 导入后的首次刷新和手动刷新可查询全部导入航班。
-11. 自动刷新只查询计划时间相对当前时间位于 `-60..240` 分钟的航段，并按航班号+日期去重。
-12. 前台在有排班和 API Key 时每 5 分钟自动刷新；忙碌时 15 秒后重试循环。
-13. 后台使用有网络约束的唯一 WorkManager 周期任务，每 15 分钟运行。
-14. 部分查询成功时必须保存成功的实时数据并保留失败警告；后台所有查询均失败且至少有可重试错误时返回 `Result.retry()`。
-15. 每次实时数据更新后应保存排班、重新关联 MUC 状态并重排提醒。
+### 7.4 响应和航段选择
 
-### 5.6 机场定位
+- 外层接受普通 JSON-RPC，或从 `data:` SSE 行中选择可解析 JSON 对象。
+- `result.content[*].text` 可能各自包含一个或多个航段，客户端会合并全部文本项。
+- 内层是飞常准返回的类 Python 字典文本，支持字符串时间与 `datetime.datetime(...)`。
+- 多经停响应按顶层字典拆为航段；当存在逐段记录时丢弃 `StopFlag='1'` 的全程摘要。
+- 入港/出港映射先选计划时间最接近排班时间的航段，再回退已存本场代码、同航班过站拓扑，最后分别回退末段/首段。
+- 新响应只有非空字段才覆盖旧值；部分数据或失败不会主动清除已保存实时字段。
 
-1. 只有获得粗略或精确定位权限后才执行定位；拒绝权限不影响排班查看。
-2. 候选机场仅来自已刷新航班且必须具有经纬度，按三字码去重。
-3. 优先请求当前定位；失败时可回退最近定位。
-4. 最近定位不得早于 10 分钟。
-5. 计算设备到所有候选机场的球面距离，只在最近机场不超过 15 km 时返回匹配。
-6. 定位仅用于显示当前排班相关机场，不上传或持久化原始位置。
+### 7.5 缓存、限流与失败
 
-### 5.7 本地保障提醒
+- 同航班同日期成功结果缓存 120 秒；失败不缓存；相同 key 的并发 loader 由 `ConcurrentHashMap.compute` 合并。
+- 进程级滑动窗口最多接受每分钟 30 次调用。
+- 容量在查询缓存之前获取，因此缓存命中也计数；测试连接绕过缓存但计数；窗口移动后在 HTTP 前跳过的调用也已占用本地容量。
+- 缓存和限流状态由 App 前台、Worker 和测试连接共享，但只存在于当前进程。
+- 401/403、408、429、5xx、网络、超时和安全失败映射为固定用户消息；未知异常不向 UI 暴露堆栈或原始响应。
+- batch 逐项执行；取消和线程中断向外传播，其他单项失败进入错误列表。
+- 部分成功会保存成功值；后台只有所有已尝试请求都失败且至少一个可重试时返回 `Result.retry()`。
 
-1. 有进港航班的任务（包括过站任务）只创建一条进港提醒：预计到达优先、计划到达回退，目标为落地前 10 分钟。
-2. 只有出港航班的任务创建出港提醒：预计起飞优先、计划起飞回退，目标为起飞前 1 小时。
-3. 已有实际到达/起飞时间时，不再创建对应提醒。
-4. 目标时间已经过去时跳过调度。
-5. 有精确闹钟特殊权限时使用 `setExactAndAllowWhileIdle`；否则使用 `setAndAllowWhileIdle` 并向用户提示可能有偏差。
-6. 刷新或重新导入前取消旧任务对应的 PendingIntent，然后按新时间重排。
-7. 通知使用高重要性“航班保障提醒”频道，点击后打开主 Activity。
-8. 设备开机完成后从本地排班恢复提醒。
+### 7.6 合并规则
 
-### 5.8 MUC 通知识别
+- 写回必须 generation 相同，并重新计算写回时的 scope 索引和允许 lookup。
+- `DUTY_WINDOW` 不更新窗口外重复航班；`ALL_ROSTER` 可更新已经完成的任务。
+- merge 在锁内基于最新排班执行，避免旧列表覆盖另一刷新已写入的不同任务或人工进度。
+- 保存成功时更新 `last_live_refresh`，随后重匹配 MUC、重排提醒并重绘小组件。
 
-1. 通知监听服务只处理包名严格等于 `com.ceair.im.muc` 的新通知。
-2. 通知移除或用户划走不得被解释为业务取消。
-3. 文本提取优先读取 MessagingStyle `EXTRA_MESSAGES`，否则合并 `BIG_TEXT`、`TEXT_LINES`、`TEXT`、标题和会话标题。
-4. 系统回调只做白名单和文本提取，后续处理进入单线程执行器。
-5. 如果平台只暴露“新消息”等摘要，应用必须记录不可读状态，不得启用数据库读取或无障碍替代方案。
-6. 文本先执行 NFKC、全角/半角、大小写和空白规范化。
-7. 支持的特服类别：
-   - 残障旅客；
-   - 轮椅 `WCHR`、`WCHS`、`WCHC`；
-   - UM 无陪伴儿童；
-   - MAAS 全流程陪伴；
-   - 客舱宠物。
-8. 数量可来自 1–2 位阿拉伯数字或常见中文数量词；座位、手机号、票号、行李和重量不得被当作人数。
-9. 支持带承运人完整航班号和 3–4 位数字简写；`CES` 转换为 `MU`。
-10. 航段匹配使用航班数字部分；有承运人且存在精确承运人匹配时优先精确匹配，再按明确日期、通知日期、日期距离和稳定排序选择。
-11. 高置信且已匹配排班的特服自动关联；高置信但无排班的候选保留最多 24 小时，排班变化后自动重试。
-12. 登机口变更、机位变更、全部特服取消和行程取消分别建模；“登机口关闭时间”“机位时间”等不得误判为变更。
-13. 更晚消息覆盖更早消息；取消建立时序墓碑，旧摘要不得恢复已取消记录；更晚有效更新可重新激活。
-14. 相同消息使用本机随机密钥生成的 HMAC 指纹去重；原始正文、姓名、发送人、电话、票号、座位、图片和附件不得进入持久化状态。
-15. 已匹配记录在航段实际、预计或计划完成时间后 24 小时过期；未匹配候选从处理时刻起 24 小时过期。
-16. Repository 通过 `StateFlow` 向前台提供实时结构化状态。
+## 8. 提醒与定位
 
-低置信行为不是共同基线，见第 6.5 节。
+### 8.1 提醒策略
 
-### 5.9 main 用户界面
+每项任务最多安排一条提醒：
 
-`main` 使用单页 Compose 界面，主要行为为：
+- 有进港航段（包括过站）：实际到达存在时不提醒；否则取预计到达优先/计划到达回退，提前 10 分钟；
+- 纯出港：实际出发存在时不提醒；否则取预计出发优先/计划出发回退，提前 1 小时；
+- 没有可用时间或目标时间已过：不安排。
 
-- 顶部显示用户姓名、当前机场和设置入口。
-- 导入卡支持图片和 Excel；工作中禁用重复操作。
-- 显示状态、解析警告和精确闹钟提示。
-- 下拉刷新实时航班。
-- 列出所有任务卡，显示机号/机型、进出港航班、机场、计划/预计/实际时间、登机口/机位、VIP、特服和取消状态。
-- 低置信 MUC 候选显示“待确认特服消息”，用户可选航段、类型、轮椅等级、数量后确认，或忽略。
-- 设置以对话框展示姓名、通知读取状态、API Key 测试/保存/清除。
-- 使用浅色主题，不提供深色模式或多语言资源化 UI。
+每次重排用 `stableId.hashCode()` 创建 PendingIntent，先取消同 ID 的旧闹钟。获得精确闹钟特殊访问时使用 `setExactAndAllowWhileIdle`，否则使用 `setAndAllowWhileIdle`。通知频道为高重要性，点击通知打开 `MainActivity`。
 
-## 6. 分支增量规格
+`BootReceiver` 只监听标准 `BOOT_COMPLETED`，负责创建频道、从排班重排提醒并重绘小组件；没有监听时区变化、系统时间变化或应用升级广播。
 
-### 6.1 CEA 分支概览
+当前人工完成状态不参与 `ReminderPolicy`。提前人工完成的任务若提醒时间未到，App/Widget 完成后的全排班重排以及开机重排仍可能再次安排它。
 
-`feat/cea-ui-rewrite` 用 3 个提交重构 UI，同时小幅扩展模型和 MUC 低置信策略。它仍复用 `main` 的解析、飞常准、定位、提醒和大部分 MUC 状态机。
+### 8.2 定位
 
-新增文件包括 `model/DutyTimeline.kt`、12 个 `ui/` 文件和 `DutyTimelineTest.kt`。唯一新增依赖是 `androidx.compose.material:material-icons-core`，Manifest 没有新增组件或权限。
+- 使用 Google Play Services Fused Location Provider；精确权限时请求高精度，只有粗略权限时请求平衡功耗精度。
+- 当前位置请求允许最多 60 秒旧缓存，最长等待 20 秒；失败或空结果回退 `lastLocation`。
+- 最终位置不得早于 10 分钟。
+- 候选机场只来自本次成功实时刷新结果的航班两端，并要求经纬度，按机场代码去重。
+- 计算设备到所有候选机场的球面距离，最近值不超过 15 km 才返回匹配。
+- 当前机场只存在 Compose 状态；设备原始位置不写入 `RosterStore`，应用自身不把它发送给飞常准。
 
-### 6.2 CEA 设计系统与导航
+## 9. MUC 通知识别
 
-1. UI 采用“中国东方航空 VI / 安静的效率感”浅色设计：东航红 `#C8102E` 用于品牌点缀、主按钮和出港强调；藏青用于标题；云白背景、白卡、微边框和克制阴影。
-2. 统一 12/20 dp 圆角、8 dp 倍数间距、等宽数字样式和 AA 目标对比色。
-3. 根界面使用 Material 3 `Scaffold + NavigationBar`，固定三个 Tab：全部执勤、当前执勤、设置。
-4. 不引入导航框架；Tab 使用 `DutySection` 枚举，状态保存在 `DutyNavigationViewModel`（配置变化保留、进程重建回到当前执勤）。
-5. 每次打开应用（冷启动、从后台恢复、进程重建后返回前台）都强制显示当前执勤页；旋转等配置变化不重置所选 Tab。
+### 9.1 输入边界
 
-### 6.3 CEA 全部执勤页
+- 通知读取必须由用户在系统设置主动授权。
+- `MucNotificationListenerService` 在提取文本前严格要求来源包名为 `com.ceair.im.muc`。
+- 只处理新的 `onNotificationPosted`；通知移除不表示业务取消。
+- MessagingStyle 的消息逐条读取正文和消息时间；否则合并 `BIG_TEXT`、`TEXT_LINES`、`TEXT`、标题和会话标题，并把通知时间标为不可靠 source time。
+- 系统回调只做提取，后续处理进入单线程 executor。
+- 只有“新消息”等摘要时记录不可读状态，不启用数据库读取或无障碍替代方案。
 
-- 保留问候、机场、图片/Excel 导入、状态、警告、精确闹钟提示和下拉刷新。
-- 全部任务卡只用单个“特服”角标表示存在特服，不展示数量详情。
-- MUC 登机口/机位变化只显示最小“变更”提示，不在该页展示新值。
-- 保留计划/实时信息、任务类型、机号机型、机场、VIP 和取消状态。
+### 9.2 解析类别
 
-### 6.4 CEA 当前执勤页与人工进度
+文本先执行 NFKC、大小写、全半角和空白规范化。支持：
 
-1. 当前任务来源为 `assignments[currentDutyIndex]`。
-2. 无排班时显示导入引导；索引达到任务数时显示“今日执勤全部完成”。
-3. 当前任务倒计时每分钟刷新：
-   - 有进港航段：`actualArrival ?: estimatedArrival ?: scheduledArrival` 减 10 分钟；
-   - 仅出港：`actualDeparture ?: estimatedDeparture ?: scheduledDeparture` 减 60 分钟；
-   - 目标已过时显示“应立即到位”。
-4. 显示下一任务及下一到位时间。
-5. 出港预计登机开始为最佳起飞时间前 40 分钟；预计登机口关闭为前 15 分钟。
-6. 当前任务详情必须展示完整特服、新旧登机口/机位对比及更新时间。
-7. “执勤完成”按钮将本地索引加 1，并立即进入下一任务；当前实现没有撤销、回退或二次确认。
-8. 新排班导入后重置索引为 0；普通实时刷新不得重置。
-9. 进度与当天日期保存在 `air_shift` SharedPreferences；读取时日期不是今天则视为索引 0。
+- 残障旅客；
+- 轮椅 `WCHR`、`WCHS`、`WCHC`；
+- UM 无陪伴儿童；
+- MAAS 全流程陪伴；
+- 客舱宠物；
+- 登机口变更与原登机口；
+- 机位变更；
+- 放弃/取消特服；
+- 取消整段行程。
 
-### 6.5 CEA 低置信 MUC 策略
+数量接受 1–2 位阿拉伯数字或常见中文数量词；解析规则排除手机号、票号、座位、行李和重量等数字上下文。
 
-CEA 分支将 `main` 的人工确认流程替换为：
+### 9.3 航班匹配与置信度
 
-- 低置信特服候选直接忽略，不进入 pending 或记录列表。
-- 最近处理结果显示“低置信已忽略 N 条”。
-- Repository 的 `confirmReview` / `ignoreReview` API 和对应 UI 被删除。
-- 高置信无排班候选仍保留并等待排班。
+- MUC 索引只包含有计划到达/出发时间的排班航段。
+- 航班 token 必须有 3–4 位数字；按完整数字部分找候选。
+- 消息带承运人且存在完整航班号匹配时优先该承运人；随后按明确日期或通知日期的距离、日期方向、日期和航班号稳定排序。
+- 没有最大日期距离阈值；跨承运人同数字也会自动稳定选择一个候选。
+- 明确服务代码/正式类别可形成高置信；普通“轮椅”“无随行”等弱表达为低置信。
+- 低置信特服直接忽略，不提供人工确认 UI。
+- 高置信特服、登机口、机位和取消候选都可在无排班匹配时暂存，并在排班变化后重试。
 
-这是有意的行为破坏性变更，不能与 `main` 的人工确认规格同时成立，必须在集成前做产品选择。
+### 9.4 时序、取消、去重和过期
 
-### 6.6 CEA 航段字段扩展
+- 更晚 source timestamp 覆盖更早状态；相同时间且不同指纹的冲突保留已有值。
+- 行程取消会停用已有特服，并移除不晚于取消事件的登机口/机位状态；更晚的有效更新可重新激活。
+- 指纹使用本机随机 32 字节密钥的 HMAC-SHA256。
+- 可靠消息时间按“同指纹 + 同 source time”去重；不可靠 fallback 摘要在未过期期间对同指纹保守去重。
+- 未匹配候选以处理时刻起 24 小时过期；已匹配记录以实际优先、预计回退、计划回退的航段时间后 24 小时过期。
+- UI active 查询会立即隐藏逻辑过期记录；SharedPreferences 的物理清理只在下一次通知处理或排班 reconcile 时发生，没有独立定时清理器。
 
-CEA 分支为 `RosterAssignment` 增加：
+### 9.5 持久化隐私
 
-- `inboundDepartureStand`：进港航班的始发机位；
-- `outboundArrivalStand`：出港航班的目的地到达机位。
+原通知文本只在内存中存在。JSON version 3 保存结构化特服、变更、取消、候选、指纹和处理状态；不会保存原文、姓名、发送人、电话、票号、座位、图片或附件。Codec 可读 version 1–3，并逐项跳过损坏记录。
 
-两者从飞常准进/出港 `FlightInfo` 分别填充，并以可空 JSON 字段持久化。旧排班 JSON 缺失这些字段时仍可加载。
+## 10. 桌面小组件
 
-### 6.7 WPS 分支概览
+- `DutyWidgetProvider` 是标准 AppWidget，默认 4×3，可横纵缩放，系统周期 `updatePeriodMillis=30` 分钟。
+- 直接读取 `RosterStore`，固定显示当前未完成任务；没有排班或全部完成时显示整卡提示。
+- 不使用集合容器、RemoteViewsService、翻页、轮播或独立小组件存储。
+- 内容包括执勤序号/总数、类型、机号/机型、VIP、到位状态、进出港航班、对方机场和本站机位。进港行使用 `arrivalStand`，出港行使用 `departureStand`；两行都显示“机位”。
+- 小组件不读取 `SpecialServiceRepository`，因此不叠加 MUC 登机口/机位变更、特服或取消状态。
+- 倒计时使用 launcher 进程渲染的 count-down `Chronometer`，App 进程无需每秒唤醒。
+- 跨过零点后的即时格式由系统 Chronometer 决定；没有代码监听零点并主动 stop，最迟在下一次重绘后转成“应立即到位”。
+- 导入、完成、成功实时合并、提醒触发、开机和系统周期都会重绘。
+- 点击卡片打开 App；完成按钮发给非导出的显式 receiver，使用 generation + 当前索引原子校验。
+- 完成成功后重排提醒、重配周期任务，并用一次性联网 Worker 只补查新进入窗口的航班。
+- 小组件固定浅色，并按标准 AppWidget 出现在 OriginOS“应用挂件”；第三方应用不能注册厂商专有“原子组件”。
 
-`feat/wps-excel-share-import` 包含两个独立增量：标准 Android Excel 分享导入，以及当日全部执勤完成后停止自动刷新。它不增加依赖或权限，版本号仍为 `0.1.0` / code 1。
+## 11. 持久化、安全与权限
 
-### 6.8 WPS/Android 分享导入
+### 11.1 本地存储
 
-1. `MainActivity` 使用 `singleTop`，Manifest 注册 `ACTION_SEND + CATEGORY_DEFAULT`。
-2. 只注册并接受两个 MIME：
-   - `application/vnd.ms-excel`；
-   - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`。
-3. 只接受单个 `EXTRA_STREAM` 的 `content://` URI。
-4. 错误 action 返回“不处理”；错误 MIME、缺少 stream、`file://` 和多 `ClipData` 项返回用户可见拒绝消息。
-5. 不接受 `ACTION_VIEW`、`ACTION_SEND_MULTIPLE`、WPS 云链接或多文件分享。
-6. 冷启动由 `onCreate` 入队，已启动时由 `onNewIntent` 入队；每个事件有单调 ID，重复 URI 也保留为独立 FIFO 事件。
-7. 首次使用尚无姓名时先完成 onboarding，再消费分享文件。
-8. 分享文件进入与系统文档选择器相同的 `ExcelRosterReader`、实时刷新、保存、定位和提醒流程。
-9. 导入进度显示“正在解析分享的 Excel 排班…”，协议错误显示“Excel 分享导入失败…”。
-
-### 6.9 WPS 自动停止刷新
-
-1. 单个航段满足任一条件时视为完成：
-   - 已有实际到达/起飞时间；
-   - 当前时间达到预计时间（优先）或计划时间加 3 小时；
-   - 航段没有任何可用时间，因无法跟踪而视为完成。
-2. 不存在的进港或出港方向天然完成；过站任务必须进、出港都完成。
-3. 排班列表必须非空且所有任务都完成，才是“全部执勤完成”。
-4. 启动和保存排班时，已全部完成则不启用 WorkManager。
-5. 前台 5 分钟循环检测全部完成后退出，并显示“今日执勤已全部完成，自动刷新已停止，导入新排班后恢复”。
-6. 后台 Worker 在发起 API 请求前检测完成状态，完成时取消唯一周期任务。
-7. 手动下拉刷新不受该短路限制。
-
-### 6.10 安卓桌面小组件
-
-1. `widget/DutyWidgetProvider` 注册 `APPWIDGET_UPDATE`（exported，供桌面 launcher 绑定）。数据直接读 `RosterStore`，不新建存储；小组件不再使用集合容器、`RemoteViewsService` 或 `BIND_REMOTEVIEWS` 服务。
-2. 小组件以 `widget_duty_item` 单个完整大卡片固定显示 `nextIncompleteDutyIndex` 给出的当前未完成执勤，不提供滑动、翻页、自动轮播或历史/后续执勤浏览。
-3. 当前执勤显示到位倒计时——已过点显示“应立即到位”，无法计算到位时间显示“暂无到位时间信息”；无排班或全部完成显示对应整卡提示。视觉沿用 CEA 设计令牌（#C8102E / #14284B / #4A5568 / #8A94A6）：VIP 琥珀徽章保留；布局为自上而下三区——meta 行（执勤进度 · 类型 · 机号 · 机型，13sp）、hero 区（左列 12sp 状态标签 + 36sp Heavy 红色倒计时 + 14sp 到位时间，右列纵向占满的红色“完成”大按钮，最小 96×56dp、16dp 圆角、2dp 投影，背景为 ripple drawable，按压时水波纹扩散并叠加 12% 黑色遮罩压暗）、登机牌撕线式虚线分隔（#E2E6EC）与底部航班信息行（浅红/浅蓝底 tonal 方向 chip，999dp 圆角，文字色随方向配套 + 17sp 航班号 + 登机口图标与值）；倒计时等数字统一 `tnum` 等宽，逐秒刷新不抖动；整卡背景叠加系统涟漪，点按卡片打开 App 有按压反馈。
-4. 倒计时使用 RemoteViews 支持的 `Chronometer`（countDown 模式），由桌面 launcher 渲染逐秒跳动，小组件进程零唤醒；计时到 00:00 停住，“应立即到位”的翻转依赖下一次数据刷新或 30 分钟 `updatePeriodMillis` 兜底更新。
-5. 底部航段行：进港行显示航班号、始发地机场中文名 + 三字码，行尾为到达站（本站）机位（`arrivalStand`，以「机位 」前缀标识）；出港行显示航班号、目的地机场中文名 + 三字码，行尾为出发机位（`departureStand`，同样加「机位 」前缀，不再使用登机口，上下两行统一为机位）；均含飞常准实时值，不叠加 MUC 变更提醒。执勤无任何航段（如仅有机号/时刻的备份任务）时隐藏撕线虚线。
-6. 刷新挂接：`syncSavedRoster`（导入/执勤完成/前台合并共用）、`FlightRefreshWorker` 后台合并成功、`ReminderReceiver.onReceive`（置于通知权限检查之前）、`BootReceiver`；统一经 `DutyWidgetUpdater.notifyRosterChanged` 调 `updateAppWidget` 直接重绘最新当前执勤。
-7. 页面模型 `DutyWidgetModel.toCurrentWidgetPage` 为纯 Kotlin 选择入口，单元测试覆盖固定选择当前执勤，以及空排班、全部完成、倒计时/过点/无时间与进出港字段。
-8. 点击卡片非按钮区域通过 `setOnClickPendingIntent` 打开 `MainActivity`；红色“完成”按钮向非导出的 `DutyWidgetActionReceiver` 发送显式 `PendingIntent`，按与 App 相同的排班 generation 和当前索引双重校验原子推进进度。旧卡片重复点击不会完成下一项；成功后重排提醒、调整后台刷新资格、立即重绘，并只以一次性 Worker 补查新进入两项窗口的航班。
-9. OriginOS 6（vivo/iQOO）适配：圆角取 `@android:dimen/system_app_widget_background_radius` 跟随系统挂件；`targetCellWidth/Height=4x3`、`minHeight=160dp` 适配 vivo 桌面 4 列网格；launcher 对超出格子高度的内容做底部裁剪（不居中裁），故三区内容按默认 4x3 尺寸压距适配（区间距 10dp），保证默认尺寸下 meta/hero/航段行完整可见；颜色固定深字白卡不随主题变化。OriginOS“原子组件”为 vivo 合作方专有体系，第三方 App 无法注册，本组件按标准 AppWidget 归入“应用挂件”。
-
-### 6.11 视觉层重构（0.6.0 / code 16）
-
-仅重做视觉层（布局、色彩、字体、组件样式、图标、动效），业务逻辑、数据结构与接口未改动。设计 token 集中于 `ui/theme/AirShiftTheme.kt`：
-
-1. 色彩：东航红 `#C8102E`（仅主按钮/当前任务/紧急状态/品牌点缀/出港标签）、深藏青 `#14284B`（页头与大标题，唯一允许的 135° 藏青单色微渐变）、暖白背景 `#F7F8FA`、纯白卡片、藏青灰阶文字 `#14284B / #4A5568 / #8A94A6`；语义色：进港藏青蓝、正常/完成墨绿 `#0F7B5F`、延误/留意琥珀 `#D97706`。深色模式：背景 `#0F1A2E`、卡片 `#1A2740`，红色不变，随系统自动切换。
-2. 字阶：倒计时 60sp、航班号 30sp Heavy（`FlightNumber`）、计划/到位时间 28sp Bold，数字统一 tabular-nums；页面标题 20sp Semibold、正文 15/16sp、辅助 12/13sp。
-3. 圆角/阴影/间距：chip 999、按钮 14、卡片 16 dp；三级阴影（列表卡 / 当前任务卡 / hero 与浮动按钮，藏青底色）；4dp 基准网格；卡片顶部 1px 内高光；状态变化统一 200ms ease-out（`AirShiftMotion`）。
-4. 图标：统一 1.5px 线性自绘（`ui/components/DesignComponents.kt` 的 `linearIcon` 与 `LinearIcons`），不再混用填充图标。
-5. 底部导航：白底 + 顶部 1px 浅灰线，中央“当前执勤”为东航红浮动圆形按钮（三级阴影）。
-6. 全部执勤页：藏青渐变页头（问候缩小、日期放大、位置 chip）、红实心主按钮 + 藏青描边次按钮、琥珀“需要留意”提示条（左边条 + 浅琥珀底）；任务卡左侧 4px 类型色条（出港红/进港蓝/接续上蓝下红）、FIDS 三字码航线、计划时间右侧大号对齐、图标 meta 行、接续航班登机牌撕线虚线分隔、`--` 占位改为浅灰骨架短横线。
-7. 当前执勤页：顶部倒计时 hero 卡——常态藏青渐变底 + 白色大数字，紧急态（应立即到位）东航红底白字 + 1.2s 呼吸脉冲光晕；到位时间与下一任务预览为卡内两行辅助信息；航班信息卡与列表页同一套卡片语言。
-
-0.6.1 迭代修订：紧急态“应立即到位”强制单行并随宽度自适应字号（40–64sp，0.02em 字距）；航段航线区改为左右对称双列（左列：三字码/中文站名/登机口/出发机位，右列镜像：三字码/中文站名/到达登机口/到达机位，箭头垂直居中），“到达登机口”暂无数据源、以骨架占位；“登机口关闭/实际离位”并入末段撕线后的 meta 区（时钟图标，与机号/机型并列）；底部导航选中项加全圆角浅红 pill 背景（11% 东航红、32dp 高、200ms ease-out），中央浮动按钮选中时加 2px 白描边 + 外扩 4px 20% 红环并放大 1.05 倍。
-
-0.6.2 迭代修订：航线区改为逐行共享基线的统一网格（1fr｜箭头列｜1fr，箭头与行1 三字码同轴），两侧标签统一精简为「登机口」「机位」；meta 区改为 2×2 等宽网格（登机口关闭｜实际离位／机号｜机型，单元格左对齐）；时间块主从调换——实时时间 28sp Heavy 大字（正常/提前墨绿 `#0F7B5F`、延误东航红 `#C8102E`、无计划可对比时藏青），其下 12sp 灰「计划 HH:mm」，无实时数据时计划时间顶替大字位且小字行隐藏。
-
-0.6.3 迭代修订：标题行航班号与时间块底部基线对齐、最小间距 24dp；实时时间延误判定改为晚于计划 15 分钟且颜色改琥珀 `#D97706`（覆盖 0.6.2 的红色规则），正点/提前统一墨绿；航线网格「登机口/机位」标签容器固定 38dp 等宽，左列数值同一起点、右列数值右缘对齐；新增飞行状态 chip（未起飞：浅灰底 + 停机小飞机；已起飞：10% 墨绿底 + 墨绿字 + 起飞小飞机），判定以实际时间或实际离位为准，无任何航班数据时不渲染；方向 chip 与状态 chip 统一 999 圆角 12sp Semibold。
-
-0.6.4 迭代修订：标题区拆为两行——行1 为 chip 行（方向 + 飞行状态，左对齐间距 8dp），行2 为主信息行（航班号左 + 实时时间块右，基线对齐）；航班号不再参与弹性压缩，不截断、不省略（`softWrap=false`、无 ellipsis），与时间的间距由弹性空隙吸收（最小 24dp），修复 chips 挤压导致航班号消失的问题。
-
-0.6.5 迭代修订：修复时间块对齐——时间块内部改为竖排两行且顺序对调（上「计划 HH:mm」12sp 灰、下实时 28sp Heavy 大字），主信息行 flex-end 底边对齐（数字无下伸部，底边对齐即视觉基线对齐）；卡片上下内边距 16→20dp，主信息行与航线区间距 16→20dp。
-
-0.6.6 迭代修订：修复跨午夜航班实时时间误标延误——延误判定由完整时间戳 `isAfter` 改为分钟差区间，仅 15 分钟～12 小时的正差判延误（琥珀），≥12 小时视为跨日数据不可比，与正点/提前一样显示墨绿。
-
-0.6.7 迭代修订：桌面小组件集合容器由 ListView 改为系统 StackView，上下拨动一次切换一个完整执勤页，首尾不循环、不自动播放；初始页改用 `setDisplayedChild` 定位，卡片内容与视觉样式保持不变。
-
-0.6.8 迭代修订：桌面小组件取消翻页与历史/后续执勤浏览，移除 StackView、RemoteViewsService 与集合适配链路；改为单个完整大卡片固定显示当前未完成执勤，数据变化时直接重绘。
-
-0.6.9 迭代修订：桌面小组件取消 Hero 区弹性撑高，改为紧凑主信息区、浅灰分隔线和均衡留白；新增红色“完成”按钮，与 App 共用防重复完成的原子进度操作，并仅补查新进入当前窗口的航班。
-
-0.7.0 迭代修订：桌面小组件视觉重构，仅调整布局与样式（RemoteViews），数据逻辑与 PendingIntent 行为不变——改为 meta 行 / hero 区 / 撕线虚线 + 底部信息行的三区结构，消灭大片留白；倒计时放大为全件最大元素（36sp Heavy + `tnum`），到位时间紧跟其下；方向标签改为浅红/浅蓝底 tonal chip（999dp 圆角，文字色随方向配套）；细分隔线改登机牌撕线式虚线（#E2E6EC；注意 RemoteViews 白名单不允许裸 `android.view.View`，虚线由 1dp 高 TextView 承载并置 software 层保证虚线渲染）；“完成”按钮加大至最小 96×56dp、16dp 圆角、2dp 投影，背景改 ripple drawable（按压叠加 12% 黑色遮罩压暗）；整卡背景叠加系统涟漪；登机口改为图标 + 值；小组件用色全面对齐 App 设计令牌；移除左侧东航红竖条。
-
-0.7.1 迭代修订：修复小组件整卡空白——撕线虚线误用 RemoteViews inflate 白名单之外的裸 `android.view.View`，launcher 进程加载布局失败；改由 1dp 高 TextView 承载虚线。
-
-0.7.2 迭代修订：小组件底部航段行信息增强——机场显示改为中文名 + 三字码并列；进港行尾改为到达站（本站）机位，出港行尾在登机口缺失时回退出发机位（机位值加「机位 」前缀与登机口区分）；无航段的执勤隐藏悬空虚线。
-
-0.7.3 迭代修订：修复小组件底部虚线与航段行在 vivo 桌面不显示——根因不是渲染失败而是格子高度不足，launcher 对超出格子的内容自顶向下布局并裁剪底部（虚线与航段行恰好位于裁剪区）；三区间距 12→10dp、主次航段行距 8→6dp、虚线 1→2dp，小组件默认尺寸由 4x2 调整为 4x3（`targetCellHeight=3`、`minHeight=160dp`），保证默认尺寸下三区完整可见。已有 4x2 实例需调整高度或重新添加方可完整显示。
-
-0.7.4 迭代修订：小组件叠加品牌装饰层，布局结构、字号与按钮保持不变——左缘 4dp 东航红竖条并入卡片背景 layer-list（左侧圆角随系统挂件，z 序天然最低）；右下角藏青燕尾双弧线水印（6% 不透明，`clipToOutline` 随卡片圆角裁剪出血边缘）；hero 与航班行之间的穿孔虚线上叠加起飞姿态小飞机（14% 不透明藏青灰、白底圆形 halo 在虚线上打出镂空、机头上仰 30°、定位于「左 padding → 完成按钮左缘前 16dp」区间中点），虚线带高度仍为 2dp，飞机经 `clipChildren=false` 溢出到上下留白，不增加内容高度，并随虚线一同在无航段时隐藏；meta 行下方新增 #EEF0F4 撕线虚线；根容器由 LinearLayout 改为 FrameLayout 以承载装饰层，装饰元素均位于内容层之下。小组件固定浅色白卡不随深色模式变化（见 6.10-9），故装饰透明度深色减半规则不适用。
-
-0.7.5 迭代修订：装饰层加料（航空票据主题，全部为覆盖层/背景 drawable，不占布局高度）——底边全宽红蓝航空邮件斜纹条（纯色对撞，让开左缘红竖条）；右上角藏青/东航红双三角撞色块，出血随卡片圆角裁剪；左下角装饰性条码纹理（12% 藏青，登机牌肌理）；倒计时数字加 5% 浅红圆角 wash 锚定 hero 视觉重心；燕尾水印增为三线并加入红色 accent 细弧，不透明度 6%→8%。
-
-0.7.6 迭代修订：按反馈移除倒计时浅红 wash；上半部分补充结构感元素（均不增加内容高度）——「距离到位」标签行升级为 时钟小图标 + 标签 + 红刻度段（2dp）+ 细引导线（1dp，weight=1 延伸至按钮前），hero 区与「完成」按钮之间加 1dp 竖向细分隔线划出操作区，右上撞色角块加大至 108×84dp 并提高不透明度（藏青 17% / 红 20%）。
-
-0.7.7 迭代修订：按反馈移除标签行红刻度段、细引导线与按钮前竖线；顶部与中部装饰重设计——meta 行升级为浅灰（#F0F2F5）圆角头带（右端 mini 票据码纹理），卡片背景加红色 L 形拐角（左竖条向顶边延伸 36dp），hero 区衬底改为藏青/红双弧线条对撞（背景 drawable，零高度成本），航线带加两端锚点（左端藏青实心圆点、右端红色空心环收笔于按钮左缘前 16dp）且小飞机不透明度 14%→20%；行距微调补偿头带高度，内容总高不变（两段航段 222dp），无裁剪风险。
-
-0.7.8 迭代修订：按反馈移除左缘红竖条与顶部红拐角（卡片背景恢复纯圆角白卡 + 涟漪），底边斜纹条恢复全宽；右上装饰由「双三角」改为「斜挎角带」——藏青带自顶边斜穿至右侧边并向下延伸收尾，补上原装饰右下侧的悬空缺口，红色细带横跨其上形成对撞。
-
-0.7.9 迭代修订：按反馈恢复右上「双三角」样式（藏青大三角 17% + 红小三角 20%），并修复其右下侧缺角——缺角根因是 clipToOutline 把装饰视图四角统一按系统挂件圆角裁剪，视图右下角（卡片内部区域）被削出弧形缺口咬掉三角尖端；修复为加高装饰视图（108→120dp）使绘制区远离视图内角，藏青三角右缘向下延伸至 88dp 补齐右下空缺。
-
-0.8.0 迭代修订：小组件底部航段行行尾统一为机位——出港行不再显示出发地登机口（`boardingGate`），改为始终显示出港机位（`departureStand`）并加「机位 」前缀，与进港行一致，消除一行机位、一行登机口的不统一。
-
-## 7. 数据、持久化与安全
-
-### 7.1 本地存储
-
-| SharedPreferences | 内容 | 保护方式 |
+| 存储 | 内容 | 兼容/保护 |
 |---|---|---|
-| `air_shift` | `user_name`、`last_live_refresh`、`assignments`；CEA 另含 `duty_progress_date`、`duty_index` | 应用私有；JSON/标量 |
+| `air_shift` | `user_name`、`last_live_refresh`、`duty_progress_date`、`duty_index`、`roster_generation`、`assignments` | 应用私有 JSON/标量 |
 | `air_shift_secrets` | API Key IV 与密文 | Android Keystore AES-GCM、128-bit tag、AAD |
-| `air_shift_special_services` | version 1–3 兼容的结构化状态、32 字节随机 HMAC key | 应用私有；不含通知正文 |
+| `air_shift_special_services` | version 1–3 结构化 MUC 状态、随机 HMAC key | 应用私有，不含正文 |
+| `SavedStateHandle` | 分享 FIFO、URI 字符串、错误、ID、attempt token | 临时尽力恢复，不是永久业务存储 |
 
-旧 supplement、旧 gateway URL 和旧 gateway 凭证在初始化时删除。
+排班 JSON 兼容行为：
 
-`RosterStore.loadAssignments()` 当前以整份 JSON 为容错边界：任一条目抛错会使整个列表退化为空。MUC JSON Codec 则逐项跳过损坏记录；两者容错策略不同。
+- `arrivalStand` 缺失时回退旧键 `arrivalGate`；
+- 新增可空实时/机场/机位字段缺失时为 null；VIP 字段缺失时为 false；
+- 非法日期字符串退化为 null；
+- `aircraftRegistration` 和 `assignees` 是必需键；外层 JSON 或任一条目抛错会让整份排班加载为空，不会逐项跳过。
 
-### 7.2 备份与迁移
+API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。Keystore/密文损坏或解密失败时清除密文和对应 key，不返回不可信明文。旧 gateway URL、supplement 和旧 gateway 凭据在初始化时清理。
 
-- Manifest 设置 `allowBackup=false` 和 `fullBackupContent=false`。
-- `data_extraction_rules.xml` 对云备份和设备迁移都排除 SharedPreferences、数据库和文件。
-- API Key 明文不进入 saved-instance-state。
+### 11.2 Manifest 权限与组件
 
-### 7.3 权限与组件
+| 声明/特殊访问 | 目的 |
+|---|---|
+| `INTERNET` | 飞常准 HTTPS MCP |
+| `ACCESS_COARSE_LOCATION` / `ACCESS_FINE_LOCATION` | Fused Location 机场匹配 |
+| `POST_NOTIFICATIONS` | 保障通知 |
+| `SCHEDULE_EXACT_ALARM` | 精确提醒特殊访问 |
+| `RECEIVE_BOOT_COMPLETED` | 开机重排提醒和重绘小组件 |
+| 通知监听特殊访问 | 系统授权 `MucNotificationListenerService` |
 
-共同 Manifest 权限：
+组件边界：
 
-- `INTERNET`
-- `ACCESS_COARSE_LOCATION`
-- `ACCESS_FINE_LOCATION`
-- `POST_NOTIFICATIONS`
-- `SCHEDULE_EXACT_ALARM`
-- `RECEIVE_BOOT_COMPLETED`
+- `MainActivity` 导出，既是 launcher 入口，也是经过严格校验的 Excel `ACTION_SEND` 入口；
+- `MucNotificationListenerService` 不导出并受 `BIND_NOTIFICATION_LISTENER_SERVICE` 保护；
+- `ReminderReceiver`、`BootReceiver`、`DutyWidgetActionReceiver` 不导出；
+- `DutyWidgetProvider` 为 launcher 绑定 AppWidget 而导出，只注册 `APPWIDGET_UPDATE`。
 
-共同组件：
+### 11.3 隐私
 
-- 导出的 launcher `MainActivity`；
-- 非导出的 `MucNotificationListenerService`，受 `BIND_NOTIFICATION_LISTENER_SERVICE` 保护；
-- 非导出的 `ReminderReceiver`；
-- 非导出的、监听 `BOOT_COMPLETED` 的 `BootReceiver`；
-- 非导出的 `widget/DutyWidgetActionReceiver`，仅接收小组件显式 `PendingIntent` 的完成动作；
-- 导出的 `widget/DutyWidgetProvider`（仅 `APPWIDGET_UPDATE`，供桌面 launcher 绑定）。
+- Manifest 设置 `allowBackup=false`、`fullBackupContent=false`；data extraction rules 对云备份和设备迁移排除 SharedPreferences、database 和 file。
+- 原图片/Excel 不持久化或上传；`.xls` 临时文件位于应用 cache 并在 `finally` 删除。
+- 只保存匹配任务；匹配行的 `assignees` 原文本会随任务写入本地 JSON，可能包含同组姓名。无关行和 VIP 之外的附加栏目不保存。
+- 飞常准请求只包含航班号、日期、JSON-RPC/MCP 字段和鉴权头；应用不记录 Key、完整请求头或原始错误载荷。
+- 设备位置不写入持久化，也不由应用发送给飞常准；定位来源仍是 Google Play Services。
+- MUC 原文不持久化，见第 9.5 节。
 
-WPS 分支让 `MainActivity` 同时成为 Excel `ACTION_SEND` 分享目标，因此所有外部 Intent 都必须经过 MIME、action、项目数和 URI scheme 校验。
+## 12. 工程、构建与验证
 
-### 7.4 隐私约束
+### 12.1 工程配置
 
-1. 图片、Excel 和解析后的完整人员栏不得上传。
-2. 飞常准请求只发送航班号、日期和 MCP 协议字段。
-3. API Key 不得写入日志、错误消息、源码、资源或测试样例。
-4. Debug OCR 日志只记录引擎、行数、token 数和耗时，不记录识别文本。
-5. VIP 原文不得持久化，只保存与当前用户航段相关的布尔值。
-6. MUC 原文只在内存中解析；持久化只允许结构化航班/日期/服务/变更/取消字段和不可逆指纹。
-7. 定位只在本机匹配排班相关机场。
+- 单模块 `:app`；namespace/application ID 为 `com.bradj.airshift`。
+- Java 17、Kotlin 2.4.10、Android Gradle Plugin 9.3.0、Gradle Wrapper 9.5.0。
+- `compileSdk=37`、`targetSdk=37`、`minSdk=33`。
+- Compose BOM 2026.08.00、Activity Compose 1.13.0、Lifecycle 2.10.0、WorkManager 2.11.2。
+- Google Play Services Location 21.4.0、ONNX Runtime Android 1.21.1、OpenCV 4.12.0、Apache POI 5.5.1、Coroutines Android 1.9.0。
+- Gradle Wrapper 使用华为云镜像并固定 SHA-256；configuration cache 开启，Gradle parallel 关闭。
+- `local.properties` 可设置 `airshift.buildDir`，把 OneDrive 内的构建产物重定向到本地目录。
+- release 未配置发布签名，`isMinifyEnabled=false`。
 
-## 8. 技术栈、构建与许可证
-
-### 8.1 工程配置
-
-- 单模块 Android 工程：`:app`。
-- Kotlin `2.4.10`，Java `17`。
-- Android Gradle Plugin `9.3.0`。
-- Gradle Wrapper `9.5.0`，华为云镜像并配置官方 SHA-256。
-- `compileSdk = 37`，`targetSdk = 37`，`minSdk = 33`。
-- Jetpack Compose + Material 3，浅色/深色双主题（design token 集中于 `ui/theme/AirShiftTheme.kt`）。
-- 可在未跟踪的 `local.properties` 中设置 `airshift.buildDir`，将 OneDrive 中的构建产物移到本地目录。
-
-### 8.2 主要依赖
-
-| 依赖 | 版本/来源 | 用途 |
-|---|---|---|
-| Activity Compose | `1.13.0` | Activity/Compose 接入 |
-| Lifecycle Runtime | `2.10.0` | 生命周期与 StateFlow 收集 |
-| WorkManager | `2.11.2` | 15 分钟后台刷新 |
-| Compose BOM | `2026.08.00` | Compose 版本对齐 |
-| Google Play Services Location | `21.4.0` | 融合定位 |
-| ONNX Runtime Android | `1.21.1` | OCR 模型推理 |
-| OpenCV | `4.12.0` | 图像预后处理 |
-| Apache POI | `5.5.1` | `.xls` HSSF 事件流 |
-| Kotlin Coroutines Android | `1.9.0` | 异步解析与 OCR |
-| Material Icons Core | CEA 分支新增 | 三 Tab 和按钮图标 |
-
-### 8.3 构建和验证命令
-
-仓库声明的完整验证流程：
+主要命令：
 
 ```powershell
-$env:JAVA_HOME = 'C:\Users\BradJ\AppData\Local\Programs\android-studio\jbr'
-$env:Path = "$env:JAVA_HOME\bin;$env:Path"
 .\gradlew.bat test lintDebug assembleDebug
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
-设备测试需要连接 Android 设备或启动模拟器。可选真实 `.xls` fixture 测试依赖 `AIRSHIFT_XLS_FIXTURES_DIR` 和 `AIRSHIFT_XLS_TEST_NAME` 环境变量，默认不执行真实文件回归。
+Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFileTest` 只有配置 `AIRSHIFT_XLS_FIXTURES_DIR` 和 `AIRSHIFT_XLS_TEST_NAME` 时才运行真实外部 `.xls` fixture。
 
-### 8.4 许可证与发布
+### 12.2 本轮验证
 
-- 项目代码：Apache License 2.0。
-- PaddleOCR SDK 和 PP-OCRv6 模型：Apache License 2.0。
-- ONNX Runtime：MIT。
-- OpenCV、Apache POI：Apache License 2.0。
-- 第三方服务和数据仍受各自条款约束。
-- Release 当前未配置发布签名，且 `isMinifyEnabled=false`；现有 APK 只应视为开发/个人验证产物。
+本轮完成了当前 `main` 的仓库、源码、资源、Manifest、Gradle 配置和测试静态遍历，并在 JDK 17 下执行：
 
-## 9. 测试规格与覆盖状态
+```powershell
+.\gradlew.bat test lintDebug assembleDebug --no-daemon --console=plain
+```
 
-### 9.1 分支测试规模
+2026-09-03 的验证结果：Gradle 构建成功；JVM 报告共 120 项，119 项通过、0 项失败、1 项因未配置真实外部 `.xls` fixture 而跳过；Lint 为 0 error、28 warning；Debug APK 成功生成。warning 来自既有的大尺寸 vector、可升级依赖、布局/资源和 KTX 建议，本轮文档迭代未为清零 warning 而修改运行时代码。
 
-| 分支 | JVM 测试 | Android 测试 | 合计 |
-|---|---:|---:|---:|
-| `main` | 54 | 1 | 55 |
-| CEA | 62 | 1 | 63 |
-| WPS | 62 | 7 | 69 |
+真机验证使用 vivo `V2505A`、Android 16 / API 36：Debug APK 覆盖安装成功，设备包管理器确认版本 `0.8.1 (37)`，`MainActivity` 冷启动成功。`connectedDebugAndroidTest` 能发现 48 项测试，但该设备会阻止 AndroidJUnitRunner 从后台拉起 Compose ActivityScenario，整批运行停在 `0/48`。首次按类/方法拆分时，31 项非 Compose 测试和 12 项 Compose 测试通过，共 43/48；其余 5 项没有得到可信的业务断言结果。
 
-### 9.2 已有自动化覆盖
+复测发现这 5 项均卡在测试辅助函数对已显示的“执勤完成”按钮执行 `performScrollToNode`，vivo 上产生持续滚动而没有进入后续断言；改为直接触发目标节点的 Compose 点击语义后，5 项逐项全部通过，完整 `DutyWindowRefreshInstrumentedTest` 也连续通过 9/9（19.596 秒）。因此 48 个 Android 测试场景均已在该机获得通过结果；但这不是标准 `connectedDebugAndroidTest` 单批次通过，仍使用了预启动 Compose 宿主、`--no-restart` 和诊断期临时 test exception collector 来绕过厂商系统的 Activity 启动与分离 APK `ServiceLoader` 限制。
 
-- OCR 表格几何恢复、姓名隔离、航班清洗、跨日和 VIP。
-- 设备端 PP-OCRv6 合成排班图完整链路。
-- `.xlsx` 语义列、共享字符串、数值日期/时间、模板变体和非法表头。
-- `.xls` 生成工作簿事件流；可选真实 fixture。
-- 飞常准字段、JSON-RPC/SSE、请求体、安全错误、缓存、限流和并发合并。
-- MUC 类别、数量隔离、航班匹配、变更、取消、乱序、去重、过期、JSON 兼容和隐私。
-- 提醒类型和任务稳定 ID。
-- CEA：8 个 `DutyTimeline` 时间规则测试，以及低置信直接忽略的状态测试。
-- WPS：8 个任务完成测试；6 个分享 Intent/Manifest/队列 Android 测试。
+临时 test exception collector 已撤回，仅保留不涉及生产逻辑的测试动作修正。最终再次执行 `test lintDebug assembleDebug assembleDebugAndroidTest`，重新安装正常 APK 并卸载测试 APK。`git diff --check` 已通过（只有 Git 的 LF→CRLF 工作区行尾提示，没有空白错误）。真实飞常准、WPS、MUC、定位、闹钟、通知、锁屏和 launcher 行为仍不能由本次自动化替代。
 
-### 9.3 主要测试缺口
+### 12.3 当前测试矩阵
 
-- Compose 页面、三 Tab、设置、人工进度和状态恢复。
-- `MainActivity` 生命周期及前台自动刷新循环。
-- WorkManager 真正执行、自取消、重试和并发导入。
-- AlarmManager、开机恢复、通知权限和精确闹钟特殊访问。
-- Android Keystore 与排班 SharedPreferences 的设备集成。
-- GPS 及 15 km 机场匹配。
-- 真实 MUC 通知样式和企业设备策略。
-- 超大图片的内存边界。
-- 真实 WPS 版本、真实 `ContentProvider` URI 授权、进程死亡和连续分享。
-- CEA 进度日期翻转、导入重置、误触/双击和变更值 UI。
-- 仓库没有 CI 工作流或可复核的构建产物。
+| 范围 | `@Test` | 主要覆盖 |
+|---|---:|---|
+| JVM `api` | 41 | 两项窗口、batch、字段/多经停映射、JSON-RPC/SSE、脱敏错误、缓存/限流/并发 |
+| JVM `model` | 19 | 时间线、自动完成、人工前缀和窗口 |
+| JVM `parser` | 6 | XLSX/XLS、模板变体、姓名隔离；含 1 个条件式真实 fixture |
+| JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
+| JVM `widget` | 11 | 当前页选择、空/完成/倒计时、VIP、机场和机位 |
+| JVM `ui` | 5 | 默认页、前后台恢复和配置变化 |
+| JVM smoke | 9 | OCR 表格、姓名、VIP、提醒基础 |
+| Android 数据层 | 13 | generation、进度、scope 合并、旧 JSON 与扩展机位 |
+| Android 刷新编排 | 14 | duty-window 9 项、foreground effect 5 项 |
+| Android WorkManager | 4 | KEEP、generation、停止和旧任务迁移 |
+| Android Excel 分享 | 11 | Manifest/Intent/FIFO/恢复 10 项、owner 隔离 1 项 |
+| Android 当前页 Compose | 2 | 点击完成、自动跳过和新排班恢复 |
+| Android 小组件 | 3 | 单卡布局与 RemoteViews 渲染 |
+| Android OCR | 1 | PP-OCRv6 合成图片端到端 |
 
-## 10. 分支兼容、待决策项与已知偏差
+`testdata/synthetic_roster.png` 是无真实个人信息的自动 OCR fixture，可由 `tools/generate_synthetic_roster.ps1` 重建。`testdata/mu2415_verify.png` 当前没有被自动测试引用。
 
-### 10.1 集成状态
+### 12.4 仍缺的验证
 
-已完成合并。`MainActivity.kt` 的实际冲突已人工解决：采用 CEA 分层 UI，接入 WPS 分享队列和完成规则；保留扩展机位字段、低置信消息直接忽略策略及手动刷新。新增排班 generation 和条件保存防止旧刷新覆盖新排班，旧 Worker 仅取消自身 ID，不再取消新排班的同名任务。最终代码无未解决冲突。
+- 标准 `connectedDebugAndroidTest` 单批次仍需在 AOSP 模拟器或无厂商后台启动限制的设备上复跑；vivo 当前只能通过预启动宿主的拆分方式完成全部场景；
+- Onboarding、全部执勤、设置页的完整 Compose 交互和无障碍；
+- 真实 `MainActivity` ActivityScenario 生命周期、进程强杀和多窗口；
+- `FlightRefreshWorker.doWork()` 的真实网络、系统重试/backoff 与系统延迟；
+- AlarmManager 实际触发、BootReceiver、通知权限、锁屏展示和时区/改时；
+- Android Keystore API Key 真机往返和密钥失效；
+- AirportLocator 自动化与真实 Fused Location；
+- NotificationListenerService、真实 MUC 样式和企业设备策略；
+- 真实 WPS MIME/ClipData/ContentProvider、URI 授权和强杀恢复；
+- Excel 安全上限、损坏/加密文件、部分 1904/公式/多表边界的直接回归；
+- OCR 零表头警告、短姓名前缀碰撞、超大图片；
+- Widget 完成 receiver、launcher 跨零点、OriginOS 裁剪和不同桌面实现。
 
-### 10.2 已采用的产品决策
+## 13. 已知实现限制与风险
 
-| 主题 | 合并前 `main` / WPS | CEA | 集成结果 |
-|---|---|---|---|
-| 低置信 MUC | 显示人工确认/忽略 | 直接丢弃 | 按 feat 优先采用 CEA，不恢复旧人工确认界面 |
-| 执勤完成 | WPS 根据 actual 或 3 小时宽限自动判断 | 用户按任务逐项手动推进 | 两者共同驱动当前页和刷新停止；手动刷新仍可用 |
-| 当前执勤 | 无独立页面 | 三 Tab + 当前任务倒计时 | 持久化索引表示手动完成前缀；其后自动跳过已完成任务，下一任务也使用同一规则 |
-| 版本 | `0.1.0` / code 1 | `0.3.0` / code 3 | `0.4.0` / code 4 |
-| 航段机位 | 只保存进港到达、出港出发 | 另存进港始发和出港到达 | 全部保留；映射、JSON 往返及旧数据缺字段兼容已测 |
+1. **导入替换**：成功但零匹配会清空旧排班并重置进度，没有预览、确认或回滚。
+2. **OCR 姓名包含匹配**：短姓名可能命中更长姓名；Excel 的分隔符感知规则更严格。
+3. **图片无上限**：图片解码没有文件、像素或内存限制，超大输入可能造成内存压力。
+4. **分享恢复**：没有永久 URI 权限或队列长度上限，不保证强停后的 exactly-once。
+5. **XLS 静默截断**：行号 10,000 以后和列号 255 以后忽略，可能产生不完整而非明确失败的结果。
+6. **排班 JSON 整体失败**：任一损坏条目可使整份排班加载为空；MUC Codec 才是逐项容错。
+7. **自动完成启发式**：陈旧预计时间或超长延误可能在 3 小时后过早完成；无时间航段直接完成。
+8. **人工完成不可撤销**：没有确认/回退，并且不会取消该任务未来提醒。
+9. **过站到位语义**：尚未整体完成的过站始终按进港到位时间显示，可能在等待出港期间长期显示过点。
+10. **后台非精确**：WorkManager 15 分钟不是准点保证，系统可延后。
+11. **载荷格式脆弱**：飞常准内层类 Python 字典依赖受限文本解析，上游格式或转义变化可能失败。
+12. **同代响应排序**：同一 generation 没有服务端更新时间冲突解决，相同字段最后写入者生效。
+13. **限流语义**：缓存命中和跳过上游的调用也消耗本地每分钟容量。
+14. **MUC 歧义**：数字简写没有最大日期距离，跨承运人同数字会确定性自动匹配而非人工确认。
+15. **MUC 低置信丢弃**：没有人工确认入口；弱表达可能被直接忽略。
+16. **MUC 逻辑过期**：物理删除依赖下一次通知或排班变化，没有后台清理器。
+17. **小组件数据边界**：不显示 MUC 状态；Chronometer 跨零点依赖 launcher 和后续重绘。
+18. **未消费字段**：`arrivalBridge` 已解析/持久化，但 UI 未展示。
+19. **提醒 ID**：`stableId.hashCode()` 是 32 位，理论上存在碰撞。
+20. **发布状态**：中文硬编码、无 CI、无发布签名、release 未压缩，只适合开发与个人验证。
 
-自动跳过不会写入人工完成索引，因此未被人工确认完成的任务在预计时间修正后可以恢复；点击完成时推进到当前实际显示任务之后。新排班原子重置人工索引并增加 generation，普通刷新保留进度。前台刷新仅随前台资格、generation 或完成状态变化重启，普通实时字段更新不触发紧密请求循环。
+## 14. 当前验收标准
 
-### 10.3 已确认的实现偏差和风险
+### 14.1 导入与存储
 
-以下是代码扫描确认的事实，不是尚未实现的新需求：
+- 有效图片/XLS/XLSX 能生成只属于配置姓名的合法航班任务；无关行不进入结果。
+- 文件格式由签名决定；非法、加密或损坏工作簿产生可理解错误且不替换旧排班。
+- 成功空结果按当前产品语义替换旧排班，并显示“无匹配姓名”警告。
+- `CES`、符号航班号、日期/序列时间和 `+` 次日按本规格规范化。
+- 新排班重置进度并增加 generation；实时刷新不重置进度。
 
-1. **已修正文档**：README 已删除“单字 OCR 容错”声明；实际仍按完整规范化姓名匹配，没有新增模糊匹配。
-2. **MUC 跨承运人数字简写可能误配**：同数字、同日存在多个承运人时会按稳定排序自动选一个，不会进入人工歧义确认。
-3. **图片无输入上限**：Excel 有明确大小限制，图片解码没有像素或内存上限。
-4. **外部载荷解析脆弱**：飞常准内层载荷以正则读取 Python-repr 风格字段，并非严格 JSON；格式或转义变化可能导致失败。
-5. **排班 JSON 整体失败**：一个损坏条目会使整份排班加载为空。
-6. **提醒 ID 碰撞理论风险**：PendingIntent 请求码使用 32 位 `stableId.hashCode()`。
-7. **未消费字段**：`arrivalBridge` 在 `main` 被解析和持久化，但当前主分支 UI 未展示。
-8. **CEA 到位提示边界**：集成后整个任务符合 WPS 完成规则即自动跳过；但尚未整体完成的过站任务仍沿用 CEA `DutyTimeline` 的到位时间显示规则。
-9. **CEA 人工进度不可撤销**：完成按钮无确认、回退或撤销，误触会跳过任务。
-10. **已修复前台恢复**：effect 纳入 generation 和完成状态；新非空排班恢复、普通重组不重启、busy 恢复已有设备回归。
-11. **已修复 saved-state 队列缺失**：使用 SavedStateHandle 保存 FIFO 事件和编号，旧 attempt/已销毁页面不能提交；恢复能力仍受第 2.5 节 Android 和 URI 授权边界约束。
-12. **已修复跨排班 Worker 竞态**：generation 条件保存及自身 ID 取消保护新排班。同一 generation 的前后台实时响应仍按最后保存生效，不新增响应时间排序协议。
-13. **已统一设置路径**：保存 API Key 时也使用联合完成状态决定后台刷新资格。
-14. **保留 WPS 三小时规则及其局限**：按 feat 优先保留；陈旧预计时间或超长延误仍可能过早完成，README 提示手动刷新核对。
-15. **真实 WPS 兼容尚未证明**：测试使用通用 Android Intent，没有真实 WPS 版本和 MIME/ClipData 样本。
+### 14.2 刷新与进度
 
-### 10.4 合并验收门槛
+- 导入、前台、后台和未完成时手动刷新只查询当前 + 下一项未完成执勤。
+- 两项窗口按航班号+日期去重，每个请求前复查最新资格。
+- 人工完成只能推进调用者所见当前任务，并只补查新进入窗口的航班。
+- 全部完成后自动刷新停止；全排班手动刷新继续可用且不重置人工进度。
+- 旧 generation 响应、Worker 或 Widget 卡片不能覆盖/推进新排班。
+- 部分 API 失败保留成功结果和已有数据，错误不泄露敏感载荷。
 
-本次代码合并的验收项如下；第 7 项仍待具备真实设备及应用环境后执行，不因模拟器测试通过而标为完成：
+### 14.3 提醒、MUC、定位与 Widget
 
-1. 明确第 10.2 节的产品选择并更新本文。
-2. 手工整合 `MainActivity`，保留 CEA UI 分层，同时接入 WPS Intent 队列。
-3. 统一 `RosterAssignment` 的 CEA 机位字段和 WPS 完成扩展。
-4. 修复 WPS 前台恢复、进程恢复和 Worker 取消竞态。
-5. 为执勤索引与自动完成之间建立单一状态语义。
-6. 运行 `test lintDebug assembleDebug connectedDebugAndroidTest`。
-7. 在真实设备验证图片、`.xls`、`.xlsx`、WPS 分享、通知、精确闹钟、定位和 MUC。
-8. 检查最终 diff、版本号、迁移兼容和隐私约束。
+- 进港/过站只建到达前 10 分钟提醒，纯出港只建出发前 1 小时提醒。
+- 无权限时功能按第 2.2 节降级，不阻断排班查看。
+- 只有 MUC 白名单包的新通知可进入解析；持久化 JSON 不含原文和个人敏感字段。
+- 更晚变更/取消按时序生效，旧摘要不能恢复已取消状态。
+- 机场只在当前刷新候选中、15 km 内匹配，设备位置不持久化。
+- Widget 固定选择当前未完成执勤；旧按钮重复点击不能完成下一项。
 
-## 11. 验收标准
+## 15. 源码追踪索引
 
-### 11.1 共同基线
-
-- 输入有效姓名并导入包含该姓名的图片或 Excel 后，只生成属于该用户的有效航班任务。
-- 不同员工姓名子串、无航班行、无机号 Excel 行和无效时间不得生成错误任务。
-- `CES`、带符号航班号和 `+` 次日时间按本规格规范化。
-- 飞常准无 Key、网络失败、部分失败和全部失败均保持可理解、脱敏且不丢失已有排班。
-- 进港/纯出港/过站提醒符合第 5.7 节，实时变化后旧提醒被替换。
-- 定位拒绝或失败不阻断排班；成功匹配必须在 15 km 内。
-- 只有 MUC 白名单包可写入特服状态，持久化 JSON 不含原文和敏感个人字段。
-- API Key 清除后缓存清除、后台实时刷新停止，已保存排班仍可离线查看。
-
-### 11.2 CEA 分支
-
-- 三个 Tab 可切换且全部执勤功能不回退。
-- 当前执勤倒计时、下一任务、登机开始/关闭时间符合 `DutyTimeline` 测试规则。
-- 导入新排班重置进度，实时刷新不重置，日期变化回到索引 0。
-- 全部执勤只显示特服/变更摘要，当前执勤显示完整详情。
-- CEA 低置信策略按最终产品决策验收，不能同时存在“直接忽略”和“要求人工确认”的模糊文案。
-
-### 11.3 WPS 分支
-
-- 真实 Android/WPS 的单个 `.xls` 与 `.xlsx` `content://` 分享可在冷启动、热启动和首次 onboarding 后完成导入。
-- 错误 MIME、多文件、无 stream、`file://`、云链接和错误 action 被明确拒绝或忽略。
-- 分享队列逐项消费，同 URI 重复分享不会被错误折叠。
-- 实际时间、预计/计划加 3 小时、过站两段和空列表的完成判断与测试一致。
-- 全部完成后前后台自动刷新停止，手动刷新仍可用；导入新未完成排班后前后台都必须可靠恢复。
-
-## 12. 源码追踪索引
-
-### 12.1 共同核心
-
-| 规格领域 | 主要证据 |
+| 规格领域 | 当前 `main` 证据 |
 |---|---|
-| 应用流程与主 UI | `main:app/src/main/java/com/bradj/airshift/MainActivity.kt` |
-| 排班模型 | `main:app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
-| 图片 OCR 接入 | `main:app/src/main/java/com/bradj/airshift/parser/OcrRosterReader.kt` |
-| OCR 表格恢复 | `main:app/src/main/java/com/bradj/airshift/parser/RosterTableParser.kt` |
-| Excel 分流与限制 | `main:app/src/main/java/com/bradj/airshift/parser/ExcelRosterReader.kt` |
-| `.xlsx` 解析 | `main:app/src/main/java/com/bradj/airshift/parser/ExcelRosterParser.kt` |
-| `.xls` 解析 | `main:app/src/main/java/com/bradj/airshift/parser/XlsRosterParser.kt` |
-| 飞常准协议 | `main:app/src/main/java/com/bradj/airshift/api/VariFlightClient.kt` |
-| 实时数据合并 | `main:app/src/main/java/com/bradj/airshift/api/FlightInfo.kt` |
-| 后台刷新 | `main:app/src/main/java/com/bradj/airshift/api/FlightRefreshWorker.kt` |
-| 本地存储 | `main:app/src/main/java/com/bradj/airshift/data/RosterStore.kt` |
-| API Key | `main:app/src/main/java/com/bradj/airshift/data/VariFlightApiKeyStore.kt` |
-| 提醒 | `main:app/src/main/java/com/bradj/airshift/reminder/` |
-| 定位 | `main:app/src/main/java/com/bradj/airshift/location/AirportLocator.kt` |
-| MUC 全链路 | `main:app/src/main/java/com/bradj/airshift/specialservice/` |
-| Manifest/隐私 | `main:app/src/main/AndroidManifest.xml`、`main:app/src/main/res/xml/data_extraction_rules.xml` |
-| 依赖与版本 | `main:app/build.gradle.kts`、`main:build.gradle.kts`、`main:gradle/wrapper/gradle-wrapper.properties` |
+| 应用生命周期与总编排 | `app/src/main/java/com/bradj/airshift/MainActivity.kt` |
+| 前台刷新 effect | `app/src/main/java/com/bradj/airshift/ForegroundFlightRefreshEffect.kt` |
+| WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
+| 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
+| 当前执勤时间线 | `app/src/main/java/com/bradj/airshift/model/DutyTimeline.kt` |
+| OCR 接入/表格恢复 | `parser/OcrRosterReader.kt`、`parser/RosterTableParser.kt` |
+| XLS/XLSX | `parser/ExcelRosterReader.kt`、`parser/ExcelRosterParser.kt`、`parser/XlsRosterParser.kt` |
+| 刷新 scope/batch/Worker | `api/DutyFlightWindow.kt`、`api/FlightRefreshBatch.kt`、`api/FlightRefreshWorker.kt` |
+| 飞常准协议/保护 | `api/VariFlightClient.kt` |
+| 多经停和字段合并 | `api/FlightInfo.kt` |
+| 排班/进度存储 | `data/RosterStore.kt` |
+| API Key | `data/VariFlightApiKeyStore.kt` |
+| MUC 全链路 | `specialservice/` |
+| 提醒/定位 | `reminder/`、`location/AirportLocator.kt` |
+| 三页 UI | `ui/AirShiftRoot.kt`、`ui/all/`、`ui/current/`、`ui/settings/` |
+| 小组件 | `widget/`、`res/layout/widget_duty_item.xml`、`res/xml/duty_widget_info.xml` |
+| 权限/备份 | `app/src/main/AndroidManifest.xml`、`res/xml/data_extraction_rules.xml` |
+| 构建/版本/依赖 | `app/build.gradle.kts`、`build.gradle.kts`、`gradle/wrapper/gradle-wrapper.properties` |
 
-### 12.2 分支专属
+表中省略 `app/src/main/java/com/bradj/airshift/` 的重复前缀时，路径均相对于该目录。
 
-| 分支能力 | 主要证据 |
-|---|---|
-| CEA 主题/导航 | `feat/cea-ui-rewrite:app/src/main/java/com/bradj/airshift/ui/` |
-| CEA 时间线 | `feat/cea-ui-rewrite:app/src/main/java/com/bradj/airshift/model/DutyTimeline.kt` |
-| CEA 进度持久化 | `feat/cea-ui-rewrite:app/src/main/java/com/bradj/airshift/data/RosterStore.kt` |
-| CEA 低置信替换 | `feat/cea-ui-rewrite:app/src/main/java/com/bradj/airshift/specialservice/SpecialServiceReducer.kt` |
-| WPS Intent 与队列 | `feat/wps-excel-share-import:app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
-| WPS Manifest 分享入口 | `feat/wps-excel-share-import:app/src/main/AndroidManifest.xml` |
-| WPS 完成规则 | `feat/wps-excel-share-import:app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
-| WPS Worker 停止 | `feat/wps-excel-share-import:app/src/main/java/com/bradj/airshift/api/FlightRefreshWorker.kt` |
+## 16. 简要演进记录
 
-### 12.3 仓库级文件
-
-- `README.md`：用户说明与已实现功能声明。
-- `PLAN.md`：`main` 为 MUC 方案记录，CEA 分支改为 UI 重写计划。
-- `LICENSE`：项目许可证全文。
-- `THIRD_PARTY_NOTICES.md`：内嵌代码、模型和依赖许可。
-- `AGENTS.md`：仓库协作约束，不属于运行时产品。
-- `.gitignore`：忽略 IDE、构建、签名、环境和本机配置。
-- `settings.gradle.kts`、`build.gradle.kts`、`app/build.gradle.kts`、`gradle.properties`、`gradle/wrapper/`：构建系统。
-- `testdata/synthetic_roster.png`、`tools/generate_synthetic_roster.ps1`：无真实个人信息的 OCR 回归资产。
-
----
-
-原始扫描事实基准保留于历史段落；当前集成基准为第 2.5 节的本地 main。后续提交应继续更新集成基线、风险状态和验收记录，避免把历史分支声明当作现状。
+- 早期版本建立端侧排班、PP-OCRv6、飞常准直连、Excel 和 MUC 能力。
+- `feat/cea-ui-rewrite` 的三页 UI、时间线和 design token 已进入 `main`。
+- `feat/wps-excel-share-import` 的 Android 分享入口和完成状态已进入 `main`。
+- 0.4.x 将刷新收敛为当前 + 下一未完成执勤，并加入 generation、scope 和生命周期竞态保护。
+- 0.5.x–0.6.x 完成当前执勤导航和 CEA 视觉层重构。
+- 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
+- 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
