@@ -370,11 +370,11 @@
                     android:layout_width="16dp"
                     android:layout_height="16dp"
                     android:layout_marginStart="8dp"
-                    android:contentDescription="登机口"
-                    android:src="@drawable/ic_widget_gate" />
+                    android:contentDescription="@string/duty_widget_stand_content_description"
+                    android:src="@drawable/ic_widget_stand" />
 
                 <TextView
-                    android:id="@+id/widget_leg_primary_gate"
+                    android:id="@+id/widget_leg_primary_stand"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
@@ -435,11 +435,11 @@
                     android:layout_width="16dp"
                     android:layout_height="16dp"
                     android:layout_marginStart="8dp"
-                    android:contentDescription="登机口"
-                    android:src="@drawable/ic_widget_gate" />
+                    android:contentDescription="@string/duty_widget_stand_content_description"
+                    android:src="@drawable/ic_widget_stand" />
 
                 <TextView
-                    android:id="@+id/widget_leg_secondary_gate"
+                    android:id="@+id/widget_leg_secondary_stand"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"

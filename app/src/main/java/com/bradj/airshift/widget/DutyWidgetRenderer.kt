@@ -38,16 +38,8 @@ internal object DutyWidgetRenderer {
         views.setTextViewText(R.id.widget_header, page.header)
         views.setViewVisibility(R.id.widget_vip, if (page.hasVip) View.VISIBLE else View.GONE)
         bindStatus(context, views, page, builtAt)
-        bindLeg(
-            context, views, page.legs.getOrNull(0),
-            R.id.widget_leg_primary, R.id.widget_leg_primary_tag,
-            R.id.widget_leg_primary_flight, R.id.widget_leg_primary_place, R.id.widget_leg_primary_gate,
-        )
-        bindLeg(
-            context, views, page.legs.getOrNull(1),
-            R.id.widget_leg_secondary, R.id.widget_leg_secondary_tag,
-            R.id.widget_leg_secondary_flight, R.id.widget_leg_secondary_place, R.id.widget_leg_secondary_gate,
-        )
+        bindLeg(context, views, page.legs.getOrNull(0), PRIMARY_LEG)
+        bindLeg(context, views, page.legs.getOrNull(1), SECONDARY_LEG)
         // 无任何航段（如仅有机号/时刻的备份执勤）时隐藏悬空虚线。
         views.setViewVisibility(R.id.widget_divider, if (page.legs.isEmpty()) View.GONE else View.VISIBLE)
     }
@@ -98,39 +90,49 @@ internal object DutyWidgetRenderer {
         views.setTextColor(R.id.widget_status_text, ContextCompat.getColor(context, colorRes))
     }
 
-    private fun bindLeg(
-        context: Context,
-        views: RemoteViews,
-        leg: WidgetFlightLeg?,
-        blockId: Int,
-        tagId: Int,
-        flightId: Int,
-        placeId: Int,
-        gateId: Int,
-    ) {
+    /** 一行航段用到的视图 id；小组件固定两行（主/次）。 */
+    private class LegViewIds(val block: Int, val tag: Int, val flight: Int, val place: Int, val stand: Int)
+
+    private val PRIMARY_LEG = LegViewIds(
+        block = R.id.widget_leg_primary,
+        tag = R.id.widget_leg_primary_tag,
+        flight = R.id.widget_leg_primary_flight,
+        place = R.id.widget_leg_primary_place,
+        stand = R.id.widget_leg_primary_stand,
+    )
+
+    private val SECONDARY_LEG = LegViewIds(
+        block = R.id.widget_leg_secondary,
+        tag = R.id.widget_leg_secondary_tag,
+        flight = R.id.widget_leg_secondary_flight,
+        place = R.id.widget_leg_secondary_place,
+        stand = R.id.widget_leg_secondary_stand,
+    )
+
+    private fun bindLeg(context: Context, views: RemoteViews, leg: WidgetFlightLeg?, ids: LegViewIds) {
         if (leg == null) {
-            views.setViewVisibility(blockId, View.GONE)
+            views.setViewVisibility(ids.block, View.GONE)
             return
         }
         val inbound = leg.direction == LegDirection.INBOUND
-        views.setViewVisibility(blockId, View.VISIBLE)
-        views.setTextViewText(tagId, leg.direction.shortLabel)
+        views.setViewVisibility(ids.block, View.VISIBLE)
+        views.setTextViewText(ids.tag, leg.direction.shortLabel)
         views.setInt(
-            tagId,
+            ids.tag,
             "setBackgroundResource",
             if (inbound) R.drawable.widget_tag_inbound else R.drawable.widget_tag_outbound,
         )
         // tonal chip：浅底深字，文字色随方向与底色配套。
         views.setTextColor(
-            tagId,
+            ids.tag,
             ContextCompat.getColor(context, if (inbound) R.color.inbound_blue else R.color.on_cea_red_soft),
         )
-        views.setTextViewText(flightId, leg.flight)
-        views.setTextViewText(placeId, leg.place)
-        views.setTextViewText(gateId, leg.gate)
+        views.setTextViewText(ids.flight, leg.flight)
+        views.setTextViewText(ids.place, leg.place)
+        views.setTextViewText(ids.stand, leg.stand)
         views.setTextColor(
-            gateId,
-            ContextCompat.getColor(context, if (leg.gate == "--") R.color.text_hint else R.color.text_body),
+            ids.stand,
+            ContextCompat.getColor(context, if (leg.stand == "--") R.color.text_hint else R.color.text_body),
         )
     }
 }

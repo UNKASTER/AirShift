@@ -37,15 +37,16 @@ import com.bradj.airshift.ui.theme.SuccessGreen
 import com.bradj.airshift.ui.theme.TextHint
 import java.time.LocalDateTime
 
-/** 航线网格标签容器等宽（以三字宽的「登机口」为准），使两侧数值列各自对齐成竖线。 */
+/** 航线网格标签容器等宽，使两侧数值列各自对齐成竖线。 */
 private val RouteMetaLabelWidth = 38.dp
 
 /**
  * 航段区块（FIDS 航显屏质感），卡片三段节奏：
  * 标题行（方向 chip + 30sp Heavy 航班号 + 右侧时间块：实时为主 / 计划为辅）
- * → 航线统一网格（行1 三字码｜行2 中文站名｜行3 登机口｜行4 机位，
+ * → 航线统一网格（行1 三字码｜行2 中文站名｜行3 机位，
  *   左右两列共享行高与基线，箭头在行1中间列与三字码同轴；
- *   两侧标签统一为「登机口」「机位」，左列左对齐、右列右对齐镜像）
+ *   两侧只显示「机位」，左列左对齐、右列右对齐镜像；登机口不在网格里，
+ *   MUC 登机口变更作为下方单独一行提示）
  * → 撕线虚线 → meta 区 2×2 等宽网格（登机口关闭｜实际离位／机号｜机型，左对齐，tabular-nums）。
  * 无数据项渲染浅灰骨架短横线，两侧占位规格统一。
  */
@@ -100,7 +101,7 @@ fun FlightRow(model: FlightLegUiModel) = with(model) {
                 left = {
                     originDetails.getOrNull(index)?.let { entry ->
                         MetaItem(
-                            icon = metaIconFor(entry.kind),
+                            icon = LinearIcons.Stand,
                             label = entry.label,
                             value = entry.value,
                             hasChange = entry.hasChange,
@@ -111,7 +112,7 @@ fun FlightRow(model: FlightLegUiModel) = with(model) {
                 right = {
                     destinationDetails.getOrNull(index)?.let { entry ->
                         MetaItem(
-                            icon = metaIconFor(entry.kind),
+                            icon = LinearIcons.Stand,
                             label = entry.label,
                             value = entry.value,
                             hasChange = entry.hasChange,
@@ -231,12 +232,6 @@ private fun RouteGridRow(
         Box(modifier = Modifier.width(52.dp), contentAlignment = Alignment.Center) { center?.invoke() }
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { right() }
     }
-}
-
-/** meta 行图标映射：按条目类型选择线性图标。 */
-private fun metaIconFor(kind: DetailKind) = when (kind) {
-    DetailKind.GATE -> LinearIcons.Gate
-    else -> LinearIcons.Stand
 }
 
 /**

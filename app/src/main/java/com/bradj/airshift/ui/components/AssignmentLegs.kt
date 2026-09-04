@@ -75,20 +75,11 @@ private fun RosterAssignment.inboundLeg(
         hasSpecialServices = services.isNotEmpty(),
         specialServices = if (full) services else emptyList(),
         flightCancellation = muc.flightCancellations.cancellationForFlight(flight, operationDate),
+        // 航线网格两侧只显示机位：到达侧本无登机口字段，出发侧为保持一致也不显示。
         originDetails = listOf(
-            DetailEntry(
-                kind = DetailKind.GATE,
-                value = if (full && gateChange != null) {
-                    gateChangeDisplayValue(inboundBoardingGate, gateChange)
-                } else {
-                    inboundBoardingGate ?: "--"
-                },
-                hasChange = gateChange != null,
-            ),
             DetailEntry(kind = DetailKind.STAND, value = inboundDepartureStand ?: "--"),
         ),
         destinationDetails = listOf(
-            DetailEntry(kind = DetailKind.GATE, value = "--"),
             DetailEntry(
                 kind = DetailKind.STAND,
                 value = if (full && standChange != null) "${arrivalStand ?: "--"} → ${standChange.stand}" else arrivalStand ?: "--",
@@ -96,10 +87,8 @@ private fun RosterAssignment.inboundLeg(
             ),
         ),
         details = buildList {
-            if (full) {
-                gateChange?.let { add(mucSource(DetailKind.GATE_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
-                standChange?.let { add(mucSource(DetailKind.STAND_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
-            }
+            gateChange?.let { add(gateChangeNotice(inboundBoardingGate, it, full)) }
+            if (full) standChange?.let { add(mucSource(DetailKind.STAND_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
             add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = inboundGateClosedObservedAt.formatClock()))
             add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = inboundActualOffBlock.formatClock()))
         },
@@ -134,27 +123,21 @@ private fun RosterAssignment.outboundLeg(
         flightCancellation = muc.flightCancellations.cancellationForFlight(flight, operationDate),
         originDetails = listOf(
             DetailEntry(
-                kind = DetailKind.GATE,
-                value = if (full && gateChange != null) gateChangeDisplayValue(boardingGate, gateChange) else boardingGate ?: "--",
-                hasChange = gateChange != null,
-            ),
-            DetailEntry(
                 kind = DetailKind.STAND,
                 value = if (full && standChange != null) "${departureStand ?: "--"} → ${standChange.stand}" else departureStand ?: "--",
                 hasChange = standChange != null,
             ),
         ),
         destinationDetails = listOf(
-            DetailEntry(kind = DetailKind.GATE, value = "--"),
             DetailEntry(kind = DetailKind.STAND, value = outboundArrivalStand ?: "--"),
         ),
         details = buildList {
             if (full) {
                 add(DetailEntry(kind = DetailKind.BOARDING_START, value = DutyTimeline.boardingStartTime(this@outboundLeg).formatClock()))
                 add(DetailEntry(kind = DetailKind.BOARDING_END, value = DutyTimeline.gateCloseTime(this@outboundLeg).formatClock()))
-                gateChange?.let { add(mucSource(DetailKind.GATE_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
-                standChange?.let { add(mucSource(DetailKind.STAND_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
             }
+            gateChange?.let { add(gateChangeNotice(boardingGate, it, full)) }
+            if (full) standChange?.let { add(mucSource(DetailKind.STAND_CHANGE_SOURCE, it.updatedAtEpochMillis)) }
             add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = outboundGateClosedObservedAt.formatClock()))
             add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = outboundActualOffBlock.formatClock()))
         },
@@ -166,3 +149,17 @@ private fun RosterAssignment.outboundLeg(
 
 private fun mucSource(kind: DetailKind, updatedAtEpochMillis: Long) =
     DetailEntry(kind = kind, value = "MUC 更新于 ${updatedAtEpochMillis.formatEpoch("HH:mm")}")
+
+/**
+ * MUC 登机口变更在卡片里是单独一行：列表页只说有变更，当前执勤页展开原值 → 新值与更新时间。
+ * 原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
+ */
+private fun gateChangeNotice(liveGate: String?, change: GateChangeRecord, full: Boolean) = DetailEntry(
+    kind = DetailKind.GATE_CHANGE,
+    value = if (full) {
+        "${gateChangeDisplayValue(liveGate, change)} · MUC 更新于 ${change.updatedAtEpochMillis.formatEpoch("HH:mm")}"
+    } else {
+        "MUC 已通知变更"
+    },
+    hasChange = true,
+)

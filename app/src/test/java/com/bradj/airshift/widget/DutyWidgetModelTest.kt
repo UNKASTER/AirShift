@@ -186,12 +186,12 @@ class DutyWidgetModelTest {
         assertEquals("MU5101", inbound.flight)
         // 进港：始发地中文名 + 三字码，行尾为到达站机位。
         assertEquals("北京首都 PEK", inbound.place)
-        assertEquals("机位 105", inbound.gate)
+        assertEquals("机位 105", inbound.stand)
         val outbound = page.legs[1]
         assertEquals(LegDirection.OUTBOUND, outbound.direction)
         // 出港：目的地中文名 + 三字码，行尾为出发机位（即使有登机口也用机位）。
         assertEquals("广州白云 CAN", outbound.place)
-        assertEquals("机位 358", outbound.gate)
+        assertEquals("机位 358", outbound.stand)
     }
 
     @Test
@@ -207,7 +207,7 @@ class DutyWidgetModelTest {
 
         val outbound = page.legs.single()
         assertEquals(LegDirection.OUTBOUND, outbound.direction)
-        assertEquals("机位 358", outbound.gate)
+        assertEquals("机位 358", outbound.stand)
     }
 
     @Test
@@ -227,7 +227,7 @@ class DutyWidgetModelTest {
         val page = (listOf(target).toWidgetPages(manuallyCompletedCount = 0, now = now).single() as WidgetPage.Duty)
         val outbound = page.legs.single()
         assertEquals("--", outbound.place)
-        assertEquals("--", outbound.gate)
+        assertEquals("--", outbound.stand)
         assertTrue(page.legs.all { it.flight.isNotBlank() })
     }
 }

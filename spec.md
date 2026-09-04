@@ -337,8 +337,8 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 显示问候、日期、当前机场、图片/Excel 导入、状态消息、解析/刷新警告和精确闹钟提示。
 - `PullToRefreshBox` 触发显式手动刷新；刷新中的视觉状态与一般工作状态分开。
 - 列出整份当前排班，而非只列刷新窗口。
-- 卡片展示任务类型、机号/机型、进出港航班、机场、计划/实时状态、登机口/机位和 VIP。
-- 特服只显示摘要角标；MUC 登机口/机位变化在该页只显示最小“变更”提示，完整新旧值在当前执勤页。
+- 卡片展示任务类型、机号/机型、进出港航班、机场、计划/实时状态、两侧机位和 VIP。登机口不在航线网格里显示：到达侧本无登机口字段，出发侧为保持一致也只显示机位（飞常准的 `BoardGate` 仍解析并保存，只作 MUC 变更提示的原值回退）。
+- 特服只显示摘要角标；MUC 机位变化在机位行上只显示最小“变更”提示，MUC 登机口变更以单独一行“登机口变更：MUC 已通知变更”提示，完整新旧值在当前执勤页。
 
 ### 6.3 当前执勤与时间线
 
@@ -347,7 +347,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 10 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 60 分钟。
 - 出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。
 - 倒计时每分钟更新；到位点已过时显示“应立即到位”。
-- 页面展示完整特服、行程取消以及 MUC 登机口/机位新旧值。
+- 页面展示完整特服、行程取消以及 MUC 机位新旧值；MUC 登机口变更是卡片内单独一行“登机口变更：原值 → 新值 · MUC 更新于 HH:mm”，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
 - “执勤完成”没有确认、撤销或回退；原子 guard 只防止旧页面和重复点击完成错误任务。
 - 尚未整体完成的过站任务始终按进港到位规则显示，即使进港已有实际时间而出港仍未完成。
 
@@ -628,7 +628,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.3）是审查计划的收尾：MUC 归并层去重与 JSON 辅助函数收敛，属纯重构，现有 JVM 用例即回归锁。执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin`：JVM 243 项通过、2 项条件跳过；detekt 首次运行在新代码上报出 3 条基线外发现（LongParameterList、NestedBlockDepth、ReturnCount），按规则改写为 `FacilityReducer` + `fold` 与单一 `when` 表达式后归零，说明门禁对新代码有效；Lint 基线外零新增；Android 测试源码编译通过，未在设备上重跑。
+本轮（0.10.4）把任务卡与小组件统一为只显示机位，MUC 登机口变更改为单独一行提示。`AssignmentLegsTest` 先按新规则改写并观察到 3 项失败，再改实现转绿；JVM 244 项通过、2 项条件跳过。detekt 与 Lint 各拦下一条新问题（`bindLeg` 参数过多因改名而脱离基线、小组件布局的硬编码 contentDescription），分别收成视图 id 组与字符串资源后归零。真机（vivo V2505A）跑小组件渲染/布局 3 项与当前执勤页 1 项通过；当前执勤页第 2 项 `importingANewNonEmptyRoster…` 在 `performScrollToNode` 处持续滚动直至 10 分钟超时，属本节此前记录的 vivo 滚动问题，与本次改动无关，未再复跑。注意：中断的 `connectedDebugAndroidTest` 会连主应用一起卸载，之后需 `installDebug` 重新安装。
+
+上一轮（0.10.3）是审查计划的收尾：MUC 归并层去重与 JSON 辅助函数收敛，属纯重构，现有 JVM 用例即回归锁。执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin`：JVM 243 项通过、2 项条件跳过；detekt 首次运行在新代码上报出 3 条基线外发现（LongParameterList、NestedBlockDepth、ReturnCount），按规则改写为 `FacilityReducer` + `fold` 与单一 `when` 表达式后归零，说明门禁对新代码有效；Lint 基线外零新增；Android 测试源码编译通过，未在设备上重跑。
 
 上一轮（0.10.2）是代码审查后的第四阶段（工程化）。守护进程首次自动下载 JDK 21 后执行 `:app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease`：detekt 对既有代码记录 466 条基线（MagicNumber 190、MaxLineLength 72、FunctionNaming 50、ReturnCount 47、LongMethod 26、LongParameterList 22、CyclomaticComplexMethod 14 等），基线之外零新增；Lint 基线 30 条，零新增；JVM 243 项通过、2 项条件跳过；`minifyReleaseWithR8` 在 `proguard-rules.pro` 的 keep 规则下一次通过，未产生 missing rules。Debug APK 251.9 MB，R8 后的未签名 release APK 216.9 MB：体积主要来自 OpenCV/ONNX Runtime 的多 ABI 原生库与 6 MB 模型，R8 只能压缩 Java/Kotlin 代码。真机（vivo V2505A，打开“后台弹出界面”权限后）：17 项 Compose 用例经标准 `connectedDebugAndroidTest` 全部通过，加上此前 44 项非 Compose 用例，本轮 Android 用例 57 项执行、0 失败、4 项按 `assumeFalse` 跳过。git 历史已用 `git filter-repo --replace-text` 改写，30 个真实姓名在全部历史中残留为 0，当前树哈希不变。
 
@@ -813,6 +815,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。
 - 0.10.3 收尾：MUC 四类记录实现 `TimestampedRecord` 并共用 `applyLatest`，登机口/机位候选循环合并为 `reduceFacilityChanges`，过期清理基于 `Fingerprinted` 统一保鲜指纹；排班 JSON 与 MUC JSON 共用 `data/JsonSupport.kt`；移除旧人工确认流程残留的 `suggestedFlights` 与 `ProcessedFingerprint.ignored`（写入停止，读取忽略）。行为不变，现有 JVM 用例即回归锁。
 - 0.10.2 代码审查后的第四阶段（工程化）：Android Lint 基线 + `warningsAsErrors`、detekt 1.23.8 默认规则集 + 基线、GitHub Actions（单元测试 / Lint / detekt）、release 开启 R8 与资源裁剪并补 POI/ONNX/OpenCV keep 规则；git 历史用 `git filter-repo --replace-text` 把真实姓名改写为合成名。
 - 0.10.1 任务卡去重：全部执勤页与当前执勤页共用 `AssignmentDetailCard`，详略由 `DetailLevel` 决定；航段显示内容由纯 Kotlin 的 `legUiModels` 算出（`FlightLegUiModel`），`FlightRow` 由 16 个参数收成一个模型；新增 6 项 JVM 用例锁定两种详略的差异。

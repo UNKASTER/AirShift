@@ -42,7 +42,7 @@ data class WidgetFlightLeg(
     val direction: LegDirection,
     val flight: String,
     val place: String,
-    val gate: String,
+    val stand: String,
 )
 
 /** 固定小组件只选择当前未完成执勤；无排班或全部完成时返回对应提示页。 */
@@ -107,8 +107,8 @@ private fun RosterAssignment.toWidgetPage(
                         direction = LegDirection.INBOUND,
                         flight = flight,
                         place = airportDisplay(origin, originCode),
-                        // 进港行尾显示到达站（本站）机位；到达侧无登机口字段。
-                        gate = arrivalStand?.let { "机位 $it" } ?: "--",
+                        // 进港行尾显示到达站（本站）机位。
+                        stand = arrivalStand?.let { "机位 $it" } ?: "--",
                     ),
                 )
             }
@@ -119,7 +119,7 @@ private fun RosterAssignment.toWidgetPage(
                         flight = flight,
                         place = airportDisplay(destination, destinationCode),
                         // 出港行尾同样显示本站机位（出发机位），与进港行保持一致。
-                        gate = departureStand?.let { "机位 $it" } ?: "--",
+                        stand = departureStand?.let { "机位 $it" } ?: "--",
                     ),
                 )
             }

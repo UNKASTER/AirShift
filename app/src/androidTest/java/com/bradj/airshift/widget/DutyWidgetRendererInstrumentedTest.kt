@@ -49,13 +49,13 @@ class DutyWidgetRendererInstrumentedTest {
         assertEquals(View.VISIBLE, root.findViewById<LinearLayout>(R.id.widget_leg_primary).visibility)
         assertEquals("MU2471", root.findViewById<TextView>(R.id.widget_leg_primary_flight).text.toString())
         assertEquals("成都天府 TFU", root.findViewById<TextView>(R.id.widget_leg_primary_place).text.toString())
-        assertEquals("机位 105", root.findViewById<TextView>(R.id.widget_leg_primary_gate).text.toString())
+        assertEquals("机位 105", root.findViewById<TextView>(R.id.widget_leg_primary_stand).text.toString())
 
         // 出港行：航班号 + 目的地中文名三字码 + 出发机位（与进港行一致，不用登机口）。
         assertEquals(View.VISIBLE, root.findViewById<LinearLayout>(R.id.widget_leg_secondary).visibility)
         assertEquals("MU2473", root.findViewById<TextView>(R.id.widget_leg_secondary_flight).text.toString())
         assertEquals("宁波栎社 NGB", root.findViewById<TextView>(R.id.widget_leg_secondary_place).text.toString())
-        assertEquals("机位 352", root.findViewById<TextView>(R.id.widget_leg_secondary_gate).text.toString())
+        assertEquals("机位 352", root.findViewById<TextView>(R.id.widget_leg_secondary_stand).text.toString())
 
         assertEquals(View.VISIBLE, root.findViewById<View>(R.id.widget_divider).visibility)
     }

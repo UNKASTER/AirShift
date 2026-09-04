@@ -20,11 +20,10 @@ import java.util.Locale
  * 不再按中文标签字符串分派。
  */
 enum class DetailKind(val label: String, val clockMeta: Boolean = false) {
-    GATE("登机口"),
     STAND("机位"),
     GATE_CLOSED("登机口关闭", clockMeta = true),
     OFF_BLOCK("实际离位", clockMeta = true),
-    GATE_CHANGE_SOURCE("登机口变更"),
+    GATE_CHANGE("登机口变更"),
     STAND_CHANGE_SOURCE("机位变更"),
     BOARDING_START("预计登机开始"),
     BOARDING_END("预计登机口关闭"),

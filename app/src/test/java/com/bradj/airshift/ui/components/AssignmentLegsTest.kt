@@ -73,20 +73,37 @@ class AssignmentLegsTest {
     }
 
     @Test
+    fun `every leg side lists only the stand`() {
+        // 登机口不再出现在航线网格里：进港到达侧本来就没有登机口字段，出港侧统一改为只显示机位。
+        val legs = turnaround.legUiModels(muc, DetailLevel.FULL)
+        legs.forEach { leg ->
+            assertEquals(listOf(DetailKind.STAND), leg.originDetails.map { it.kind })
+            assertEquals(listOf(DetailKind.STAND), leg.destinationDetails.map { it.kind })
+        }
+        assertEquals("101", legs[0].originDetails.single().value)
+        assertEquals("358", legs[1].originDetails.single().value)
+        assertEquals("C3", legs[1].destinationDetails.single().value)
+    }
+
+    @Test
     fun `the summary level only flags a change without revealing the new value`() {
         val legs = turnaround.legUiModels(muc, DetailLevel.SUMMARY)
         val inbound = legs[0]
         val outbound = legs[1]
 
-        val outboundGate = outbound.originDetails.single { it.kind == DetailKind.GATE }
-        assertEquals("D64", outboundGate.value)
-        assertTrue(outboundGate.hasChange)
+        // MUC 登机口变更在卡片里是单独一行提示；列表页只说有变更，不展开新旧值。
+        val gateNotice = outbound.details.single { it.kind == DetailKind.GATE_CHANGE }
+        assertEquals("MUC 已通知变更", gateNotice.value)
+        assertTrue(gateNotice.hasChange)
         val inboundStand = inbound.destinationDetails.single { it.kind == DetailKind.STAND }
         assertEquals("105", inboundStand.value)
         assertTrue(inboundStand.hasChange)
-        assertTrue(outbound.details.none { it.kind == DetailKind.GATE_CHANGE_SOURCE })
         assertTrue(outbound.details.none { it.kind == DetailKind.BOARDING_START })
-        assertEquals(listOf(DetailKind.GATE_CLOSED, DetailKind.OFF_BLOCK), outbound.details.map { it.kind })
+        assertEquals(
+            listOf(DetailKind.GATE_CHANGE, DetailKind.GATE_CLOSED, DetailKind.OFF_BLOCK),
+            outbound.details.map { it.kind },
+        )
+        assertTrue(inbound.details.none { it.kind == DetailKind.GATE_CHANGE })
         // 列表页只在标题处打“特服”角标，不展开明细。
         assertTrue(outbound.hasSpecialServices)
         assertTrue(outbound.specialServices.isEmpty())
@@ -98,13 +115,15 @@ class AssignmentLegsTest {
         val inbound = legs[0]
         val outbound = legs[1]
 
-        assertEquals("D64 → D65", outbound.originDetails.single { it.kind == DetailKind.GATE }.value)
+        val gateNotice = outbound.details.single { it.kind == DetailKind.GATE_CHANGE }
+        assertTrue(gateNotice.value, gateNotice.value.startsWith("D64 → D65 · MUC 更新于 "))
+        assertTrue(gateNotice.hasChange)
         assertEquals("105 → 107", inbound.destinationDetails.single { it.kind == DetailKind.STAND }.value)
         assertEquals(
             listOf(
                 DetailKind.BOARDING_START,
                 DetailKind.BOARDING_END,
-                DetailKind.GATE_CHANGE_SOURCE,
+                DetailKind.GATE_CHANGE,
                 DetailKind.GATE_CLOSED,
                 DetailKind.OFF_BLOCK,
             ),
@@ -149,8 +168,8 @@ class AssignmentLegsTest {
             standChanges = listOf(standChange.copy(operationDate = date.plusDays(1))),
         )
         val legs = turnaround.legUiModels(staleMuc, DetailLevel.FULL)
-        assertEquals("D64", legs[1].originDetails.single { it.kind == DetailKind.GATE }.value)
-        assertFalse(legs[1].originDetails.single { it.kind == DetailKind.GATE }.hasChange)
+        assertTrue(legs[1].details.none { it.kind == DetailKind.GATE_CHANGE })
+        assertFalse(legs[1].originDetails.single { it.kind == DetailKind.STAND }.hasChange)
         assertEquals("105", legs[0].destinationDetails.single { it.kind == DetailKind.STAND }.value)
     }
 }
