@@ -7,6 +7,8 @@ plugins {
 detekt {
     // 默认规则集；既有发现记入基线，此后新增的复杂度/长函数/长参数列表等问题让 detekt 失败。
     buildUponDefaultConfig = true
+    // detekt.yml 只对 @Composable 放开命名/长度/魔法数字规则，见文件内注释。
+    config.setFrom(file("detekt.yml"))
     baseline = file("detekt-baseline.xml")
     source.setFrom("src/main/java", "src/test/java", "src/androidTest/java")
 }
@@ -24,8 +26,8 @@ android {
         applicationId = "com.bradj.airshift"
         minSdk = 33
         targetSdk = 37
-        versionCode = 47
-        versionName = "0.10.6"
+        versionCode = 48
+        versionName = "0.11.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -31,3 +31,12 @@ SDK 源文件保留了上游版权与许可证头。模型使用 PaddleOCR 官�
 - 许可证：[Apache License 2.0](https://github.com/apache/poi/blob/trunk/LICENSE)
 
 应用使用 Apache POI 的 HSSF 事件模型读取旧版 BIFF `.xls` 工作簿，不解析或持久化其中的图片对象。
+
+## Barlow 字体
+
+- 来源：[jpt/barlow](https://github.com/jpt/barlow)
+- 文件位置：`app/src/main/res/font/barlow_*.ttf`（Barlow Regular/Medium/SemiBold/Bold，Barlow Semi Condensed SemiBold/Bold）
+- Copyright 2017 The Barlow Project Authors
+- 许可证：[SIL Open Font License 1.1](https://github.com/jpt/barlow/blob/main/OFL.txt)
+
+应用内所有 Latin 字母与数字使用 Barlow；板面大数字、时钟、航班号与机位号使用 Barlow Semi Condensed，并启用 tabular figures。汉字仍由系统字体渲染。

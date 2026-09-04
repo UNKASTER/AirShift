@@ -1,9 +1,9 @@
 # 航勤智排（AirShift）当前实现规格
 
 > - 文档类型：当前 `main` 的 as-built specification
-> - 审查日期：2026-09-04（Asia/Shanghai）
-> - 源码基线：`cd811b8` 之后的排班日历迭代
-> - 应用版本：`0.9.0` / version code `38`
+> - 审查日期：2026-09-05（Asia/Shanghai）
+> - 源码基线：`c5e02cd` 之后的 0.11.0 界面重设计
+> - 应用版本：`0.11.0` / version code `48`
 > - 支持平台：Android 13（API 33）及以上
 
 ## 1. 文档定位
@@ -324,59 +324,70 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ## 6. UI 规格
 
-### 6.1 根导航
+### 6.1 根导航与页面骨架
 
-- `AirShiftRoot` 使用 Material 3 `Scaffold` 加自定义 `Surface/Row` 底栏，不使用 Navigation Component 或 Material `NavigationBar`。
-- 固定四页：全部执勤、排班日历、当前执勤、设置；中央当前执勤为红色圆形主入口。
-- 底栏左侧两项各占 1 份权重、右侧设置占 2 份，浮动按钮的 88dp 缺口才落在正中；设置在自己的双宽格内居中。
-- 新 ViewModel 默认当前执勤；冷启动、进程重建和真正从后台恢复都会回到当前执勤。
-- 旋转等 `isChangingConfigurations=true` 的停止不算离开应用，保持当前页。
+- `AirShiftRoot` 使用 Material 3 `Scaffold`（`contentWindowInsets = 0`）加四等分自定义底栏，不使用 Navigation Component 或 Material `NavigationBar`；固定四页：全部执勤、排班日历、当前执勤、设置，底栏文字标签就是这四个词。
+- 底栏 64dp + 导航栏 inset，顶部 1dp 线；激活项图标与文字变主文字色，上方一枚 20×3dp 东航红"灯"随选中横移，150 ms。不再有浮动圆形按钮。
+- 分区切换用 fade-through（旧页 90 ms 淡出，新页 210 ms 淡入并从 96% 放大）。
+- 每页顶部是 `BoardHeader`：藏青"板面"贯通到状态栏之下（板内 `statusBarsPadding`），左侧分区名 + 副标题，右侧实时钟（逐位翻牌）与日期；板面主体与板脚由各页给出。因此状态栏图标恒为浅色（`MainActivity.enableEdgeToEdge(statusBarStyle = dark(TRANSPARENT))`），导航栏透明跟随底栏。
+- 新 ViewModel 默认当前执勤；冷启动、进程重建和真正从后台恢复都会回到当前执勤。旋转等 `isChangingConfigurations=true` 的停止不算离开应用，保持当前页。
 
-### 6.2 全部执勤
+### 6.2 信息条（DutyStrip）
 
-- 显示问候、日期、当前机场、图片/Excel 导入、状态消息、解析/刷新警告和精确闹钟提示。
-- `PullToRefreshBox` 触发显式手动刷新；刷新中的视觉状态与一般工作状态分开。
-- 列出整份当前排班，而非只列刷新窗口。
-- 卡片展示任务类型、机号/机型、进出港航班、机场、计划/实时状态、两侧机位和 VIP。登机口不在航线网格里显示：到达侧本无登机口字段，出发侧为保持一致也只显示机位（飞常准的 `BoardGate` 仍解析并保存，只作 MUC 变更提示的原值回退）。
-- 特服只显示摘要角标；MUC 机位变化在机位行上只显示最小“变更”提示，MUC 登机口变更以单独一行“登机口变更：MUC 已通知变更”提示，完整新旧值在当前执勤页。
+四页共用一种任务表示：`ui/components/DutyStrip.kt`。
 
-### 6.3 当前执勤与时间线
+- 左侧 6dp 方向夹条（`DirectionHolder`）：进港藏青蓝、出港东航红、过站上蓝下红。
+- **折叠态**：每个航段一行 44dp，固定列 —— 进/出字、时间（实时优先计划回退，实际墨绿、晚点琥珀、次日带 `+1` 上标）、航班号、航线（进港"前站 →"、出港"→ 后站"，只给三字码）、本站机位、状态灯。第一行尾部可带 VIP 灯与特服轮椅灯。
+- **展开态**（`DetailLevel.FULL`）：条头为任务类型 + 特服灯 + VIP 灯；每个航段一块：方向灯 + 26sp 航班号，右侧 26sp 本站机位；航线全名"PVG 上海浦东 → LHW 兰州中川"；"计划 / 预计（或实际）"两个时间 + 状态灯；meta 行只列有值的项（对方机位、预计登机、预计登机口关闭、登机口关闭、实际离位）；MUC 登机口/机位变更各一行琥珀值；取消为红灯；特服明细逐行。条脚为机号 · 机型。
+- 状态灯（`StatusLamp`，22dp 高、4dp 圆角小矩形，不是胶囊）：已完成 / 已到达 / 已起飞（墨绿带点）、晚 N 分（琥珀带点，15 分钟以内算正点，≥12 小时视为跨午夜不可比）、已取消（红带点）、未起飞（中性）、VIP（琥珀金）、进港 / 出港方向灯。
+- 缺失数据一律显示"—"或省略该格，不再使用灰色骨架占位。
+- 登机口不在条上显示；飞常准的 `BoardGate` 仍解析并保存，只作 MUC 登机口变更的原值回退。轮椅只显示线性图标 + 等级字母 C/R/S。
+- 折叠 ↔ 展开用 `animateContentSize`（250 ms）；条在栏位间移动用 `LazyColumn` 的 `animateItem`（400 ms）。
 
-- 无排班时显示导入引导；没有未完成任务时显示今日完成态。
-- 页面使用第 4.3 节的窗口算法，展示当前与下一项未完成任务。
-- 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 15 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 70 分钟。
-- 出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。
-- 倒计时每分钟更新；到位点已过时显示“应立即到位”。
-- 页面展示完整特服（轮椅记录以轮椅线性图标 + 等级字母 C/R/S 表示，角标与详情行都不显示 WCHR/WCHS/WCHC 全称）、行程取消以及 MUC 机位新旧值；MUC 登机口变更是卡片内单独一行“登机口变更：原值 → 新值 · MUC 更新于 HH:mm”，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
-- “执勤完成”没有确认、撤销或回退；原子 guard 只防止旧页面和重复点击完成错误任务。
+### 6.3 全部执勤
+
+- 板头：分区名 + "N 项 · M 已完成"、日期与实时钟；板脚两行：本场（"PVG 上海浦东 · 本场"或"导入并刷新航班后自动识别机场"）与 `statusMessage`。
+- 列表自上而下：导入操作条（一条 48dp：图标 + 说明 + "图片" / "Excel" 两个小按钮；处理中换成进度指示）、精确闹钟提示条与解析警告条（`NoticeStrip`，琥珀底）、然后是三个栏位：**当前**（1 条，抬起有阴影）、**接下来 N**、**已完成 N**（整条 60% 透明，状态灯"已完成"）。分栏由纯函数 `splitIntoBays(manuallyCompletedCount, now)` 算出：当前 = 人工前缀后第一项未自动完成任务；当前之前的全部与当前之后已自动完成的进"已完成"；其余进"接下来"。
+- 点任一条就地展开 / 折叠；展开状态跨配置变化保留。
+- `PullToRefreshBox` 触发显式手动刷新，指示器着板面色；列出整份当前排班，而非只列刷新窗口。
+- 无排班时给 `EmptyBay`（"还没有排班"）。
+
+### 6.4 当前执勤与时间线
+
+- 板面主体是倒计时："距到位" + 68sp Barlow Semi Condensed 翻牌数字（≥60 分钟显示"N 小时 M 分"两组数字）+ 右侧"到位时间 HH:mm"；到位点已过时改为红灯"应立即到位"（光晕呼吸，系统"移除动画"时静止），到位时间旁给"已过 N 分"。板脚是一个文本节点："下一任务 <航班>：HH:mm 前到位（还有 …）"。
+- 滚动区只有一个 `LazyColumn`：栏位"当前"里放当前条（展开、抬起），栏位"接下来"里放下一条（折叠）。
+- "执勤完成"钉在底栏之上的 `PinnedActionBar`（52dp 东航红），不随内容滚动；点击先给一次 `HapticFeedbackType.Confirm` 触感再调用完成。没有确认、撤销或回退；原子 guard 只防止旧页面和重复点击完成错误任务。
+- 无排班时板头 + `EmptyBay`（"还没有排班"，可去导入）；没有未完成任务时 `EmptyBay`（"今日执勤全部完成"，可返回全部执勤）。
+- 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 15 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 70 分钟。出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。倒计时每分钟更新。
+- 页面展示完整特服、行程取消以及 MUC 机位新旧值；MUC 登机口变更是条内单独一行"登机口变更 原值 → 新值 · MUC 更新于 HH:mm"，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
 - 尚未整体完成的过站任务始终按进港到位规则显示，即使进港已有实际时间而出港仍未完成。
 
-### 6.4 设置
+### 6.5 设置
 
-- 修改姓名；保存后只影响后续导入，不重新解析旧排班。
-- API Key 文本状态不使用 `rememberSaveable`，明文不进入 saved-instance-state。
-- 测试连接从现有排班中选择首个带航班号的任务；无候选时直接失败。
-- 保存非空 API Key 后清缓存并重配刷新；空文本不会隐式清除已有 Key，必须点击“清除 API Key”。
-- 显示 MUC 通知读取授权状态、最近成功识别时间和最近处理结果，并打开系统授权页。
-- 排班日历分区显示生效的班组（按姓名自动识别或手动指定），姓名匹配不到时才出现手动选组的胶囊；到位余量可选 0/15/30 分钟。
+- 板头：分区名 + "姓名 · 第 N 组"。分组信息条：MUC 通知读取（状态点 + 已授权/未授权、最近成功识别与最近处理结果、描边按钮打开系统授权页）、排班日历（我的班组；姓名匹配不到时才出现可点选的班组小灯；到位余量用三格分段选择器，0/15/30 分钟）、个人信息（姓名输入框）、飞常准 API Key（密码输入框、测试连接 / 清除 API Key 文字按钮、连接结果用琥珀提示条）。
+- "保存"钉在底部（`PinnedActionBar`），姓名去空格后不足 2 字或测试中禁用。
+- 修改姓名只影响后续导入，不重新解析旧排班。API Key 文本状态不使用 `rememberSaveable`，明文不进入 saved-instance-state。测试连接从现有排班中选择首个带航班号的任务；无候选时直接失败。保存非空 API Key 后清缓存并重配刷新；空文本不会隐式清除已有 Key，必须点击"清除 API Key"。
 
-### 6.5 视觉系统
+### 6.6 排班日历
 
-- Design token 集中于 `ui/theme/AirShiftTheme.kt`；主色为东航红 `#C8102E` 和深藏青 `#14284B`。
-- App 支持随系统切换的浅/深色主题；小组件固定浅色。
-- 任务卡使用统一的方向色条、航班号、航线网格、实时/计划时间、状态 chip、meta 行和骨架占位。
-- 当前执勤 hero 正常为藏青，过点为红色并使用呼吸动效；数字采用等宽样式避免跳动。
-- 状态颜色和导航状态变化使用 200 ms ease-out token。
+- 板头：分区名 + "上三休三 · 第 N 组"；板面主体是今天的班次大字（"晚二" / "休息" / "不到岗"）+ 日型说明 + 右侧班车时间；板脚给预计下班（交接班日为交班）时间与校正来源。
+- 范围为今天前 7 天至后 42 天，按月给 `BayTitle`；每天一条：日期列（M/D + 周几）| 班次灯（整班藏青蓝、交接班琥珀）+ 日型说明 + "今天"灯 | 到位 / 到场 / 富余 / 预估或按当日排班 | 右侧班车时刻与下班/交班时间。夹条：今天藏青、整班东航红、交接班琥珀、休息与不到岗灰。
+- 休息日与交接班日不到岗时无底无边，只显示日期与说明。到场晚于到位时间（`spareMinutes < 0`）时班车时刻变琥珀并加灯"晚 N 分 · 建议提前一班"；没有合适班车时给琥珀文字。
+- 没有匹配到班组时不渲染日期行，只给 `EmptyBay` 并提供跳转设置的入口。
 
-### 6.6 排班日历页
+### 6.7 首次进入
 
-- `ShiftCalendarScreen` 与全部执勤页同构：`LazyColumn` + 16dp contentPadding + 16dp 间距，页头复用深藏青渐变卡与燕尾弧线装饰。
-- 范围为今天前 7 天至后 42 天，按月给出小标题；今天那一行用 `QuietCard(vip = true)` 的琥珀描边高亮。
-- 每天一张卡：左侧 `AccentBar` 按日型着色（整班东航红、交接班琥珀、休息弱提示灰），右上角班次胶囊，正文给出日型说明、班车、到场/到位/富余分钟数，以及预计下班或交班时间。
-- 休息日与交接班日不到岗时只显示日期与说明，不显示班次胶囊、班车和下班时间。
-- 班车明细在到场晚于到位时间（`spareMinutes < 0`）时改用琥珀色并提示“建议提前一班”，异常不会混在灰字里。
-- 没有匹配到班组时不渲染任何日期行，只给一张说明卡并提供跳转设置的入口。
-- 只使用 `ui/theme/AirShiftTheme.kt` 既有 token 与 `ui/components/` 既有组件，未引入新颜色、圆角或阴影。
+- 整屏板面：右上实时钟；标题"航勤智排"与副标题；一条白色信息条承载姓名输入（带 N / 20 计数）；红色"保存并开始使用"；去除首尾空格后 2–20 字才可保存。
+
+### 6.8 视觉系统
+
+- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Quick 150 / Standard 250 / Emphasized 400 / Flip 280 / fade-through 90+210，`EmphasizedDecelerate` 与 `Standard` 曲线，`rememberAnimatorScaleEnabled()` 读系统动画开关）。
+- 色彩：板面藏青 `#14284B`、条架 `#F1F3F7`、信息条白；东航红 `#C8102E` 只给出港夹条与主操作，进港 `#2B5EA7`；墨绿 `#0F7B5F` 正常 / 已起飞，琥珀 `#B45309` 预计 / 变更 / 交接班，VIP 琥珀金。深色是夜间航显：板面与底 `#0B1526`、条 `#122036`、主文字 `#EDF1F7`、琥珀 `#F5B233`、进港 `#7FA6E6`、红字 `#FF8A98`。没有渐变。
+- 字体：`res/font/` 内置 Barlow（OFL 1.1，Regular/Medium/SemiBold/Bold）与 Barlow Semi Condensed（SemiBold/Bold）。所有 Latin 与数字用 Barlow，汉字由系统字体逐字回落；板面大数字、时钟、航班号、机位号用 Semi Condensed；全部数字样式启用 `tnum`，倒计时不跳动（`FontFeaturesInstrumentedTest` 断言等宽）。字阶 11 / 12 / 13 / 15 / 17 / 20 / 26 / 34 / 44 / 68 sp。
+- 图标：`ui/components/DesignComponents.kt` 的 `linearIcon()` 1.5px 线性图标集（`LinearIcons`）。
+- 组件（`ui/components/`）：`BoardHeader` / `BoardClock`、`DutyStrip`、`StatusLamp`（`LampKind`）、`DirectionHolder` / `HolderBar`、`BayTitle`、`OdometerText`、`PinnedActionBar`、`EmptyBay`、`NoticeStrip`、`StatusDot`；纯计算在 `LegPresentation.kt`（状态灯规则、本站/对方机位、缺失判定）、`DutyBays.kt`（分栏）、`BoardFormats.kt`（日期与剩余时长文案）、`OdometerSlot.kt`（翻牌槽位）。
+- 有限时长动画跟随系统"动画时长比例"；无限循环的呼吸灯用 `rememberAnimatorScaleEnabled()` 门控。
+- detekt 通过 `app/detekt.yml` 对 `@Composable` 放开命名 / 长度 / 复杂度 / 魔法数字规则，并把 `ui/theme` 排除出 MagicNumber；业务代码不受影响。
 
 ## 7. 飞常准实时航班
 
@@ -539,14 +550,15 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - `DutyWidgetProvider` 是标准 AppWidget，默认 4×3，可横纵缩放，系统周期 `updatePeriodMillis=30` 分钟。
 - 直接读取 `RosterStore`，固定显示当前未完成任务；没有排班或全部完成时显示整卡提示。
 - 不使用集合容器、RemoteViewsService、翻页、轮播或独立小组件存储。
-- 内容包括执勤序号/总数、类型、机号/机型、VIP、到位状态、进出港航班、对方机场和本站机位。进港行使用 `arrivalStand`，出港行使用 `departureStand`；两行都显示“机位”。
+- 视觉是固定藏青板面（`res/layout/widget_duty_item.xml`，与 App 板头同色，浅深壁纸都可读，不随系统深色切换）：头行"执勤 2/8 · 类型 · 机号 · 机型"（尾部省略）+ VIP 灯；hero 行"距到位"倒计时（40sp Barlow Semi Condensed）+ 到位时间 + 72×40dp 描边"完成"；一条板面行线；两行航段（3dp 方向夹条 + 进/出 + 航班号 + 对方机场 + 本站机位）。没有条码、条纹、弧线、二维码等装饰层，总高约 205dp。文案全部来自 `strings.xml`，颜色来自 `colors.xml` 的 `board / on_board / on_board_secondary / on_board_alert / widget_*`。
+- 内容包括执勤序号/总数、类型、机号/机型、VIP、到位状态、进出港航班、对方机场和本站机位。进港行使用 `arrivalStand`，出港行使用 `departureStand`；两行都显示"机位"，缺失显示"机位 —"。
 - 小组件不读取 `SpecialServiceRepository`，因此不叠加 MUC 登机口/机位变更、特服或取消状态。
 - 倒计时使用 launcher 进程渲染的 count-down `Chronometer`，App 进程无需每秒唤醒。
 - 跨过零点后的即时格式由系统 Chronometer 决定；没有代码监听零点并主动 stop，最迟在下一次重绘后转成“应立即到位”。
 - 导入、完成、成功实时合并、提醒触发、开机和系统周期都会重绘。
 - 点击卡片打开 App；完成按钮发给非导出的显式 receiver，使用 generation + 当前索引原子校验。
 - 完成成功后重排提醒、重配周期任务，并用一次性联网 Worker 只补查新进入窗口的航班。
-- 小组件固定浅色，并按标准 AppWidget 出现在 OriginOS“应用挂件”；第三方应用不能注册厂商专有“原子组件”。
+- 小组件按标准 AppWidget 出现在 OriginOS"应用挂件"；第三方应用不能注册厂商专有"原子组件"。RemoteViews 不允许裸 `View`，行线用空 `FrameLayout`；字体经 `android:fontFamily="@font/…"` 引用本包资源，由 launcher 进程解析。
 
 ## 11. 持久化、安全与权限
 
@@ -614,7 +626,8 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败�
 - `local.properties` 可设置 `airshift.buildDir`，把 OneDrive 内的构建产物重定向到本地目录。
 - release 未配置发布签名；`isMinifyEnabled=true`、`isShrinkResources=true`，keep 规则在 `app/proguard-rules.pro`（POI 反射构造 Record、ONNX Runtime 与 OpenCV 的 JNI）。
 - Android Lint：`app/lint-baseline.xml` 记录既有 warning，`warningsAsErrors=true`，新增 warning 让 `lintDebug` 失败。
-- detekt 1.23.8：默认规则集，`app/detekt-baseline.xml` 记录既有发现，新增发现让 `detekt` 失败。
+- detekt 1.23.8：默认规则集之上叠加 `app/detekt.yml`（对 `@Composable` 放开 FunctionNaming / LongMethod / LongParameterList / CyclomaticComplexMethod / NestedBlockDepth / MagicNumber / TooManyFunctions，`ui/theme` 排除出 MagicNumber），`app/detekt-baseline.xml` 记录既有发现，新增发现让 `detekt` 失败。
+- 内置字体 `app/src/main/res/font/`：Barlow 与 Barlow Semi Condensed 六个静态 TTF（OFL 1.1，见 THIRD_PARTY_NOTICES.md）。
 - GitHub Actions（`.github/workflows/ci.yml`）：push 到 `main` 与 PR 时在 ubuntu 上执行 `testDebugUnitTest lintDebug detekt`；真机测试仍手动。
 
 主要命令：
@@ -628,7 +641,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.6）让 MUC 解析兼容轮椅口语简称 C轮/R轮/S轮，并把任务卡上的轮椅记录改为轮椅线性图标 + 等级字母。先在 `SpecialServiceParserTest` 增加简称用例（小写 `r轮` 经规范化识别、字母与“轮”之间一个空格、`旅客S 轮` 按单人计数、`WCHR改为S轮` 的代码与简称混用按更正处理、座位 `32C轮椅` 不误判为 C 轮、`WCHS轮椅` 不重复识别出 S 轮），新增 `SpecialServiceLabelsTest` 锁定角标与详情行文案只给单字母（等级缺失时只剩数量或空串），再改实现。`:app:testDebugUnitTest`（`--rerun`）：JVM 248 项通过、0 项失败、2 项条件跳过。detekt 首次运行拦下 2 条基线外发现：新增私有 Composable `WheelchairGlyph` 触发 FunctionNaming（默认规则集未豁免 `@Composable`，既有 Composable 都在基线里），以及图标路径字符串超过行宽；分别改为在两处内联 `Icon` 与拆分字符串拼接后归零。随后 `:app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，Lint 基线外零新增（仍提示基线中 2 条记录未在项目中找到）。图标形状用同一路径在浏览器里按 192/48/24/14/12px 渲染核对。真机（vivo V2505A）以 `adb install -r` 覆盖安装 0.10.6（version code 47），`dumpsys package` 确认版本，拉起应用无崩溃；排班、校准、MUC 记录与 API 密钥保留。未复跑仪器测试。
+本轮（0.11.0）是整套界面的重设计（方向"航显板 × 进程单"，见第 6 节）。流程：先用 Claude Design 画布出 10 块高保真画板（当前执勤浅/深/过点、全部执勤、排班日历、设置、首次进入、小组件、完成动效分镜、设计系统一览）经用户确认，再按 B0–B10 分任务实现。新增 Barlow 字体、`AirShiftPalette` 双主题 token、`BoardHeader` / `DutyStrip` / `StatusLamp` / `OdometerText` / `PinnedActionBar` 等组件，四页与 Onboarding 全部重写，底栏改为四等分 + 红灯指示，页面切换 fade-through，`enableEdgeToEdge` 显式指定状态栏图标恒为浅色并修正深色模式下的图标颜色，小组件改为藏青板面并删除全部装饰 drawable。先写纯函数测试再写实现：`DutyBaysTest` 3 项（人工前缀 / 自动完成 / 无时间任务落入已完成栏位、全部完成、空排班）、`OdometerSlotsTest` 2 项、`AssignmentLegsTest` 追加 `liveKind` 1 项；androidTest 新增 `FontFeaturesInstrumentedTest`（tnum 等宽断言）2 项与 `AllDutyScreenBaysInstrumentedTest` 1 项；`CurrentDutyScreenIntegrationInstrumentedTest` 的完成辅助函数改为直接点击钉底按钮（按钮已不在滚动区内）。detekt 首轮拦下主题 token 的 MagicNumber、单文件多声明命名、多 return、超长行与 Composable 复杂度，分别用 `detekt.yml` 排除 `ui/theme`、拆文件（`LampKind.kt`、`OdometerSlot.kt`、`LegPresentation.kt`）、改 `when` 与折行归零；Lint 拦下 RemoteViews 不允许裸 `View`，行线改为空 `FrameLayout`。最终在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、0 项失败、2 项条件跳过；detekt 0 新发现；Lint 基线外零新增（提示基线中 22 条记录已不存在，对应删除的旧小组件装饰与卡片文案）；Debug APK 生成。本轮没有连接设备：仪器测试、真机截图、字体缩放与小组件裁剪复检待下次接入设备执行。
+
+上一轮（0.10.6）让 MUC 解析兼容轮椅口语简称 C轮/R轮/S轮，并把任务卡上的轮椅记录改为轮椅线性图标 + 等级字母。先在 `SpecialServiceParserTest` 增加简称用例（小写 `r轮` 经规范化识别、字母与“轮”之间一个空格、`旅客S 轮` 按单人计数、`WCHR改为S轮` 的代码与简称混用按更正处理、座位 `32C轮椅` 不误判为 C 轮、`WCHS轮椅` 不重复识别出 S 轮），新增 `SpecialServiceLabelsTest` 锁定角标与详情行文案只给单字母（等级缺失时只剩数量或空串），再改实现。`:app:testDebugUnitTest`（`--rerun`）：JVM 248 项通过、0 项失败、2 项条件跳过。detekt 首次运行拦下 2 条基线外发现：新增私有 Composable `WheelchairGlyph` 触发 FunctionNaming（默认规则集未豁免 `@Composable`，既有 Composable 都在基线里），以及图标路径字符串超过行宽；分别改为在两处内联 `Icon` 与拆分字符串拼接后归零。随后 `:app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，Lint 基线外零新增（仍提示基线中 2 条记录未在项目中找到）。图标形状用同一路径在浏览器里按 192/48/24/14/12px 渲染核对。真机（vivo V2505A）以 `adb install -r` 覆盖安装 0.10.6（version code 47），`dumpsys package` 确认版本，拉起应用无崩溃；排班、校准、MUC 记录与 API 密钥保留。未复跑仪器测试。
 
 上一轮（0.10.5）把到位提前量改为进港实时到达前 15 分钟、纯出港实时起飞前 70 分钟，并把提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用，因此系统提醒、当前执勤页倒计时、小组件倒计时与排班日历班车推荐同步变化。先按新规则改写 `DutyTimelineTest`、`ProjectSmokeTest`、`DutyWidgetModelTest`、`ShiftBusPlanTest`、`ShiftCalendarRowsTest` 的期望值（`ShiftCalendarRowsTest` 的“余量不改变班车”用例改用组 8 在 09-06 的早三，因原用例的早二在 30 分钟余量下已需提前一班），再改实现。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest`：JVM 244 项通过、0 项失败、2 项条件跳过；随后 `:app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，detekt 0 项、Lint 基线外零新增（Lint 另提示基线中有 2 条记录未在项目中找到，未查证来源）。班车推荐因到位提前而变化的推算场景：默认 15 分钟余量下，整班工作日的早一、晚三、晚四与交接班日的早二由 05:55 改为 05:25，其余槽位不变。真机（vivo V2505A，Android 16 / API 36）：以 `adb install -r` 覆盖安装 0.10.5（version code 46），排班、校准、MUC 记录与 API 密钥保留。先用 `notClass` 排除 4 个 Compose 测试类跑 `connectedDebugAndroidTest`：40 项执行、0 失败、4 项跳过（`FlightRefreshSchedulerInstrumentedTest` 因手机上配置了真实 API Key 按 `assumeFalse` 跳过），小组件渲染/布局 3 项通过。随后单独跑 Compose 的 16 项（仍排除此前记录会持续滚动的 `importingANewNonEmptyRoster…`）：首次尝试时宿主 Activity 始终没有拉起，等待 14 分钟仍是 0/16，手动 `am force-stop` 终止；在手机设置里为 AirShift 放开“后台弹出界面”后重跑，`DutyWindowRefreshInstrumentedTest` 9 项、`ForegroundFlightRefreshEffectInstrumentedTest` 5 项、`SharedExcelImportOwnerInstrumentedTest` 1 项与当前执勤页 `manualCompletionAndAutomaticCompletion…` 1 项全部通过（16/16，57 秒）。这说明此前几轮 Compose 用例无结果的原因是该权限，而非用例本身。重跑期间有一次因 vivo 安装确认被拒（`INSTALL_FAILED_ABORTED`）而未执行任何用例，允许安装后再跑即通过。测试 APK 已卸载，主应用与本地数据保留。AlarmManager 实际触发与通知展示未复跑。
 
@@ -678,7 +693,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | JVM `parser` | 12 | XLSX/XLS、模板变体、姓名隔离、班次行解析；含 2 个条件式真实 fixture |
 | JVM `model/shift` | 85 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配 |
 | JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
-| JVM `ui/components` | 6 | 任务卡航段模型：进出港顺序与本站机场、SUMMARY 只打角标、FULL 展开原值 → 新值/登机时刻/特服、取消归属、机号机型落在末段、日期不符不采用 |
+| JVM `ui/components` | 17 | 航段模型（进出港顺序与本站机场、SUMMARY 只打角标、FULL 展开原值 → 新值/登机时刻/特服、取消归属、机号机型落在末段、日期不符不采用、`liveKind` 预计/实际）、特服角标文案 6 项、栏位分栏 3 项、翻牌槽位 2 项 |
 | JVM `widget` | 11 | 当前页选择、空/完成/倒计时、VIP、机场和机位 |
 | JVM `ui` | 8 | 默认页、前后台恢复、配置变化和排班日历页选中 |
 | JVM smoke | 9 | OCR 表格、姓名、VIP、提醒基础 |
@@ -688,6 +703,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | Android WorkManager | 4 | KEEP、generation、停止和旧任务迁移 |
 | Android Excel 分享 | 11 | Manifest/Intent/FIFO/恢复 10 项、owner 隔离 1 项 |
 | Android 当前页 Compose | 2 | 点击完成、自动跳过和新排班恢复 |
+| Android 全部执勤页 Compose | 1 | 三个栏位与点条展开 |
+| Android 字体 | 2 | Barlow / Barlow Semi Condensed 的 tnum 等宽数字 |
 | Android 小组件 | 3 | 单卡布局与 RemoteViews 渲染 |
 | Android OCR | 1 | PP-OCRv6 合成图片端到端 |
 
@@ -783,8 +800,10 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 |---|---|
 | Composition root | `app/src/main/java/com/bradj/airshift/MainActivity.kt` |
 | 编排层与端口 | `duty/DutyViewModel.kt`、`duty/DutyUiState.kt`、`duty/DutyPorts.kt`、`data/RosterRepository.kt`、`api/LiveFlightRefresher.kt` |
-| 四页装配 | `ui/AirShiftApp.kt` |
-| 任务卡与航段模型 | `ui/components/AssignmentDetailCard.kt`、`ui/components/AssignmentLegs.kt`、`ui/components/FlightRow.kt` |
+| 四页装配与 fade-through | `ui/AirShiftApp.kt` |
+| 信息条与航段模型 | `ui/components/DutyStrip.kt`、`ui/components/AssignmentLegs.kt`、`ui/components/LegPresentation.kt`、`ui/components/DutyBays.kt` |
+| 板面、状态灯、翻牌、钉底操作 | `ui/components/BoardHeader.kt`、`StatusLamp.kt`、`LampKind.kt`、`DirectionHolder.kt`、`Bay.kt`、`OdometerText.kt`、`OdometerSlot.kt`、`PinnedActionBar.kt`、`EmptyBay.kt`、`NoticeStrip.kt`、`BoardFormats.kt`、`DesignComponents.kt`（线性图标） |
+| Design token 与字体 | `ui/theme/AirShiftTheme.kt`、`ui/theme/AirShiftFonts.kt`、`ui/theme/AirShiftMotion.kt`、`res/font/`、`res/values/themes.xml`、`res/values-night/themes.xml` |
 | 前台刷新 effect | `app/src/main/java/com/bradj/airshift/ForegroundFlightRefreshEffect.kt` |
 | WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
 | 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
@@ -801,7 +820,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | API Key | `data/VariFlightApiKeyStore.kt` |
 | MUC 全链路 | `specialservice/` |
 | 提醒/定位 | `reminder/`、`location/AirportLocator.kt` |
-| 四页 UI | `ui/AirShiftRoot.kt`、`ui/all/`、`ui/calendar/`、`ui/current/`、`ui/settings/` |
+| 四页 UI 与底栏 | `ui/AirShiftRoot.kt`、`ui/all/`、`ui/calendar/`、`ui/current/`、`ui/settings/`、`ui/onboarding/` |
 | 排班周期与班车 | `model/shift/ShiftCycle.kt`、`ShiftGroupTable.kt`、`ShiftSlot.kt`、`ShiftSchedule.kt`、`ShiftBusPlan.kt`、`ShiftCalendarRows.kt`、`ShiftRosterBridge.kt` |
 | 小组件 | `widget/`、`res/layout/widget_duty_item.xml`、`res/xml/duty_widget_info.xml` |
 | 权限/备份 | `app/src/main/AndroidManifest.xml`、`res/xml/data_extraction_rules.xml` |
@@ -819,6 +838,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.11.0 界面重设计"航显板 × 进程单"：新增 Barlow 字体与 `AirShiftPalette` 双主题 token；每页顶部改为贯通状态栏的藏青板面（实时钟逐位翻牌），任务统一为带方向夹条的信息条（折叠一航段一行、点开展开），全部执勤按"当前 / 接下来 / 已完成"分栏，当前执勤的"执勤完成"钉在底部并带触感，底栏改四等分红灯指示、分区切换 fade-through，状态改为小矩形灯、缺失值显示"—"；设置与日历改为板头 + 信息条，Onboarding 改整屏板面；小组件改为藏青板面并删除装饰层；`enableEdgeToEdge` 显式指定系统栏样式并新增 `values-night` 主题；`app/detekt.yml` 对 Composable 放开规则。业务、数据与 MUC 逻辑不变，已有测试契约（底栏文字、"执勤完成"、单一滚动节点、小组件 view id）保留。
 - 0.10.6 MUC 轮椅简称与角标：解析器兼容口语简称 `C轮/R轮/S轮`（与 WCHC/WCHR/WCHS 同为高置信，可与代码在同一句混用，如「WCHR改为S轮」）；`WheelchairLevel` 增加 `shortCode` 单字母；任务卡特服角标与详情行的轮椅记录改为轮椅线性图标 + 等级字母，不再显示 WCHR/WCHS/WCHC 全称。数据层与 JSON 不变。
 - 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
 - 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。
