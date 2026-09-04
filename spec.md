@@ -609,13 +609,17 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败�
 - Compose BOM 2026.08.00、Activity Compose 1.13.0、Lifecycle 2.10.0、WorkManager 2.11.2。
 - Google Play Services Location 21.4.0、ONNX Runtime Android 1.21.1、OpenCV 4.12.0、Apache POI 5.5.1、Coroutines Android 1.9.0。
 - Gradle Wrapper 使用华为云镜像并固定 SHA-256；configuration cache 开启，Gradle parallel 关闭。
+- 守护进程 JVM 由 `gradle/gradle-daemon-jvm.properties` 固定为 JDK 21，缺失时经 `foojay-resolver-convention` 自动下载；本机 Android Studio 自带的 JBR 25 会让 detekt 1.23 内嵌的旧版 Kotlin 编译器崩溃，这样本机与 CI 一致。
 - `local.properties` 可设置 `airshift.buildDir`，把 OneDrive 内的构建产物重定向到本地目录。
-- release 未配置发布签名，`isMinifyEnabled=false`。
+- release 未配置发布签名；`isMinifyEnabled=true`、`isShrinkResources=true`，keep 规则在 `app/proguard-rules.pro`（POI 反射构造 Record、ONNX Runtime 与 OpenCV 的 JNI）。
+- Android Lint：`app/lint-baseline.xml` 记录既有 warning，`warningsAsErrors=true`，新增 warning 让 `lintDebug` 失败。
+- detekt 1.23.8：默认规则集，`app/detekt-baseline.xml` 记录既有发现，新增发现让 `detekt` 失败。
+- GitHub Actions（`.github/workflows/ci.yml`）：push 到 `main` 与 PR 时在 ubuntu 上执行 `testDebugUnitTest lintDebug detekt`；真机测试仍手动。
 
 主要命令：
 
 ```powershell
-.\gradlew.bat test lintDebug assembleDebug
+.\gradlew.bat test lintDebug detekt assembleDebug
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
@@ -623,7 +627,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.0–0.10.1）是代码审查后的第三阶段（结构），连接 vivo `V2505A`（Android 16 / API 36）。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 243 项，241 项通过、0 项失败、2 项条件跳过；新增 `DutyViewModelTest` 12 项与 `AssignmentLegsTest` 6 项（从真机 duty-window / owner 场景移植，含"清理后的 ViewModel 不落库"）。真机：非 Compose 的 44 项（数据层、迁移、调度、小组件、分享 Intent、OCR）通过，其中 `FlightRefreshSchedulerInstrumentedTest` 4 项因手机上的正式应用已配置真实 API Key 而按 `assumeFalse` 主动跳过；17 项 Compose 用例在该机仍被阻止从后台拉起宿主，改用"预启动宿主 + `--no-restart`"后又因预启动进程已初始化 kotlinx-coroutines、测试 APK 的 `ExceptionCollector` 无法经 ServiceLoader 注册而全部报错，因此本轮 Compose 用例没有得到结果，需在放开"后台弹出界面"权限后重跑。Lint 0 error、29 warning（新增 1 条为 `kotlinx-coroutines-test` 依赖的版本提示）。
+本轮（0.10.2）是代码审查后的第四阶段（工程化）。守护进程首次自动下载 JDK 21 后执行 `:app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease`：detekt 对既有代码记录 466 条基线（MagicNumber 190、MaxLineLength 72、FunctionNaming 50、ReturnCount 47、LongMethod 26、LongParameterList 22、CyclomaticComplexMethod 14 等），基线之外零新增；Lint 基线 30 条，零新增；JVM 243 项通过、2 项条件跳过；`minifyReleaseWithR8` 在 `proguard-rules.pro` 的 keep 规则下一次通过，未产生 missing rules。Debug APK 251.9 MB，R8 后的未签名 release APK 216.9 MB：体积主要来自 OpenCV/ONNX Runtime 的多 ABI 原生库与 6 MB 模型，R8 只能压缩 Java/Kotlin 代码。真机（vivo V2505A，打开“后台弹出界面”权限后）：17 项 Compose 用例经标准 `connectedDebugAndroidTest` 全部通过，加上此前 44 项非 Compose 用例，本轮 Android 用例 57 项执行、0 失败、4 项按 `assumeFalse` 跳过。git 历史已用 `git filter-repo --replace-text` 改写，30 个真实姓名在全部历史中残留为 0，当前树哈希不变。
+
+上一轮（0.10.0–0.10.1）是代码审查后的第三阶段（结构），连接 vivo `V2505A`（Android 16 / API 36）。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 243 项，241 项通过、0 项失败、2 项条件跳过；新增 `DutyViewModelTest` 12 项与 `AssignmentLegsTest` 6 项（从真机 duty-window / owner 场景移植，含"清理后的 ViewModel 不落库"）。真机：非 Compose 的 44 项（数据层、迁移、调度、小组件、分享 Intent、OCR）通过，其中 `FlightRefreshSchedulerInstrumentedTest` 4 项因手机上的正式应用已配置真实 API Key 而按 `assumeFalse` 主动跳过；17 项 Compose 用例在该机仍被阻止从后台拉起宿主，改用"预启动宿主 + `--no-restart`"后又因预启动进程已初始化 kotlinx-coroutines、测试 APK 的 `ExceptionCollector` 无法经 ServiceLoader 注册而全部报错，因此本轮 Compose 用例没有得到结果，需在放开"后台弹出界面"权限后重跑。Lint 0 error、29 warning（新增 1 条为 `kotlinx-coroutines-test` 依赖的版本提示）。
 
 上一轮（0.9.2）是代码审查后的第二阶段（性能与健壮性），没有连接设备。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 225 项，223 项通过、0 项失败、2 项条件跳过；新增的 `aSlowLoadForOneFlightDoesNotBlockAnotherFlightInTheSameHashBin` 先在旧实现上以 `TimeoutException` 失败，改为 future 合并后转绿；Lint 保持 0 error。Android 用例只完成编译。
 
@@ -718,12 +724,13 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 17. **小组件数据边界**：不显示 MUC 状态；Chronometer 跨零点依赖 launcher 和后续重绘。
 18. **未消费字段**：`arrivalBridge` 已解析/持久化，但 UI 未展示。
 19. **提醒 ID**：`stableId.hashCode()` 是 32 位，理论上存在碰撞。
-20. **发布状态**：中文硬编码、无 CI、无发布签名、release 未压缩，只适合开发与个人验证。
+20. **发布状态**：中文硬编码、无发布签名；release 虽已开启 R8，但只验证到 `assembleRelease` 成功，压缩后的 OCR/XLS 导入未在真机跑过，Debug APK 仍是唯一可安装产物。
 21. **排班规律为外推**：六天周期、轮转步长 3、槽位分层和交接班到岗规则由六份实测排班表反推，样本内零反例但属外推；实际排班调整后需靠导入 Excel 的班次行自校正，应用不会主动发现漂移。
 22. **日历班车多为预估**：只有与当前已导入排班同一天的那一行使用真实航班时间；其余行按实测的典型首个任务推算，个别日期观测到首任务时间离群（如 08-24 晚二 10:40、08-30 晚一 08:25）。
 23. **单份排班的限制**：App 只保存一份当前排班，因此日历无法为多个日期同时提供真实数据。
 24. **内置班组表无成员**：校准前无法按姓名自动识别班组，只能手动指定；这是为了不让真实姓名进入公开仓库而有意为之。
 25. **执勤日固定 06:00 切换**：`DutyProgressDay.ROLLOVER_HOUR` 不可配置；延误到 06:00 之后才手动完成的夜班任务会在切换后重新显示，直到 3 小时自动完成生效。
+26. **APK 体积**：Debug 约 252 MB、R8 后的 release 约 217 MB，主要是 OpenCV 与 ONNX Runtime 的多 ABI 原生库；要明显缩小需要 ABI split 或 App Bundle，不在当前范围内。
 
 ## 14. 当前验收标准
 
@@ -803,6 +810,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.2 代码审查后的第四阶段（工程化）：Android Lint 基线 + `warningsAsErrors`、detekt 1.23.8 默认规则集 + 基线、GitHub Actions（单元测试 / Lint / detekt）、release 开启 R8 与资源裁剪并补 POI/ONNX/OpenCV keep 规则；git 历史用 `git filter-repo --replace-text` 把真实姓名改写为合成名。
 - 0.10.1 任务卡去重：全部执勤页与当前执勤页共用 `AssignmentDetailCard`，详略由 `DetailLevel` 决定；航段显示内容由纯 Kotlin 的 `legUiModels` 算出（`FlightLegUiModel`），`FlightRow` 由 16 个参数收成一个模型；新增 6 项 JVM 用例锁定两种详略的差异。
 - 0.10.0 代码审查后的第三阶段（结构）：新增 `duty/DutyViewModel` 承载导入、实时刷新、人工完成、设置与权限跟进，所有外部依赖收敛为 `DutyPorts` 端口接口；`RosterStore` 实现 `RosterRepository`；两个 Reader 与实时刷新改为挂起函数（`LiveFlightRefresher`）；`MainActivity` 降到 92 行，`ui/AirShiftApp` 只渲染状态；真机 duty-window / owner 场景移植为 JVM 的 `DutyViewModelTest`，真机测试改用 `ViewModelStore.clear()` 模拟进程重建。
 - 0.9.2 代码审查后的第二阶段：飞常准响应缓存改为 `CompletableFuture` 合并，网络请求移出 `ConcurrentHashMap` 桶锁；Excel/OCR/飞常准载荷/MUC 解析中逐单元格、逐字段重新编译的 Regex 全部提升为常量或按字段名缓存；小组件“完成”广播用 `goAsync()` 等待 WorkManager 配置完成；进出港方向与详情条目改为 `LegDirection` / `DetailKind` 枚举，不再按中文文案分派；MUC 可见列表按状态与分钟 tick 记忆，避免每次重组都让全部任务卡重组；删除无调用的 `fetchFlight`、`resetDutyProgress`、`advanceDutyIndex`、`ReviewStatus.IGNORED` 与 7 个未使用的主题 token。

@@ -1,7 +1,20 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.gitlab.arturbosch.detekt")
 }
+
+detekt {
+    // 默认规则集；既有发现记入基线，此后新增的复杂度/长函数/长参数列表等问题让 detekt 失败。
+    buildUponDefaultConfig = true
+    baseline = file("detekt-baseline.xml")
+    source.setFrom("src/main/java", "src/test/java", "src/androidTest/java")
+}
+
+// detekt 1.23 按运行 Gradle 的 JDK 推断 jvm-target，Android Studio 自带的 JDK 25 超出其上限；
+// 与 compileOptions 一致地固定为 17。
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach { jvmTarget = "17" }
+tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach { jvmTarget = "17" }
 
 android {
     namespace = "com.bradj.airshift"
@@ -11,16 +24,27 @@ android {
         applicationId = "com.bradj.airshift"
         minSdk = 33
         targetSdk = 37
-        versionCode = 42
-        versionName = "0.10.1"
+        versionCode = 43
+        versionName = "0.10.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 未配置发布签名，release 仍不可直接安装；开启压缩是为了把 POI/OpenCV/ONNX 的体积问题
+            // 与 keep 规则提前在 assembleRelease 上暴露。规则见 proguard-rules.pro。
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+    }
+
+    lint {
+        // 既有 28 条 warning 记入基线；此后新增的 warning 直接让 lintDebug 失败。
+        baseline = file("lint-baseline.xml")
+        warningsAsErrors = true
+        abortOnError = true
     }
 
     compileOptions {

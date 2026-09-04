@@ -2,7 +2,7 @@
 
 AirShift 是面向航司地面服务保障人员的单用户 Android 排班助手。它在手机本机识别排班图片或 Excel，只留下当前用户的保障任务；在用户自行配置 API Key 后，手机会直接查询飞常准 Aviation MCP，并把实时航班、提醒、MUC 特服信息和当前执勤集中到一个界面中。它还按上三休三周期推算未来的上班日、班次和应乘班车。
 
-- 当前版本：`0.10.1`（version code `42`）
+- 当前版本：`0.10.2`（version code `43`）
 - 最低系统：Android 13（API 33）
 - 项目形态：单模块、端侧优先、无自建后端
 
@@ -234,8 +234,10 @@ PowerShell 7：
 ```powershell
 $env:JAVA_HOME = '<JDK 17 或 Android Studio JBR 路径>'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
-.\gradlew.bat test lintDebug assembleDebug
+.\gradlew.bat test lintDebug detekt assembleDebug
 ```
+
+Gradle 守护进程固定使用 JDK 21（`gradle/gradle-daemon-jvm.properties`，首次运行时经 foojay 自动下载），因此 `JAVA_HOME` 指向 Android Studio 自带的 JBR 25 也没关系；`compileOptions` 仍是 Java 17。Android Lint 与 detekt 各有一份基线文件（`app/lint-baseline.xml`、`app/detekt-baseline.xml`）：既有发现不阻塞构建，新增的 warning 或 detekt 发现会让对应任务失败。`.github/workflows/ci.yml` 在 push 到 `main` 与 PR 时执行同样的单元测试、Lint 和 detekt。
 
 默认 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`；配置 `airshift.buildDir` 后位于 `<airshift.buildDir>/app/outputs/apk/debug/app-debug.apk`。连接设备后可安装或执行 Android 测试：
 
@@ -270,7 +272,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 - 小组件不显示 MUC 变更；跨零点状态与 OriginOS 等 launcher 的实际裁剪行为仍需真机验证。
 - `arrivalBridge` 已解析并持久化，但当前 UI 未展示；提醒 ID 使用 32 位 `stableId.hashCode()`，理论上可能碰撞。
 - 真实飞常准、真实 WPS/MUC、ContentProvider 授权、定位、闹钟、通知和锁屏流程仍需物理设备端到端验证。
-- 仓库没有 CI、发布签名或商店分发配置；release 未开启代码压缩，Debug APK 只适合开发与个人验证。
+- 仓库有 GitHub Actions（单元测试 + Android Lint + detekt），但没有发布签名或商店分发配置；release 已开启 R8 压缩，但未签名、未在真机验证，Debug APK 仍是唯一可安装的产物。
 
 ## 开源许可
 

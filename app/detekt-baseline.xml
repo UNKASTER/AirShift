@@ -1,0 +1,472 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:PolygonUnclip.kt$PolygonUnclip$!area.isFinite() || !perimeter.isFinite() || area &lt;= EPS || perimeter &lt;= EPS</ID>
+    <ID>CyclomaticComplexMethod:AirShiftApp.kt$@Composable internal fun AirShiftApp( viewModel: DutyViewModel, readImageRoster: suspend (Uri, String) -&gt; RosterParseResult, readExcelRoster: suspend (Uri, String) -&gt; RosterParseResult, openExactAlarmSettings: () -&gt; Unit, openNotificationAccessSettings: () -&gt; Unit, pendingSharedExcelImport: PendingSharedExcelImport?, sharedExcelImportQueue: SharedExcelImportQueueViewModel, dutyNavigation: DutyNavigationViewModel, )</ID>
+    <ID>CyclomaticComplexMethod:AssignmentDetailCard.kt$@Composable fun AssignmentDetailCard( assignment: RosterAssignment, muc: MucContext, level: DetailLevel, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:AssignmentLegs.kt$private fun RosterAssignment.inboundLeg( flight: String, muc: MucContext, level: DetailLevel, isLast: Boolean, ): FlightLegUiModel</ID>
+    <ID>CyclomaticComplexMethod:CurrentDutyScreen.kt$@Composable private fun CountdownHero( assignment: RosterAssignment, nextAssignment: RosterAssignment?, now: LocalDateTime, )</ID>
+    <ID>CyclomaticComplexMethod:DBPostProcessor.kt$DBPostProcessor$fun process( pred: FloatArray, predShape: LongArray, thresh: Float, boxThresh: Float, unclipRatio: Float, maxCandidates: Int, useDilation: Boolean, scoreMode: String, boxType: String, originalH: Int, originalW: Int, ): List&lt;OCRBox&gt;</ID>
+    <ID>CyclomaticComplexMethod:DutyViewModel.kt$DutyViewModel$fun refreshCurrentAssignments(automatic: Boolean = false, onlyLookups: Set&lt;FlightLookup&gt;? = null)</ID>
+    <ID>CyclomaticComplexMethod:DutyWidgetModel.kt$private fun RosterAssignment.toWidgetPage( index: Int, total: Int, currentIndex: Int, now: LocalDateTime, ): WidgetPage.Duty</ID>
+    <ID>CyclomaticComplexMethod:FlightInfo.kt$internal fun RosterAssignment.withLiveInfo( live: Map&lt;FlightLookup, List&lt;FlightInfo&gt;&gt;, fallbackDate: LocalDate, ): RosterAssignment</ID>
+    <ID>CyclomaticComplexMethod:FlightRefreshWorker.kt$FlightRefreshWorker$override fun doWork(): Result</ID>
+    <ID>CyclomaticComplexMethod:FlightRow.kt$@Composable fun FlightRow(model: FlightLegUiModel)</ID>
+    <ID>CyclomaticComplexMethod:RosterTableParser.kt$RosterTableParser$fun parse( tokens: List&lt;OcrToken&gt;, imageWidth: Int, userName: String, clock: Clock = Clock.systemDefaultZone(), ): RosterParseResult</ID>
+    <ID>CyclomaticComplexMethod:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$fun encode(state: SpecialServiceState): String</ID>
+    <ID>CyclomaticComplexMethod:SpecialServiceReducer.kt$MucMessageReducer$fun apply( initial: SpecialServiceState, message: ParsedMucMessage, flights: List&lt;FlightReference&gt;, ): MucMessageReduction</ID>
+    <ID>CyclomaticComplexMethod:SpecialServiceReducer.kt$SpecialServiceExpiry$fun prune(state: SpecialServiceState, nowEpochMillis: Long): SpecialServiceState</ID>
+    <ID>FunctionNaming:AirShiftApp.kt$@Composable internal fun AirShiftApp( viewModel: DutyViewModel, readImageRoster: suspend (Uri, String) -&gt; RosterParseResult, readExcelRoster: suspend (Uri, String) -&gt; RosterParseResult, openExactAlarmSettings: () -&gt; Unit, openNotificationAccessSettings: () -&gt; Unit, pendingSharedExcelImport: PendingSharedExcelImport?, sharedExcelImportQueue: SharedExcelImportQueueViewModel, dutyNavigation: DutyNavigationViewModel, )</ID>
+    <ID>FunctionNaming:AirShiftRoot.kt$@Composable fun AirShiftRoot( section: DutySection, onSectionSelected: (DutySection) -&gt; Unit, content: @Composable (PaddingValues) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:AirShiftRoot.kt$@Composable private fun BottomBarItem( icon: ImageVector, label: String, selected: Boolean, onClick: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:AirShiftRoot.kt$@Composable private fun DutyBottomBar( section: DutySection, onSectionSelected: (DutySection) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:AirShiftTheme.kt$@Composable fun AirShiftTheme( darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@Composable private fun ActionNotice(text: String, action: String, onAction: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@Composable private fun AllDutyHeader(name: String, airport: String?, today: LocalDate)</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@Composable private fun EmptyRoster()</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@Composable private fun ImportCard( isWorking: Boolean, onImportImage: () -&gt; Unit, onImportExcel: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@Composable private fun WarningCard(warnings: List&lt;String&gt;)</ID>
+    <ID>FunctionNaming:AllDutyScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun AllDutyScreen( userName: String, currentAirport: String?, today: LocalDate, isWorking: Boolean, isLiveRefreshing: Boolean, statusMessage: String?, warnings: List&lt;String&gt;, exactAlarmWarning: Boolean, assignments: List&lt;RosterAssignment&gt;, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onImportImage: () -&gt; Unit, onImportExcel: () -&gt; Unit, onRefresh: () -&gt; Unit, onOpenExactAlarmSettings: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:AssignmentDetailCard.kt$@Composable fun AssignmentDetailCard( assignment: RosterAssignment, muc: MucContext, level: DetailLevel, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:ChangeIndicator.kt$@Composable fun ChangeIndicator(modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable fun CurrentDutyScreen( assignments: List&lt;RosterAssignment&gt;, dutyIndex: Int, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onDutyComplete: () -&gt; Unit, onGoToAllDuty: () -&gt; Unit, modifier: Modifier = Modifier, now: LocalDateTime = LocalDateTime.now(), )</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable private fun CountdownHero( assignment: RosterAssignment, nextAssignment: RosterAssignment?, now: LocalDateTime, )</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable private fun CountdownNumbers(remaining: Duration)</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable private fun CurrentDutyContent( assignment: RosterAssignment, nextAssignment: RosterAssignment?, now: LocalDateTime, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onDutyComplete: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable private fun CurrentDutyEmpty(modifier: Modifier, onGoToAllDuty: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CurrentDutyScreen.kt$@Composable private fun CurrentDutyFinished(modifier: Modifier, onGoToAllDuty: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun AccentBar(color: Color, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun BoardingPassDivider(modifier: Modifier = Modifier, color: Color? = null)</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun DirectionTag(direction: LegDirection, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun FlightStatusChip(departed: Boolean, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun MetaItem( icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier, hasChange: Boolean = false, labelWidth: Dp? = null, alignEnd: Boolean = false, )</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun QuietCard( modifier: Modifier = Modifier, vip: Boolean = false, containerColor: Color = MaterialTheme.colorScheme.surface, content: @Composable ColumnScope.() -&gt; Unit, )</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun RouteArcsDecoration( color: Color, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun RouteArrow( color: Color, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun SkeletonStub( modifier: Modifier = Modifier, width: Dp = 32.dp, height: Dp = 10.dp, )</ID>
+    <ID>FunctionNaming:DesignComponents.kt$@Composable fun StatusDot(color: Color, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable fun FlightRow(model: FlightLegUiModel)</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable fun SpecialServiceDetails(records: List&lt;FlightServiceRecord&gt;)</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable private fun RouteCode(code: String?, alignEnd: Boolean)</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable private fun RouteGridRow( left: @Composable () -&gt; Unit, right: @Composable () -&gt; Unit, center: (@Composable () -&gt; Unit)? = null, )</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable private fun RouteName(name: String?, alignEnd: Boolean)</ID>
+    <ID>FunctionNaming:FlightRow.kt$@Composable private fun TimeBlock(live: LocalDateTime?, planned: LocalDateTime?)</ID>
+    <ID>FunctionNaming:ForegroundFlightRefreshEffect.kt$@Composable internal fun ForegroundFlightRefreshEffect( active: Boolean, rosterGeneration: Long, dutiesComplete: Boolean, isWorking: Boolean, onConfigure: (Boolean) -&gt; Unit, onRefresh: () -&gt; Unit, onStopped: () -&gt; Unit, refreshIntervalMillis: Long = 5 * 60 * 1000L, busyRetryMillis: Long = 15 * 1000L, refreshDelayMillis: () -&gt; Long = { 0L }, )</ID>
+    <ID>FunctionNaming:OnboardingScreen.kt$@Composable fun OnboardingScreen(onSave: (String) -&gt; Unit)</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun SettingsScreen( currentName: String, currentApiKey: String, hasStoredApiKey: Boolean, notificationAccessGranted: Boolean, lastSuccessfulRecognitionEpochMillis: Long?, lastProcessingResult: String?, shiftGroupId: Int?, shiftGroupAutoDetected: Boolean, shiftGroupOptions: List&lt;Int&gt;, shiftReportMarginMinutes: Int, onShiftGroupSelected: (Int?) -&gt; Unit, onShiftReportMarginSelected: (Int) -&gt; Unit, onOpenNotificationAccessSettings: () -&gt; Unit, onSave: (String, String) -&gt; Unit, onClearApiKey: () -&gt; Unit, onTestConnection: (String, (Result&lt;Unit&gt;) -&gt; Unit) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun ChoiceChip(text: String, selected: Boolean, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun MucNotificationCard( notificationAccessGranted: Boolean, lastSuccessfulRecognitionEpochMillis: Long?, lastProcessingResult: String?, onOpenNotificationAccessSettings: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsSection( title: String, content: @Composable () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsTextField( value: String, onValueChange: (String) -&gt; Unit, label: String, supportingText: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default, visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None, )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun ShiftCalendarSection( shiftGroupId: Int?, autoDetected: Boolean, options: List&lt;Int&gt;, reportMarginMinutes: Int, onGroupSelected: (Int?) -&gt; Unit, onMarginSelected: (Int) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable fun ShiftCalendarScreen( userName: String, schedule: ShiftSchedule, groupId: Int?, assignments: List&lt;RosterAssignment&gt;, reportMarginMinutes: Int, today: LocalDate, onGoToSettings: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable private fun CalendarHeader( userName: String, schedule: ShiftSchedule, groupId: Int?, today: LocalDate, todayRow: ShiftCalendarRow?, )</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable private fun MonthLabel(date: LocalDate)</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable private fun Pill(text: String, background: Color, foreground: Color)</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable private fun ShiftDayCard(row: ShiftCalendarRow)</ID>
+    <ID>FunctionNaming:ShiftCalendarScreen.kt$@Composable private fun UnknownGroupCard(userName: String, onGoToSettings: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:SpecialServiceBadge.kt$@Composable fun SpecialServiceBadge(modifier: Modifier = Modifier)</ID>
+    <ID>InstanceOfCheckForException:FlightRefreshBatch.kt$error is VariFlightClientException</ID>
+    <ID>LongMethod:AirShiftApp.kt$@Composable internal fun AirShiftApp( viewModel: DutyViewModel, readImageRoster: suspend (Uri, String) -&gt; RosterParseResult, readExcelRoster: suspend (Uri, String) -&gt; RosterParseResult, openExactAlarmSettings: () -&gt; Unit, openNotificationAccessSettings: () -&gt; Unit, pendingSharedExcelImport: PendingSharedExcelImport?, sharedExcelImportQueue: SharedExcelImportQueueViewModel, dutyNavigation: DutyNavigationViewModel, )</ID>
+    <ID>LongMethod:AirShiftRoot.kt$@Composable private fun DutyBottomBar( section: DutySection, onSectionSelected: (DutySection) -&gt; Unit, )</ID>
+    <ID>LongMethod:AllDutyScreen.kt$@Composable private fun AllDutyHeader(name: String, airport: String?, today: LocalDate)</ID>
+    <ID>LongMethod:AllDutyScreen.kt$@Composable private fun ImportCard( isWorking: Boolean, onImportImage: () -&gt; Unit, onImportExcel: () -&gt; Unit, )</ID>
+    <ID>LongMethod:AllDutyScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun AllDutyScreen( userName: String, currentAirport: String?, today: LocalDate, isWorking: Boolean, isLiveRefreshing: Boolean, statusMessage: String?, warnings: List&lt;String&gt;, exactAlarmWarning: Boolean, assignments: List&lt;RosterAssignment&gt;, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onImportImage: () -&gt; Unit, onImportExcel: () -&gt; Unit, onRefresh: () -&gt; Unit, onOpenExactAlarmSettings: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:AssignmentDetailCard.kt$@Composable fun AssignmentDetailCard( assignment: RosterAssignment, muc: MucContext, level: DetailLevel, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:CurrentDutyScreen.kt$@Composable private fun CountdownHero( assignment: RosterAssignment, nextAssignment: RosterAssignment?, now: LocalDateTime, )</ID>
+    <ID>LongMethod:DBPostProcessor.kt$DBPostProcessor$fun process( pred: FloatArray, predShape: LongArray, thresh: Float, boxThresh: Float, unclipRatio: Float, maxCandidates: Int, useDilation: Boolean, scoreMode: String, boxType: String, originalH: Int, originalW: Int, ): List&lt;OCRBox&gt;</ID>
+    <ID>LongMethod:DutyViewModel.kt$DutyViewModel$fun refreshCurrentAssignments(automatic: Boolean = false, onlyLookups: Set&lt;FlightLookup&gt;? = null)</ID>
+    <ID>LongMethod:ExcelRosterParserTest.kt$ExcelRosterParserTest$@Test fun parsesSemanticColumnsWithInsertedPhotoFieldsAndSharedStrings()</ID>
+    <ID>LongMethod:FlightRefreshWorker.kt$FlightRefreshWorker$override fun doWork(): Result</ID>
+    <ID>LongMethod:FlightRow.kt$@Composable fun FlightRow(model: FlightLegUiModel)</ID>
+    <ID>LongMethod:OCREngine.kt$OCREngine$private fun run(srcMat: org.opencv.core.Mat): OCREngineResult</ID>
+    <ID>LongMethod:OnboardingScreen.kt$@Composable fun OnboardingScreen(onSave: (String) -&gt; Unit)</ID>
+    <ID>LongMethod:RecPreprocessor.kt$RecPreprocessor$fun preprocessBatch(crops: List&lt;Mat&gt;): RecPreprocessResult</ID>
+    <ID>LongMethod:RosterTableParser.kt$RosterTableParser$fun parse( tokens: List&lt;OcrToken&gt;, imageWidth: Int, userName: String, clock: Clock = Clock.systemDefaultZone(), ): RosterParseResult</ID>
+    <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen( currentName: String, currentApiKey: String, hasStoredApiKey: Boolean, notificationAccessGranted: Boolean, lastSuccessfulRecognitionEpochMillis: Long?, lastProcessingResult: String?, shiftGroupId: Int?, shiftGroupAutoDetected: Boolean, shiftGroupOptions: List&lt;Int&gt;, shiftReportMarginMinutes: Int, onShiftGroupSelected: (Int?) -&gt; Unit, onShiftReportMarginSelected: (Int) -&gt; Unit, onOpenNotificationAccessSettings: () -&gt; Unit, onSave: (String, String) -&gt; Unit, onClearApiKey: () -&gt; Unit, onTestConnection: (String, (Result&lt;Unit&gt;) -&gt; Unit) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:SharedExcelImportOwnerInstrumentedTest.kt$SharedExcelImportOwnerInstrumentedTest$@Test fun aClearedViewModelCannotCommitAndTheRecreatedOneReadsTheSharedFileAgain()</ID>
+    <ID>LongMethod:ShiftCalendarScreen.kt$@Composable private fun ShiftDayCard(row: ShiftCalendarRow)</ID>
+    <ID>LongMethod:SpecialServiceParser.kt$SpecialServiceParser$fun parseMessage( texts: List&lt;String&gt;, sourceEpochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault(), fingerprintKey: ByteArray? = null, notificationEpochMillis: Long = sourceEpochMillis, ): ParsedMucMessage</ID>
+    <ID>LongMethod:SpecialServiceReducer.kt$MucMessageReducer$fun apply( initial: SpecialServiceState, message: ParsedMucMessage, flights: List&lt;FlightReference&gt;, ): MucMessageReduction</ID>
+    <ID>LongMethod:SpecialServiceRepository.kt$SpecialServiceRepository$fun processNotification( texts: List&lt;String&gt;, sourceEpochMillis: Long, sourceTimeReliable: Boolean = false, notificationEpochMillis: Long = sourceEpochMillis, )</ID>
+    <ID>LongMethod:SpecialServiceStateTest.kt$SpecialServiceStateTest$@Test fun gateAndStandChangesRespectMessageOrderAndTripCancellation()</ID>
+    <ID>LongMethod:SpecialServiceStateTest.kt$SpecialServiceStateTest$@Test fun jsonRoundTripContainsOnlyRedactedStructuredState()</ID>
+    <ID>LongMethod:VariFlightClient.kt$VariFlightPayloadParser$private fun parseLeg(element: String, fallbackFlightNumber: String): FlightInfo?</ID>
+    <ID>LongMethod:VariFlightProtectionTest.kt$VariFlightProtectionTest$@Test fun requestWaitingForAFailedCacheLoadRechecksTheWindowBeforeCallingUpstream()</ID>
+    <ID>LongParameterList:AirShiftApp.kt$( viewModel: DutyViewModel, readImageRoster: suspend (Uri, String) -&gt; RosterParseResult, readExcelRoster: suspend (Uri, String) -&gt; RosterParseResult, openExactAlarmSettings: () -&gt; Unit, openNotificationAccessSettings: () -&gt; Unit, pendingSharedExcelImport: PendingSharedExcelImport?, sharedExcelImportQueue: SharedExcelImportQueueViewModel, dutyNavigation: DutyNavigationViewModel, )</ID>
+    <ID>LongParameterList:AllDutyScreen.kt$( userName: String, currentAirport: String?, today: LocalDate, isWorking: Boolean, isLiveRefreshing: Boolean, statusMessage: String?, warnings: List&lt;String&gt;, exactAlarmWarning: Boolean, assignments: List&lt;RosterAssignment&gt;, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onImportImage: () -&gt; Unit, onImportExcel: () -&gt; Unit, onRefresh: () -&gt; Unit, onOpenExactAlarmSettings: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:CurrentDutyScreen.kt$( assignment: RosterAssignment, nextAssignment: RosterAssignment?, now: LocalDateTime, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onDutyComplete: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:CurrentDutyScreen.kt$( assignments: List&lt;RosterAssignment&gt;, dutyIndex: Int, specialServiceRecords: List&lt;FlightServiceRecord&gt;, gateChanges: List&lt;GateChangeRecord&gt;, standChanges: List&lt;StandChangeRecord&gt;, flightCancellations: List&lt;FlightCancellationRecord&gt;, onDutyComplete: () -&gt; Unit, onGoToAllDuty: () -&gt; Unit, modifier: Modifier = Modifier, now: LocalDateTime = LocalDateTime.now(), )</ID>
+    <ID>LongParameterList:DBPostProcessor.kt$DBPostProcessor$( pred: FloatArray, predShape: LongArray, thresh: Float, boxThresh: Float, unclipRatio: Float, maxCandidates: Int, useDilation: Boolean, scoreMode: String, boxType: String, originalH: Int, originalW: Int, )</ID>
+    <ID>LongParameterList:DesignComponents.kt$( icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier, hasChange: Boolean = false, labelWidth: Dp? = null, alignEnd: Boolean = false, )</ID>
+    <ID>LongParameterList:DutyTimelineTest.kt$DutyTimelineTest$( inboundFlight: String? = null, outboundFlight: String? = null, scheduledArrival: LocalDateTime? = null, estimatedArrival: LocalDateTime? = null, actualArrival: LocalDateTime? = null, scheduledDeparture: LocalDateTime? = null, estimatedDeparture: LocalDateTime? = null, actualDeparture: LocalDateTime? = null, )</ID>
+    <ID>LongParameterList:DutyWidgetModelTest.kt$DutyWidgetModelTest$( registration: String = "B-1234", inboundFlight: String? = null, origin: String? = null, originCode: String? = null, scheduledArrival: LocalDateTime? = null, actualArrival: LocalDateTime? = null, outboundFlight: String? = null, destination: String? = null, destinationCode: String? = null, scheduledDeparture: LocalDateTime? = null, actualDeparture: LocalDateTime? = null, inboundBoardingGate: String? = null, boardingGate: String? = null, arrivalStand: String? = null, departureStand: String? = null, inboundHasVip: Boolean = false, )</ID>
+    <ID>LongParameterList:DutyWidgetRenderer.kt$DutyWidgetRenderer$( context: Context, views: RemoteViews, leg: WidgetFlightLeg?, blockId: Int, tagId: Int, flightId: Int, placeId: Int, gateId: Int, )</ID>
+    <ID>LongParameterList:ExcelRosterParser.kt$ExcelRosterParser$( row: ExcelRow, columns: Map&lt;RosterColumn, Int&gt;, rosterDate: LocalDate, userName: String, vipFlightNumbers: Set&lt;String&gt;, uses1904DateSystem: Boolean, )</ID>
+    <ID>LongParameterList:ForegroundFlightRefreshEffect.kt$( active: Boolean, rosterGeneration: Long, dutiesComplete: Boolean, isWorking: Boolean, onConfigure: (Boolean) -&gt; Unit, onRefresh: () -&gt; Unit, onStopped: () -&gt; Unit, refreshIntervalMillis: Long = 5 * 60 * 1000L, busyRetryMillis: Long = 15 * 1000L, refreshDelayMillis: () -&gt; Long = { 0L }, )</ID>
+    <ID>LongParameterList:ORTSessionManager.kt$ORTSessionManager$( ortEnv: OrtEnvironment, session: OrtSession, inputName: String, input: FloatArray, shape: LongArray, modelName: String, )</ID>
+    <ID>LongParameterList:PaddleOCR.kt$PaddleOCR.Companion$( context: Context, config: PaddleOCRConfig, engineConfig: EngineConfig, detModelAssetPath: String, recModelAssetPath: String, recConfigAssetPath: String, )</ID>
+    <ID>LongParameterList:PolygonUnclip.kt$PolygonUnclip$( output: MutableList&lt;Point&gt;, center: Point, fromNormal: Point, toNormal: Point, distance: Double, clockwiseInImageCoords: Boolean, )</ID>
+    <ID>LongParameterList:RosterAssignmentCompletionTest.kt$RosterAssignmentCompletionTest$( inboundFlight: String? = null, outboundFlight: String? = null, scheduledArrival: LocalDateTime? = null, scheduledDeparture: LocalDateTime? = null, estimatedArrival: LocalDateTime? = null, estimatedDeparture: LocalDateTime? = null, actualArrival: LocalDateTime? = null, actualDeparture: LocalDateTime? = null, )</ID>
+    <ID>LongParameterList:SettingsScreen.kt$( currentName: String, currentApiKey: String, hasStoredApiKey: Boolean, notificationAccessGranted: Boolean, lastSuccessfulRecognitionEpochMillis: Long?, lastProcessingResult: String?, shiftGroupId: Int?, shiftGroupAutoDetected: Boolean, shiftGroupOptions: List&lt;Int&gt;, shiftReportMarginMinutes: Int, onShiftGroupSelected: (Int?) -&gt; Unit, onShiftReportMarginSelected: (Int) -&gt; Unit, onOpenNotificationAccessSettings: () -&gt; Unit, onSave: (String, String) -&gt; Unit, onClearApiKey: () -&gt; Unit, onTestConnection: (String, (Result&lt;Unit&gt;) -&gt; Unit) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:SettingsScreen.kt$( shiftGroupId: Int?, autoDetected: Boolean, options: List&lt;Int&gt;, reportMarginMinutes: Int, onGroupSelected: (Int?) -&gt; Unit, onMarginSelected: (Int) -&gt; Unit, )</ID>
+    <ID>LongParameterList:SettingsScreen.kt$( value: String, onValueChange: (String) -&gt; Unit, label: String, supportingText: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default, visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None, )</ID>
+    <ID>LongParameterList:ShiftCalendarRows.kt$ShiftCalendarRows$( schedule: ShiftSchedule, groupId: Int, from: LocalDate, toInclusive: LocalDate, today: LocalDate, rosterDate: LocalDate? = null, rosterReportByMinutes: Int? = null, rosterLastTaskMinutes: Int? = null, marginMinutes: Int = ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES, )</ID>
+    <ID>LongParameterList:ShiftCalendarRowsTest.kt$ShiftCalendarRowsTest$( from: LocalDate = LocalDate.of(2026, 8, 29), to: LocalDate = LocalDate.of(2026, 9, 3), rosterDate: LocalDate? = null, reportBy: Int? = null, lastTask: Int? = null, margin: Int = ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES, )</ID>
+    <ID>LongParameterList:ShiftCalendarScreen.kt$( userName: String, schedule: ShiftSchedule, groupId: Int?, assignments: List&lt;RosterAssignment&gt;, reportMarginMinutes: Int, today: LocalDate, onGoToSettings: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:SpecialServiceParser.kt$SpecialServiceParser$( segment: String, fallbackText: String, fingerprint: String, explicitDate: LocalDate?, notificationDate: LocalDate, sourceEpochMillis: Long, expiresAtEpochMillis: Long, )</ID>
+    <ID>LoopWithTooManyJumpStatements:DBPostProcessor.kt$DBPostProcessor$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ExcelRosterParser.kt$ExcelRosterParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ForegroundFlightRefreshEffect.kt$while</ID>
+    <ID>LoopWithTooManyJumpStatements:ModelConfig.kt$ModelConfig.Companion$while</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0x99FFFFFF</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF0F1A2E</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF0F7B5F</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF14284B</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF1A2740</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF1D3F73</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF1E3252</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF1E3A66</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF22304A</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF2A3A57</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF2B5EA7</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF3F2E00</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF4A3600</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF4A5568</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF5C1422</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF6E4200</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF8A6100</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF8A94A6</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF8FB0E8</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF9AA7BD</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFF9C0B22</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFA85D00</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFC8102E</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFD5DAE2</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFD5E2F8</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFD97706</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFE3E6EB</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFE8A33D</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFE8B34B</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFEAF1FB</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFECEEF2</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFEDF1F7</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFF0F2F5</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFF7F8FA</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFBE7AE</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFBF0DC</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFCEBC8</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFDECEE</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFFD9DE</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$0xFFFFFFFF</ID>
+    <ID>MagicNumber:AirShiftTheme.kt$AirShiftMotion$0.58f</ID>
+    <ID>MagicNumber:AirportLocator.kt$AirportLocator$1000.0</ID>
+    <ID>MagicNumber:AirportLocator.kt$AirportLocator$20_000</ID>
+    <ID>MagicNumber:AirportLocator.kt$AirportLocator$60_000</ID>
+    <ID>MagicNumber:CurrentDutyScreen.kt$0.35f</ID>
+    <ID>MagicNumber:CurrentDutyScreen.kt$60</ID>
+    <ID>MagicNumber:DBPostProcessor.kt$DBPostProcessor$255.0</ID>
+    <ID>MagicNumber:DBPostProcessor.kt$DBPostProcessor$3</ID>
+    <ID>MagicNumber:DBPostProcessor.kt$DBPostProcessor$4</ID>
+    <ID>MagicNumber:DesignComponents.kt$0.08f</ID>
+    <ID>MagicNumber:DesignComponents.kt$0.55f</ID>
+    <ID>MagicNumber:DesignComponents.kt$0.8f</ID>
+    <ID>MagicNumber:DesignComponents.kt$0.92f</ID>
+    <ID>MagicNumber:DesignComponents.kt$1.05f</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.224</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.225</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.229</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.406</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.456</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$0.485</ID>
+    <ID>MagicNumber:DetPreprocessor.kt$DetPreprocessor$3</ID>
+    <ID>MagicNumber:DetectionEngine.kt$DetectionEngine$3</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$0.000001</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$100_000.0</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$12</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$1899</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$1904</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$20_000.0</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$23</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$2359</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$24</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$26</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$3</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$30</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$4</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$59</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$6</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$60</ID>
+    <ID>MagicNumber:ExcelRosterParser.kt$ExcelRosterParser$8192</ID>
+    <ID>MagicNumber:ExcelRosterReader.kt$ExcelRosterReader$0x11</ID>
+    <ID>MagicNumber:ExcelRosterReader.kt$ExcelRosterReader$0x1A</ID>
+    <ID>MagicNumber:ExcelRosterReader.kt$ExcelRosterReader$1024</ID>
+    <ID>MagicNumber:ExcelRosterReader.kt$ExcelRosterReader$64</ID>
+    <ID>MagicNumber:FlightRefreshWorker.kt$FlightRefreshScheduler$15</ID>
+    <ID>MagicNumber:FlightRow.kt$16</ID>
+    <ID>MagicNumber:FlightRow.kt$720</ID>
+    <ID>MagicNumber:ForegroundFlightRefreshEffect.kt$1000L</ID>
+    <ID>MagicNumber:ForegroundFlightRefreshEffect.kt$15</ID>
+    <ID>MagicNumber:ForegroundFlightRefreshEffect.kt$5</ID>
+    <ID>MagicNumber:ForegroundFlightRefreshEffect.kt$60</ID>
+    <ID>MagicNumber:ImageUtils.kt$ImageUtils$32</ID>
+    <ID>MagicNumber:ImageUtils.kt$ImageUtils$32.0</ID>
+    <ID>MagicNumber:MathUtils.kt$MathUtils$0.5</ID>
+    <ID>MagicNumber:OCRBox.kt$OCRBox$4</ID>
+    <ID>MagicNumber:OcrRosterReader.kt$OcrRosterReader$4</ID>
+    <ID>MagicNumber:OnboardingScreen.kt$20</ID>
+    <ID>MagicNumber:PolygonUnclip.kt$PolygonUnclip$3</ID>
+    <ID>MagicNumber:PolygonUnclip.kt$PolygonUnclip$8.0</ID>
+    <ID>MagicNumber:QuadGeometry.kt$QuadGeometry$3</ID>
+    <ID>MagicNumber:QuadTextCrop.kt$QuadTextCrop$3</ID>
+    <ID>MagicNumber:QuadTextCrop.kt$QuadTextCrop$4</ID>
+    <ID>MagicNumber:RecPreprocessor.kt$RecPreprocessor$127.5</ID>
+    <ID>MagicNumber:RecPreprocessor.kt$RecPreprocessor$3</ID>
+    <ID>MagicNumber:ReminderPolicy.kt$ReminderPolicy$10</ID>
+    <ID>MagicNumber:RosterAssignment.kt$3</ID>
+    <ID>MagicNumber:RosterFlightMatcher.kt$RosterFlightMatcher$24</ID>
+    <ID>MagicNumber:RosterFlightMatcher.kt$RosterFlightMatcher$3</ID>
+    <ID>MagicNumber:RosterFlightMatcher.kt$RosterFlightMatcher$4</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.008</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.032</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.090</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.160</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.293</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.394</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.469</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.48</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.56</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.58</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.640</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.723</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.75</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$0.778</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$1.5</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$12.0</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$23</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$3</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$4</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$4.0</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$5</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$59</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$6</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$7</ID>
+    <ID>MagicNumber:RosterTableParser.kt$RosterTableParser$8</ID>
+    <ID>MagicNumber:SettingsScreen.kt$20</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$10</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$11</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$12</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$13</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$15</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$17</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$20</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$21</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$22</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$25</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$3</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$30</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$35</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$4</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$40</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$45</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$5</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$50</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$55</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$7</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$8</ID>
+    <ID>MagicNumber:ShiftBusPlan.kt$ShiftBusPlan$9</ID>
+    <ID>MagicNumber:ShiftCycle.kt$ShiftCycle$2026</ID>
+    <ID>MagicNumber:ShiftCycle.kt$ShiftCycle$23</ID>
+    <ID>MagicNumber:ShiftCycle.kt$ShiftCycle$3</ID>
+    <ID>MagicNumber:ShiftCycle.kt$ShiftCycle$8</ID>
+    <ID>MagicNumber:ShiftSlot.kt$ShiftClock$60</ID>
+    <ID>MagicNumber:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$3</ID>
+    <ID>MagicNumber:SpecialServiceModels.kt$3</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$10</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$12</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$18</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$23</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$24</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$3</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$4</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$5</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$59</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$6</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$7</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$8</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$9</ID>
+    <ID>MagicNumber:SpecialServiceParser.kt$SpecialServiceParser$99</ID>
+    <ID>MagicNumber:SpecialServiceRepository.kt$SpecialServiceRepository$32</ID>
+    <ID>MagicNumber:VariFlightClient.kt$401</ID>
+    <ID>MagicNumber:VariFlightClient.kt$403</ID>
+    <ID>MagicNumber:VariFlightClient.kt$408</ID>
+    <ID>MagicNumber:VariFlightClient.kt$429</ID>
+    <ID>MagicNumber:VariFlightClient.kt$500</ID>
+    <ID>MagicNumber:VariFlightClient.kt$599</ID>
+    <ID>MagicNumber:VariFlightClient.kt$VariFlightClient$200</ID>
+    <ID>MagicNumber:VariFlightClient.kt$VariFlightClient$299</ID>
+    <ID>MagicNumber:VariFlightClient.kt$VariFlightPayloadParser$3</ID>
+    <ID>MagicNumber:VariFlightClient.kt$VariFlightPayloadParser$4</ID>
+    <ID>MagicNumber:VariFlightClient.kt$VariFlightPayloadParser$5</ID>
+    <ID>MagicNumber:XlsRosterParser.kt$XlsRosterParser.BiffWorkbookCollector$255</ID>
+    <ID>MatchingDeclarationName:AirShiftRoot.kt$DutySection</ID>
+    <ID>MatchingDeclarationName:DutyFlightWindow.kt$FlightRefreshScope</ID>
+    <ID>MatchingDeclarationName:FlightRefreshBatch.kt$FlightRefreshBatchResult</ID>
+    <ID>MaxLineLength:AirShiftApp.kt$val visibleFlightCancellations = remember(specialServiceState, state.now) { specialServiceState.activeFlightCancellations() }</ID>
+    <ID>MaxLineLength:AirShiftTheme.kt$displaySmall = TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, lineHeight = 40.sp, letterSpacing = (-0.25).sp, fontFeatureSettings = TabularNums)</ID>
+    <ID>MaxLineLength:AirShiftTheme.kt$headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 32.sp, letterSpacing = (-0.2).sp)</ID>
+    <ID>MaxLineLength:AirportLocator.kt$AirportLocator$ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED</ID>
+    <ID>MaxLineLength:AirportLocator.kt$AirportLocator$if</ID>
+    <ID>MaxLineLength:AssignmentLegs.kt$add(DetailEntry(kind = DetailKind.BOARDING_END, value = DutyTimeline.gateCloseTime(this@outboundLeg).formatClock()))</ID>
+    <ID>MaxLineLength:AssignmentLegs.kt$add(DetailEntry(kind = DetailKind.BOARDING_START, value = DutyTimeline.boardingStartTime(this@outboundLeg).formatClock()))</ID>
+    <ID>MaxLineLength:AssignmentLegs.kt$value = if (full &amp;&amp; gateChange != null) gateChangeDisplayValue(boardingGate, gateChange) else boardingGate ?: "--"</ID>
+    <ID>MaxLineLength:AssignmentLegs.kt$value = if (full &amp;&amp; standChange != null) "${arrivalStand ?: "--"} → ${standChange.stand}" else arrivalStand ?: "--"</ID>
+    <ID>MaxLineLength:AssignmentLegs.kt$value = if (full &amp;&amp; standChange != null) "${departureStand ?: "--"} → ${standChange.stand}" else departureStand ?: "--"</ID>
+    <ID>MaxLineLength:AssignmentLegsTest.kt$AssignmentLegsTest$"MU5102"</ID>
+    <ID>MaxLineLength:AssignmentLegsTest.kt$AssignmentLegsTest$private val cancellation = FlightCancellationRecord("MU5101", date, FlightCancellationScope.TRIP, 4_000L, 10_000L, "cancel")</ID>
+    <ID>MaxLineLength:DesignComponents.kt$LinearIcons$"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"</ID>
+    <ID>MaxLineLength:DesignComponents.kt$LinearIcons$"M2 22h20 M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z"</ID>
+    <ID>MaxLineLength:DesignComponents.kt$LinearIcons$"M2.5 21.5h19 M17.8 18.2 16 10l3.5-3.5C21 5 21.5 3 21 2c-1-.5-3 0-4.5 1.5L12 7 4.8 5.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 11l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"</ID>
+    <ID>MaxLineLength:DesignComponents.kt$LinearIcons$"M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21"</ID>
+    <ID>MaxLineLength:DutyFlightWindowTest.kt$DutyFlightWindowTest$assignment("MU1001").copy(scheduledArrival = yesterday, outboundFlight = "MU1001", scheduledDeparture = now)</ID>
+    <ID>MaxLineLength:DutyViewModel.kt$DutyViewModel$pendingRefresh = PendingFlightRefresh(completion.snapshot.generation, pending).takeIf { pending.isNotEmpty() }</ID>
+    <ID>MaxLineLength:DutyViewModel.kt$DutyViewModel$val scope = if (!automatic &amp;&amp; window.isEmpty()) FlightRefreshScope.ALL_ROSTER else FlightRefreshScope.DUTY_WINDOW</ID>
+    <ID>MaxLineLength:DutyViewModelTest.kt$DutyViewModelTest$assertTrue(viewModel.uiState.value.assignments.dutyWindowIndices(viewModel.uiState.value.manuallyCompletedCount, baseTime).isEmpty())</ID>
+    <ID>MaxLineLength:DutyViewModelTest.kt$FakeRosterRepository$override</ID>
+    <ID>MaxLineLength:DutyWindowRefreshInstrumentedTest.kt$DutyWindowRefreshInstrumentedTest.&lt;no name provided&gt;$override fun canScheduleExactAlarms(): Boolean</ID>
+    <ID>MaxLineLength:ExcelRosterParserTest.kt$ExcelRosterParserTest$"&lt;?xml version=\"1.0\"?&gt;&lt;Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/&gt;"</ID>
+    <ID>MaxLineLength:ExcelRosterParserTest.kt$ExcelRosterParserTest$"&lt;?xml version=\"1.0\"?&gt;&lt;workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"&gt;&lt;workbookPr date1904=\"0\"/&gt;&lt;/workbook&gt;"</ID>
+    <ID>MaxLineLength:FlightRefreshSchedulerInstrumentedTest.kt$FlightRefreshSchedulerInstrumentedTest$assumeFalse("Scheduling tests must not touch a configured API credential", RosterStore(baseContext).hasVariFlightApiKey)</ID>
+    <ID>MaxLineLength:FlightRow.kt$"${record.typeLabel()} · ${record.confidence.label()} · 已确认 · 更新 ${record.updatedAtEpochMillis.formatEpoch("MM-dd HH:mm")}"</ID>
+    <ID>MaxLineLength:OcrRosterReader.kt$OcrRosterReader$"engine=PP-OCRv6-tiny lines=${ocrResult.lineCount} tokens=${tokens.size} totalMs=${ocrResult.totalTimeMs}"</ID>
+    <ID>MaxLineLength:ReminderReceiver.kt$ReminderReceiver$if</ID>
+    <ID>MaxLineLength:RosterAssignment.kt$private</ID>
+    <ID>MaxLineLength:RosterFlightMatcherTest.kt$RosterFlightMatcherTest$assertEquals(notificationDate.plusDays(1), RosterFlightMatcher.match(candidate("MU2473", notificationDate.plusDays(1)), flights).matched?.operationDate)</ID>
+    <ID>MaxLineLength:RosterStoreInstrumentedTest.kt$RosterStoreInstrumentedTest$mapOf(FlightLookup.of("MU1001", date) to listOf(liveFlight("MU1001", "NEW").copy(estimatedArrival = now.plusHours(2))))</ID>
+    <ID>MaxLineLength:RosterTableParser.kt$RosterTableParser$val leftEdge = minOf(tokens.minOfOrNull { it.left.toDouble() } ?: 0.0, sortedAnchors.first().token.left.toDouble())</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$supportingText = supportingText?.let { text -&gt; { Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant) } }</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None</ID>
+    <ID>MaxLineLength:ShiftBusPlanTest.kt$ShiftBusPlanTest$assertEquals(ShiftBusPlan.departures(ShiftDayKind.WORK_FIRST).sorted(), ShiftBusPlan.departures(ShiftDayKind.WORK_FIRST))</ID>
+    <ID>MaxLineLength:ShiftRotationTest.kt$ShiftRotationTest$assertEquals("$date 组$group", ShiftSlot(ShiftTier.EARLY, index + 1), schedule.slotOnFullWorkday(group, date))</ID>
+    <ID>MaxLineLength:ShiftRotationTest.kt$ShiftRotationTest$assertEquals("$date 组$group", ShiftSlot(ShiftTier.MID, index + 1), schedule.slotOnFullWorkday(group, date))</ID>
+    <ID>MaxLineLength:ShiftRotationTest.kt$ShiftRotationTest$assertEquals("$date 组$group", ShiftSlot(ShiftTier.NIGHT, index + 1), schedule.slotOnFullWorkday(group, date))</ID>
+    <ID>MaxLineLength:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$flightCancellations = root.optJSONArray("flightCancellations").mapObjects { it.toFlightCancellationRecord() }</ID>
+    <ID>MaxLineLength:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$pendingFlightCancellations = root.optJSONArray("pendingFlightCancellations").mapObjects { it.toParsedFlightCancellation() }</ID>
+    <ID>MaxLineLength:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$processedFingerprints = root.optJSONArray("processedFingerprints").mapObjects { it.toProcessedFingerprint() }</ID>
+    <ID>MaxLineLength:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec$put("pendingFlightCancellations", JSONArray().apply { state.pendingFlightCancellations.forEach { put(it.toJson()) } })</ID>
+    <ID>MaxLineLength:SpecialServiceParser.kt$SpecialServiceParser$add(ServiceMention(ServiceType.UNACCOMPANIED_MINOR, null, Confidence.HIGH, match.range.first, match.range.last))</ID>
+    <ID>MaxLineLength:SpecialServiceParser.kt$SpecialServiceParser$add(ServiceMention(ServiceType.UNACCOMPANIED_MINOR, null, Confidence.LOW, match.range.first, match.range.last))</ID>
+    <ID>MaxLineLength:SpecialServiceParser.kt$SpecialServiceParser$if (facilityChangeRanges.any { changeRange -&gt; range.first &gt;= changeRange.first &amp;&amp; range.last &lt;= changeRange.last }) return true</ID>
+    <ID>MaxLineLength:SpecialServiceParser.kt$SpecialServiceParser$val dateRanges = fullDateRegex.findAll(text).map(MatchResult::range) + monthDayRegex.findAll(text).map(MatchResult::range)</ID>
+    <ID>MaxLineLength:SpecialServiceParser.kt$SpecialServiceParser$val digits = mapOf('零' to 0, '一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)</ID>
+    <ID>MaxLineLength:SpecialServiceParserTest.kt$SpecialServiceParserTest$assertEquals(keyed, SpecialServiceParser.parse(listOf("MU2473一位UM"), sourceTime, zoneId, ByteArray(32) { 7 }).single().fingerprint)</ID>
+    <ID>MaxLineLength:SpecialServiceParserTest.kt$SpecialServiceParserTest$val keyed = SpecialServiceParser.parse(listOf("MU2473一位UM"), sourceTime, zoneId, ByteArray(32) { 7 }).single().fingerprint</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$)</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$MucMessageReducer$pendingReviews = pendingReviews.filterNot { it.id == candidate.id } + candidate.toPendingReview(emptyList())</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$MucMessageReducer$record.copy(expiresAtEpochMillis = refreshedExpiry(record.flightNumber, record.operationDate, record.expiresAtEpochMillis))</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$MucMessageReducer$record.flightKey == flight.key &amp;&amp; record.updatedAtEpochMillis &lt;= candidate.sourceEpochMillis</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$flightCancellations.forEach { record -&gt; put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$gateChanges.forEach { record -&gt; put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$pending.forEach { review -&gt; put(review.fingerprint, maxOf(get(review.fingerprint) ?: 0L, review.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$pendingFlightCancellations.forEach { candidate -&gt; put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$pendingGateChanges.forEach { candidate -&gt; put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$pendingStandChanges.forEach { candidate -&gt; put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$records.forEach { record -&gt; put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$standChanges.forEach { record -&gt; put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }</ID>
+    <ID>MaxLineLength:SpecialServiceReducer.kt$SpecialServiceExpiry$val pendingFlightCancellations = state.pendingFlightCancellations.filter { it.expiresAtEpochMillis &gt; nowEpochMillis }</ID>
+    <ID>MaxLineLength:SpecialServiceRepository.kt$SpecialServiceRepository$flightCancellations = message.flightCancellations.map { it.copy(expiresAtEpochMillis = now + PENDING_TTL_MILLIS) }</ID>
+    <ID>MaxLineLength:SpecialServiceRepository.kt$SpecialServiceRepository$serviceCandidates = message.serviceCandidates.map { it.copy(expiresAtEpochMillis = now + PENDING_TTL_MILLIS) }</ID>
+    <ID>MaxLineLength:SpecialServiceRepository.kt$SpecialServiceRepository$standChanges = message.standChanges.map { it.copy(expiresAtEpochMillis = now + PENDING_TTL_MILLIS) }</ID>
+    <ID>MaxLineLength:VariFlightApiKeyStore.kt$VariFlightApiKeyStore$cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(iv, Base64.NO_WRAP)))</ID>
+    <ID>MaxLineLength:VariFlightClient.kt$VariFlightPayloadParser$Regex(valueStart(key) + "datetime\\.datetime\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*(\\d+))?")</ID>
+    <ID>MaxLineLength:VariFlightPayloadParserTest.kt$VariFlightPayloadParserTest$.</ID>
+    <ID>MaxLineLength:VariFlightProtectionTest.kt$VariFlightProtectionTest$// Confirm the second caller is really parked on the in-flight load, rather than only racing two submissions.</ID>
+    <ID>MaxLineLength:VariFlightProtectionTest.kt$VariFlightProtectionTest$assertEquals("1", cache.getOrFetch(lookup) { listOf(flight("1")).also { upstreamCalls++ } }.first().arrivalBridge)</ID>
+    <ID>MaxLineLength:VariFlightProtectionTest.kt$VariFlightProtectionTest$assertEquals("1", cache.getOrFetch(lookup) { listOf(flight("2")).also { upstreamCalls++ } }.first().arrivalBridge)</ID>
+    <ID>MaxLineLength:VariFlightProtectionTest.kt$VariFlightProtectionTest$assertEquals("2", cache.getOrFetch(lookup) { listOf(flight("2")).also { upstreamCalls++ } }.first().arrivalBridge)</ID>
+    <ID>MayBeConst:AirShiftTheme.kt$private val TabularNums = "tnum"</ID>
+    <ID>NestedBlockDepth:CTCDecoder.kt$CTCDecoder$fun decode(output: FloatArray, shape: LongArray, characterList: List&lt;String&gt;): List&lt;Pair&lt;String, Float&gt;&gt;</ID>
+    <ID>NestedBlockDepth:DBPostProcessor.kt$DBPostProcessor$fun process( pred: FloatArray, predShape: LongArray, thresh: Float, boxThresh: Float, unclipRatio: Float, maxCandidates: Int, useDilation: Boolean, scoreMode: String, boxType: String, originalH: Int, originalW: Int, ): List&lt;OCRBox&gt;</ID>
+    <ID>NestedBlockDepth:ExcelRosterReader.kt$ExcelRosterReader$private fun parseXls(input: InputStream, cacheDir: File, userName: String): RosterParseResult</ID>
+    <ID>NestedBlockDepth:FlightRefreshBatch.kt$internal fun refreshFlightBatch( targets: Set&lt;FlightLookup&gt;, isCurrent: (FlightLookup) -&gt; Boolean, fetch: (FlightLookup) -&gt; List&lt;FlightInfo&gt;, ): FlightRefreshBatchResult</ID>
+    <ID>NestedBlockDepth:OCREngine.kt$OCREngine$private fun run(srcMat: org.opencv.core.Mat): OCREngineResult</ID>
+    <ID>NestedBlockDepth:SpecialServiceReducer.kt$MucMessageReducer$fun apply( initial: SpecialServiceState, message: ParsedMucMessage, flights: List&lt;FlightReference&gt;, ): MucMessageReduction</ID>
+    <ID>ReturnCount:DutyTimeline.kt$DutyTimeline$fun gateArrivalTime(assignment: RosterAssignment): LocalDateTime?</ID>
+    <ID>ReturnCount:DutyViewModel.kt$DutyViewModel$fun refreshCurrentAssignments(automatic: Boolean = false, onlyLookups: Set&lt;FlightLookup&gt;? = null)</ID>
+    <ID>ReturnCount:DutyViewModel.kt$DutyViewModel$private fun drainPendingRefresh()</ID>
+    <ID>ReturnCount:DutyViewModel.kt$DutyViewModel$private suspend fun finishImport(result: RosterParseResult, attempt: ImportAttempt?)</ID>
+    <ID>ReturnCount:DutyViewModelTest.kt$FakeRosterRepository$override fun completeCurrentDuty(expectedGeneration: Long, expectedDutyIndex: Int, now: LocalDateTime): DutyCompletion?</ID>
+    <ID>ReturnCount:DutyViewModelTest.kt$FakeRosterRepository$override fun mergeLiveInfoIfGeneration( live: Map&lt;FlightLookup, List&lt;FlightInfo&gt;&gt;, expectedGeneration: Long, fallbackDate: LocalDate, refreshedAtEpochMillis: Long?, scope: FlightRefreshScope, ): RosterSnapshot?</ID>
+    <ID>ReturnCount:DutyWidgetActionReceiver.kt$DutyWidgetActionReceiver$override fun onReceive(context: Context, intent: Intent)</ID>
+    <ID>ReturnCount:DutyWidgetModel.kt$fun List&lt;RosterAssignment&gt;.toWidgetPages( manuallyCompletedCount: Int, now: LocalDateTime = LocalDateTime.now(), ): List&lt;WidgetPage&gt;</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun containsAssignee(raw: String, userName: String): Boolean</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun findRosterDate( rows: List&lt;ExcelRow&gt;, today: LocalDate, uses1904DateSystem: Boolean, ): LocalDate?</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun parseAssignment( row: ExcelRow, columns: Map&lt;RosterColumn, Int&gt;, rosterDate: LocalDate, userName: String, vipFlightNumbers: Set&lt;String&gt;, uses1904DateSystem: Boolean, ): RosterAssignment?</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun parseObservedShiftGroups(rows: List&lt;ExcelRow&gt;): ObservedShiftGroups?</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun parsePartialDate(raw: String, today: LocalDate): LocalDate?</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun parseRosterTime(raw: String, date: LocalDate): LocalDateTime?</ID>
+    <ID>ReturnCount:ExcelRosterParser.kt$ExcelRosterParser$private fun parseTimeCell( cell: ExcelCell?, rosterDate: LocalDate, uses1904DateSystem: Boolean, ): LocalDateTime?</ID>
+    <ID>ReturnCount:FlightInfo.kt$private fun selectInboundLeg( legs: List&lt;FlightInfo&gt;?, scheduledArrival: LocalDateTime?, localAirportCode: String?, throughFlight: Boolean, ): FlightInfo?</ID>
+    <ID>ReturnCount:FlightInfo.kt$private fun selectOutboundLeg( legs: List&lt;FlightInfo&gt;?, scheduledDeparture: LocalDateTime?, localAirportCode: String?, throughFlight: Boolean, ): FlightInfo?</ID>
+    <ID>ReturnCount:FlightRefreshWorker.kt$FlightRefreshWorker$override fun doWork(): Result</ID>
+    <ID>ReturnCount:ModelConfig.kt$ModelConfig.Companion$private fun parseYamlListScalar(rawValue: String): String</ID>
+    <ID>ReturnCount:PolygonUnclip.kt$PolygonUnclip$fun unclip(points: List&lt;Point&gt;, unclipRatio: Float): List&lt;Point&gt;</ID>
+    <ID>ReturnCount:ReminderPolicy.kt$ReminderPolicy$fun create(assignment: RosterAssignment): ReminderSpec?</ID>
+    <ID>ReturnCount:RosterAssignment.kt$private fun isLegComplete(actual: LocalDateTime?, estimated: LocalDateTime?, scheduled: LocalDateTime?, now: LocalDateTime): Boolean</ID>
+    <ID>ReturnCount:RosterFlightMatcher.kt$RosterFlightMatcher$fun matchFlightToken( flightToken: String, explicitDate: LocalDate?, notificationDate: LocalDate, flights: List&lt;FlightReference&gt;, ): FlightMatchResult</ID>
+    <ID>ReturnCount:RosterTableParser.kt$RosterTableParser$fun parseRosterTime(raw: String, date: LocalDate): LocalDateTime?</ID>
+    <ID>ReturnCount:RosterTableParser.kt$RosterTableParser$private fun clusterTableRows(tokens: List&lt;OcrToken&gt;, edges: DoubleArray): List&lt;List&lt;OcrToken&gt;&gt;</ID>
+    <ID>ReturnCount:SharedExcelImport.kt$SharedExcelIntentParser$fun parse(intent: Intent): SharedExcelIntentResult?</ID>
+    <ID>ReturnCount:ShiftBusPlan.kt$ShiftBusPlan$fun recommend( kind: ShiftDayKind, slot: ShiftSlot, rosterReportByMinutes: Int? = null, marginMinutes: Int = DEFAULT_REPORT_MARGIN_MINUTES, ): BusRecommendation?</ID>
+    <ID>ReturnCount:ShiftCycle.kt$ShiftCycle$fun rotationOffset(date: LocalDate, tableSize: Int = ShiftGroupTable.DEFAULT.size): Int?</ID>
+    <ID>ReturnCount:ShiftRosterBridge.kt$ShiftRosterBridge$fun lastTaskMinutes(assignments: List&lt;RosterAssignment&gt;): Int?</ID>
+    <ID>ReturnCount:ShiftRosterBridge.kt$ShiftRosterBridge$fun reportByMinutes(assignments: List&lt;RosterAssignment&gt;): Int?</ID>
+    <ID>ReturnCount:ShiftSchedule.kt$ShiftSchedule$fun positionOf(groupId: Int, date: LocalDate): Int?</ID>
+    <ID>ReturnCount:ShiftSchedule.kt$ShiftSchedule$private fun rotationOffset(date: LocalDate): Int?</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun extractCount(text: String, mention: ServiceMention): Int?</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun extractDate(text: String, notificationDate: LocalDate): LocalDate?</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun isLikelyNonFlightNumber(text: String, range: IntRange, carrier: String): Boolean</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun parseCount(raw: String): Int?</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun parseGateChangeSegment( segment: String, fallbackText: String, fingerprint: String, explicitDate: LocalDate?, notificationDate: LocalDate, sourceEpochMillis: Long, expiresAtEpochMillis: Long, ): List&lt;ParsedGateChangeCandidate&gt;</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun parseSegment( segment: String, fallbackText: String, fingerprint: String, explicitDate: LocalDate?, notificationDate: LocalDate, sourceEpochMillis: Long, expiresAtEpochMillis: Long, ): List&lt;ParsedServiceCandidate&gt;</ID>
+    <ID>ReturnCount:SpecialServiceParser.kt$SpecialServiceParser$private fun parseStandChangeSegment( segment: String, fallbackText: String, fingerprint: String, explicitDate: LocalDate?, notificationDate: LocalDate, sourceEpochMillis: Long, expiresAtEpochMillis: Long, ): List&lt;ParsedStandChangeCandidate&gt;</ID>
+    <ID>ReturnCount:SpecialServiceReducer.kt$SpecialServiceReducer$fun apply( records: List&lt;FlightServiceRecord&gt;, candidate: ParsedServiceCandidate, flight: FlightReference, reviewStatus: ReviewStatus, ): SpecialServiceReduction</ID>
+    <ID>ReturnCount:SpecialServiceReducer.kt$SpecialServiceReducer$fun applyFlightCancellation( records: List&lt;FlightCancellationRecord&gt;, candidate: ParsedFlightCancellationCandidate, flight: FlightReference, ): FlightCancellationReduction</ID>
+    <ID>ReturnCount:SpecialServiceReducer.kt$SpecialServiceReducer$fun applyGateChange( records: List&lt;GateChangeRecord&gt;, candidate: ParsedGateChangeCandidate, flight: FlightReference, ): GateChangeReduction</ID>
+    <ID>ReturnCount:SpecialServiceReducer.kt$SpecialServiceReducer$fun applyStandChange( records: List&lt;StandChangeRecord&gt;, candidate: ParsedStandChangeCandidate, flight: FlightReference, ): StandChangeReduction</ID>
+    <ID>ReturnCount:SpecialServiceRepository.kt$internal fun SpecialServiceState.withRepairedProcessingStatus(): SpecialServiceState</ID>
+    <ID>ReturnCount:VariFlightClient.kt$FlightResponseCache$fun getOrFetch(lookup: FlightLookup, loader: () -&gt; List&lt;FlightInfo&gt;): List&lt;FlightInfo&gt;</ID>
+    <ID>ReturnCount:VariFlightClient.kt$VariFlightPayloadParser$private fun dataArrayRegion(payload: String): String?</ID>
+    <ID>ReturnCount:VariFlightClient.kt$VariFlightPayloadParser$private fun dateTimeField(payload: String, key: String): LocalDateTime?</ID>
+    <ID>SpreadOperator:BitmapUtils.kt$BitmapUtils$(*imageBytes)</ID>
+    <ID>SpreadOperator:DBPostProcessor.kt$DBPostProcessor$(*contour.toArray())</ID>
+    <ID>ThrowsCount:FlightRefreshBatchTest.kt$FlightRefreshBatchTest$@Test fun partialFailuresKeepSuccessfulDataAndDoNotExposeUnexpectedExceptionDetails()</ID>
+    <ID>ThrowsCount:ModelConfig.kt$ModelConfig.Companion$fun parse(context: Context, assetPath: String): ModelConfig</ID>
+    <ID>ThrowsCount:ModelConfig.kt$ModelConfig.Companion$private fun extractCharacterDict(content: String, assetPath: String): List&lt;String&gt;</ID>
+    <ID>ThrowsCount:ORTSessionManager.kt$ORTSessionManager$fun loadModels(detAssetPath: String, recAssetPath: String)</ID>
+    <ID>ThrowsCount:ORTSessionManager.kt$ORTSessionManager$private fun runSession( ortEnv: OrtEnvironment, session: OrtSession, inputName: String, input: FloatArray, shape: LongArray, modelName: String, ): Pair&lt;FloatArray, LongArray&gt;</ID>
+    <ID>ThrowsCount:VariFlightClient.kt$VariFlightClient$private fun requestFlightBlocking(lookup: FlightLookup): List&lt;FlightInfo&gt;</ID>
+    <ID>ThrowsCount:VariFlightClient.kt$VariFlightJsonRpcParser$fun parse(body: String, fallbackFlightNumber: String): List&lt;FlightInfo&gt;</ID>
+    <ID>TooGenericExceptionCaught:BitmapUtils.kt$BitmapUtils$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:DutyViewModel.kt$DutyViewModel$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:FlightRefreshBatch.kt$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:ModelConfig.kt$ModelConfig.Companion$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:OCREngine.kt$OCREngine$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ORTSessionManager.kt$ORTSessionManager$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:VariFlightClient.kt$FlightResponseCache$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:XlsRosterParser.kt$XlsRosterParser$error: Exception</ID>
+    <ID>TooGenericExceptionThrown:ORTSessionManager.kt$ORTSessionManager$throw Exception("Output is not an ONNX tensor")</ID>
+    <ID>TooManyFunctions:DesignComponents.kt$com.bradj.airshift.ui.components.DesignComponents.kt</ID>
+    <ID>TooManyFunctions:DutyViewModel.kt$DutyViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:ExcelRosterParser.kt$ExcelRosterParser</ID>
+    <ID>TooManyFunctions:Lookups.kt$com.bradj.airshift.ui.components.Lookups.kt</ID>
+    <ID>TooManyFunctions:RosterStore.kt$RosterStore : RosterRepository</ID>
+    <ID>TooManyFunctions:RosterTableParser.kt$RosterTableParser</ID>
+    <ID>TooManyFunctions:SpecialServiceJsonCodec.kt$SpecialServiceJsonCodec</ID>
+    <ID>TooManyFunctions:SpecialServiceParser.kt$SpecialServiceParser</ID>
+    <ID>UnusedParameter:OpenCVUtils.kt$OpenCVUtils$context: Context</ID>
+    <ID>UseCheckOrError:FlightRefreshBatchTest.kt$FlightRefreshBatchTest$throw IllegalStateException("private token=secret response body")</ID>
+    <ID>UseCheckOrError:VariFlightApiKeyStore.kt$VariFlightApiKeyStore$throw IllegalStateException("无法安全保存飞常准 API Key")</ID>
+  </CurrentIssues>
+</SmellBaseline>
