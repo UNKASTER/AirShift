@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 系统栏颜色与图标明暗由 MainActivity.enableEdgeToEdge 决定；这里只给窗口底色，避免启动闪白。 -->
     <style name="Theme.AirShift" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:colorAccent">#C8102E</item>
-        <item name="android:navigationBarColor">#F5F6F8</item>
-        <item name="android:statusBarColor">#F5F6F8</item>
+        <item name="android:windowBackground">@color/ground_light</item>
+        <item name="android:colorAccent">@color/cea_red</item>
     </style>
 </resources>

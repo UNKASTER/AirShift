@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -39,7 +40,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) sharedExcelImportQueue.enqueue(intent)
         setIntent(Intent(Intent.ACTION_MAIN))
-        enableEdgeToEdge()
+        // 每页顶部都是藏青板面，状态栏图标恒为浅色；导航栏透明，跟随底栏颜色。
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ),
+        )
         ReminderReceiver.createChannel(this)
         LegacyMigrations.runOnce(this)
         val store = RosterStore(this)

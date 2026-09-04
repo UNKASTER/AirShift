@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 夜间航显：窗口底色与板面同色。 -->
+    <style name="Theme.AirShift" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ground_dark</item>
+        <item name="android:colorAccent">@color/cea_red</item>
+    </style>
+</resources>

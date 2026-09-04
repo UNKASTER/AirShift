@@ -1,21 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 小组件（RemoteViews）用色，与 ui/theme/AirShiftTheme.kt 的设计令牌保持一致。 -->
+<!-- 窗口底色与小组件（RemoteViews）用色，与 ui/theme/AirShiftTheme.kt 的 AirShiftPalette 保持一致。 -->
 <resources>
+    <!-- 窗口底色（浅 / 深） -->
+    <color name="ground_light">#F1F3F7</color>
+    <color name="ground_dark">#0B1526</color>
     <color name="cea_red">#C8102E</color>
-    <color name="cea_red_soft">#FDECEE</color>
-    <color name="on_cea_red_soft">#9C0B22</color>
-    <color name="inbound_blue">#2B5EA7</color>
-    <color name="inbound_blue_soft">#EAF1FB</color>
-    <color name="text_primary">#14284B</color>
-    <color name="text_body">#4A5568</color>
-    <color name="text_secondary">#4A5568</color>
-    <color name="text_hint">#8A94A6</color>
-    <color name="success_green">#0F7B5F</color>
-    <color name="border_soft">#ECEEF2</color>
-    <color name="field_fill">#F0F2F5</color>
-    <color name="divider_dash">#E2E6EC</color>
-    <color name="divider_tear">#EEF0F4</color>
-    <color name="card_white">#FFFFFF</color>
-    <color name="vip_container">#FCEBC8</color>
-    <color name="on_vip_container">#6E4200</color>
+
+    <!-- 小组件：固定藏青板面，浅深壁纸都可读 -->
+    <color name="board">#14284B</color>
+    <color name="board_rule">#1AFFFFFF</color>
+    <color name="on_board">#FFFFFF</color>
+    <color name="on_board_secondary">#A9B6CC</color>
+    <color name="on_board_alert">#FF8A98</color>
+    <color name="widget_arrival">#7FA6E6</color>
+    <color name="widget_departure">#FF6B7A</color>
+    <color name="widget_ok">#4CC38A</color>
+    <color name="widget_vip_bg">#38F0B24A</color>
+    <color name="widget_vip_text">#F5CB7A</color>
+    <color name="widget_ripple">#33FFFFFF</color>
+    <color name="widget_outline">#8CFFFFFF</color>
 </resources>

@@ -1,0 +1,31 @@
+# 在默认规则集（buildUponDefaultConfig）之上，只放开 Compose 的惯例：
+# @Composable 函数按约定使用 PascalCase，参数多、方法长、含尺寸字面量是 UI 声明式代码的常态。
+# ui/theme 是 design token 文件，色值、字号、曲线本身就是内容，不算魔法数字。
+# 业务代码不受影响，仍按默认阈值检查。
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+
+complexity:
+  LongMethod:
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+  CyclomaticComplexMethod:
+    ignoreAnnotated: ['Composable']
+  NestedBlockDepth:
+    ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    ignoreAnnotatedFunctions: ['Composable']
+
+style:
+  MagicNumber:
+    ignoreAnnotated: ['Composable']
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/commonTest/**'
+      - '**/jvmTest/**'
+      - '**/androidUnitTest/**'
+      - '**/androidInstrumentedTest/**'
+      - '**/ui/theme/**'

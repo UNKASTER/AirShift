@@ -12,17 +12,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -30,21 +32,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bradj.airshift.ui.components.linearIcon
 import com.bradj.airshift.ui.theme.AirShiftMotion
-import com.bradj.airshift.ui.theme.BorderSoft
-import com.bradj.airshift.ui.theme.CeaRed
-import com.bradj.airshift.ui.theme.NavyGrey
-import com.bradj.airshift.ui.theme.heroShadow
+import com.bradj.airshift.ui.theme.AirShiftTokens
 
 enum class DutySection {
     ALL,
@@ -53,8 +51,7 @@ enum class DutySection {
     SETTINGS,
 }
 
-// ---------- 1.5px 线性图标（Lucide 风格自绘，禁止填充/线性混用） ----------
-// 构建器统一放在 ui.components.linearIcon 复用。
+// ---------- 1.5px 线性图标（统一线性，禁止填充/线性混用） ----------
 
 /** 全部执勤：列表。 */
 private val IconDutyList = linearIcon(
@@ -80,11 +77,24 @@ private val IconSettings = linearIcon(
     "M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4",
 )
 
+private data class NavDestination(
+    val section: DutySection,
+    val icon: ImageVector,
+    val label: String,
+    val testTag: String,
+)
+
+private val Destinations = listOf(
+    NavDestination(DutySection.ALL, IconDutyList, "全部执勤", "nav_all"),
+    NavDestination(DutySection.CALENDAR, IconShiftCalendar, "排班日历", "nav_calendar"),
+    NavDestination(DutySection.CURRENT, IconDutyCurrent, "当前执勤", "nav_current"),
+    NavDestination(DutySection.SETTINGS, IconSettings, "设置", "nav_settings"),
+)
+
 /**
- * 根布局：Scaffold + 品牌底部导航。
- * 白底 + 顶部 1px 浅灰线；1.5px 线性图标；激活态东航红；
- * 中央「当前执勤」为浮动圆形红按钮（三级阴影），突出核心入口。
- * 状态颜色切换统一 200ms ease-out。
+ * 根布局：Scaffold + 四等分底栏。
+ * 页面自己处理状态栏 inset（板面贯通到状态栏之下），所以 Scaffold 不消费任何 inset；
+ * 底栏消费导航栏 inset。
  */
 @Composable
 fun AirShiftRoot(
@@ -93,9 +103,10 @@ fun AirShiftRoot(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = AirShiftTokens.colors.ground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            DutyBottomBar(
+            DutyNavigationBar(
                 section = section,
                 onSectionSelected = onSectionSelected,
             )
@@ -107,193 +118,88 @@ fun AirShiftRoot(
     }
 }
 
+/**
+ * 底栏：四个等宽目的地，顶部 1dp 线；激活项上方一枚 20×3dp 红灯，图标与文字变藏青。
+ * 灯与颜色的变化 150 ms。
+ */
 @Composable
-private fun DutyBottomBar(
+private fun DutyNavigationBar(
     section: DutySection,
     onSectionSelected: (DutySection) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        // 白条本体：白底 + 顶部 1px 浅灰线
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column {
-                HorizontalDivider(thickness = 1.dp, color = BorderSoft)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BottomBarItem(
-                        modifier = Modifier.weight(1f),
-                        icon = IconDutyList,
-                        label = "全部执勤",
-                        selected = section == DutySection.ALL,
-                        onClick = { onSectionSelected(DutySection.ALL) },
-                    )
-                    BottomBarItem(
-                        modifier = Modifier.weight(1f),
-                        icon = IconShiftCalendar,
-                        label = "排班日历",
-                        selected = section == DutySection.CALENDAR,
-                        onClick = { onSectionSelected(DutySection.CALENDAR) },
-                    )
-                    // 中央浮动按钮占位
-                    Spacer(modifier = Modifier.width(88.dp))
-                    // 左右各 2 份权重，浮动按钮的 88dp 缺口才落在正中；设置在自己的双宽格内居中。
-                    BottomBarItem(
-                        modifier = Modifier.weight(2f),
-                        icon = IconSettings,
-                        label = "设置",
-                        selected = section == DutySection.SETTINGS,
-                        onClick = { onSectionSelected(DutySection.SETTINGS) },
-                    )
-                }
+    val c = AirShiftTokens.colors
+    Column(modifier = Modifier.fillMaxWidth().background(c.nav).navigationBarsPadding()) {
+        HorizontalDivider(thickness = 1.dp, color = c.rule)
+        Row(modifier = Modifier.fillMaxWidth().height(64.dp)) {
+            Destinations.forEach { destination ->
+                NavigationItem(
+                    destination = destination,
+                    selected = section == destination.section,
+                    onClick = { onSectionSelected(destination.section) },
+                    modifier = Modifier.weight(1f),
+                )
             }
-        }
-        // 中央「当前执勤」浮动圆形按钮：红底白图标 + 三级阴影；
-        // 选中时外圈光环（2px 白描边 + 外扩 4px 的 20% 红环）并放大 1.05 倍
-        val currentSelected = section == DutySection.CURRENT
-        val fabScale by animateFloatAsState(
-            targetValue = if (currentSelected) 1.05f else 1f,
-            animationSpec = tween(AirShiftMotion.StateChangeMs, easing = AirShiftMotion.EaseOut),
-            label = "fabScale",
-        )
-        val haloAlpha by animateFloatAsState(
-            targetValue = if (currentSelected) 1f else 0f,
-            animationSpec = tween(AirShiftMotion.StateChangeMs, easing = AirShiftMotion.EaseOut),
-            label = "fabHalo",
-        )
-        Column(
-            modifier = Modifier.align(Alignment.TopCenter),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                modifier = Modifier.size(68.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (haloAlpha > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .drawBehind {
-                                val buttonRadius = 28.dp.toPx() * fabScale
-                                // 外扩 4px 的 20% 透明度红环
-                                drawCircle(
-                                    color = CeaRed.copy(alpha = 0.2f * haloAlpha),
-                                    radius = buttonRadius + 4.dp.toPx(),
-                                    style = Stroke(width = 4.dp.toPx()),
-                                )
-                                // 2px 白色描边
-                                drawCircle(
-                                    color = Color.White.copy(alpha = haloAlpha),
-                                    radius = buttonRadius + 1.dp.toPx(),
-                                    style = Stroke(width = 2.dp.toPx()),
-                                )
-                            },
-                    )
-                }
-                Surface(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                        .heroShadow(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true, radius = 28.dp),
-                            role = Role.Tab,
-                            onClick = { onSectionSelected(DutySection.CURRENT) },
-                        ),
-                    shape = CircleShape,
-                    color = CeaRed,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = IconDutyCurrent,
-                            contentDescription = "当前执勤",
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.White,
-                        )
-                    }
-                }
-            }
-            val labelColor by bottomItemColor(selected = currentSelected)
-            Text(
-                "当前执勤",
-                color = labelColor,
-                fontSize = 10.sp,
-                fontWeight = if (currentSelected) FontWeight.Bold else FontWeight.Medium,
-            )
         }
     }
 }
 
 @Composable
-private fun bottomItemColor(selected: Boolean) = animateColorAsState(
-    targetValue = if (selected) CeaRed else NavyGrey,
-    animationSpec = tween(
-        durationMillis = AirShiftMotion.StateChangeMs,
-        easing = AirShiftMotion.EaseOut,
-    ),
-    label = "bottomItemColor",
-)
-
-@Composable
-private fun BottomBarItem(
-    icon: ImageVector,
-    label: String,
+private fun NavigationItem(
+    destination: NavDestination,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tint by bottomItemColor(selected)
-    val pillAlpha by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = tween(AirShiftMotion.StateChangeMs, easing = AirShiftMotion.EaseOut),
-        label = "navPill",
+    val c = AirShiftTokens.colors
+    val tint by animateColorAsState(
+        targetValue = if (selected) c.ink else c.hint,
+        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
+        label = "navTint",
     )
-    Column(
+    val lampAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
+        label = "navLamp",
+    )
+    Box(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxHeight()
+            .testTag(destination.testTag)
+            .semantics { this.selected = selected }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true),
                 role = Role.Tab,
                 onClick = onClick,
             ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        // 激活 pill：全圆角浅红底（东航红 11%），高 32dp，200ms ease-out 淡入淡出
         Box(
-            modifier = Modifier.height(32.dp),
-            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .width(20.dp)
+                .height(3.dp)
+                .graphicsLayer { alpha = lampAlpha }
+                .background(c.departure, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)),
+        )
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            if (pillAlpha > 0f) {
-                Box(
-                    modifier = Modifier
-                        .width(56.dp)
-                        .height(32.dp)
-                        .graphicsLayer { alpha = pillAlpha }
-                        .background(CeaRed.copy(alpha = 0.11f), CircleShape),
-                )
-            }
             Icon(
-                imageVector = icon,
-                contentDescription = label,
+                imageVector = destination.icon,
+                contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = tint,
             )
+            Spacer(Modifier.height(4.dp))
+            val labelStyle = MaterialTheme.typography.labelSmall
+            Text(
+                destination.label,
+                color = tint,
+                style = if (selected) labelStyle.copy(fontWeight = FontWeight.SemiBold) else labelStyle,
+                maxLines = 1,
+            )
         }
-        Text(
-            label,
-            color = tint,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        )
     }
 }

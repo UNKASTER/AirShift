@@ -95,9 +95,9 @@ class CurrentDutyScreenIntegrationInstrumentedTest {
         composeRule.onNodeWithText("ZZ1002").assertIsDisplayed()
     }
 
+    /** "执勤完成"钉在滚动区之外的底部操作条上，始终可见，直接点击。 */
     private fun completeCurrentDuty() {
-        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("执勤完成"))
-        composeRule.onNodeWithText("执勤完成").performClick()
+        composeRule.onNodeWithText("执勤完成").assertIsDisplayed().performClick()
     }
 
     private fun duty(index: Int, now: LocalDateTime, complete: Boolean = false) = RosterAssignment(

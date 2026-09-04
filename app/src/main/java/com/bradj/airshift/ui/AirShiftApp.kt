@@ -4,6 +4,13 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,11 +27,18 @@ import com.bradj.airshift.PendingSharedExcelImport
 import com.bradj.airshift.SUPPORTED_EXCEL_MIME_TYPES
 import com.bradj.airshift.SharedExcelImportQueueViewModel
 import com.bradj.airshift.duty.DutyUiEvent
+import com.bradj.airshift.duty.DutyUiState
 import com.bradj.airshift.duty.DutyViewModel
 import com.bradj.airshift.duty.ImportAttempt
 import com.bradj.airshift.duty.RosterSource
 import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.parser.RosterParseResult
+import com.bradj.airshift.specialservice.FlightCancellationRecord
+import com.bradj.airshift.specialservice.FlightServiceRecord
+import com.bradj.airshift.specialservice.GateChangeRecord
+import com.bradj.airshift.specialservice.SpecialServiceState
+import com.bradj.airshift.specialservice.StandChangeRecord
+import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.all.AllDutyScreen
 import com.bradj.airshift.ui.calendar.ShiftCalendarScreen
 import com.bradj.airshift.ui.current.CurrentDutyScreen
@@ -52,7 +66,7 @@ internal fun AirShiftApp(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val userName = state.userName
     if (userName == null) {
-        OnboardingScreen { name -> viewModel.saveUserName(name) }
+        OnboardingScreen(now = state.now) { name -> viewModel.saveUserName(name) }
         return
     }
 
@@ -147,25 +161,85 @@ internal fun AirShiftApp(
         section = section,
         onSectionSelected = dutyNavigation::selectSection,
     ) { padding ->
+        // 分区切换用 fade-through：旧页 90 ms 淡出，新页 210 ms 淡入并从 96% 放大。
+        AnimatedContent(
+            targetState = section,
+            transitionSpec = {
+                val enter = fadeIn(tween(AirShiftMotion.FadeInMs, delayMillis = AirShiftMotion.FadeOutMs)) +
+                    scaleIn(
+                        tween(AirShiftMotion.FadeInMs, delayMillis = AirShiftMotion.FadeOutMs),
+                        initialScale = SECTION_ENTER_SCALE,
+                    )
+                enter togetherWith fadeOut(tween(AirShiftMotion.FadeOutMs))
+            },
+            label = "section",
+        ) { target ->
+            SectionContent(
+                section = target,
+                padding = padding,
+                state = state,
+                userName = userName,
+                specialServiceState = specialServiceState,
+                shiftSchedule = shiftSchedule,
+                shiftGroupId = shiftGroupId,
+                autoShiftGroupId = autoShiftGroupId,
+                visibleSpecialServiceRecords = visibleSpecialServiceRecords,
+                visibleGateChanges = visibleGateChanges,
+                visibleStandChanges = visibleStandChanges,
+                visibleFlightCancellations = visibleFlightCancellations,
+                viewModel = viewModel,
+                dutyNavigation = dutyNavigation,
+                openExactAlarmSettings = openExactAlarmSettings,
+                openNotificationAccessSettings = openNotificationAccessSettings,
+                onImportImage = {
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
+            )
+        }
+    }
+}
+
+private const val SECTION_ENTER_SCALE = 0.96f
+
+@Composable
+private fun SectionContent(
+    section: DutySection,
+    padding: PaddingValues,
+    state: DutyUiState,
+    userName: String,
+    specialServiceState: SpecialServiceState,
+    shiftSchedule: ShiftSchedule,
+    shiftGroupId: Int?,
+    autoShiftGroupId: Int?,
+    visibleSpecialServiceRecords: List<FlightServiceRecord>,
+    visibleGateChanges: List<GateChangeRecord>,
+    visibleStandChanges: List<StandChangeRecord>,
+    visibleFlightCancellations: List<FlightCancellationRecord>,
+    viewModel: DutyViewModel,
+    dutyNavigation: DutyNavigationViewModel,
+    openExactAlarmSettings: () -> Unit,
+    openNotificationAccessSettings: () -> Unit,
+    onImportImage: () -> Unit,
+    onImportExcel: () -> Unit,
+) {
         when (section) {
             DutySection.ALL -> AllDutyScreen(
-                userName = userName,
                 currentAirport = state.currentAirport,
-                today = state.now.toLocalDate(),
+                now = state.now,
                 isWorking = state.isWorking,
                 isLiveRefreshing = state.isLiveRefreshing,
                 statusMessage = state.statusMessage,
                 warnings = state.warnings,
                 exactAlarmWarning = state.exactAlarmWarning,
                 assignments = state.assignments,
+                manuallyCompletedCount = state.manuallyCompletedCount,
                 specialServiceRecords = visibleSpecialServiceRecords,
                 gateChanges = visibleGateChanges,
                 standChanges = visibleStandChanges,
                 flightCancellations = visibleFlightCancellations,
-                onImportImage = {
-                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
-                onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
+                onImportImage = onImportImage,
+                onImportExcel = onImportExcel,
                 onRefresh = { viewModel.refreshCurrentAssignments() },
                 onOpenExactAlarmSettings = openExactAlarmSettings,
                 modifier = Modifier.padding(padding),
@@ -188,7 +262,7 @@ internal fun AirShiftApp(
                 groupId = shiftGroupId,
                 assignments = state.assignments,
                 reportMarginMinutes = state.shiftReportMarginMinutes,
-                today = state.now.toLocalDate(),
+                now = state.now,
                 onGoToSettings = { dutyNavigation.selectSection(DutySection.SETTINGS) },
                 modifier = Modifier.padding(padding),
             )
@@ -204,6 +278,7 @@ internal fun AirShiftApp(
                 shiftGroupAutoDetected = autoShiftGroupId != null,
                 shiftGroupOptions = shiftSchedule.table.cycleOrder.sorted(),
                 shiftReportMarginMinutes = state.shiftReportMarginMinutes,
+                now = state.now,
                 onShiftGroupSelected = viewModel::selectShiftGroup,
                 onShiftReportMarginSelected = viewModel::selectReportMargin,
                 onOpenNotificationAccessSettings = openNotificationAccessSettings,
@@ -213,5 +288,4 @@ internal fun AirShiftApp(
                 modifier = Modifier.padding(padding),
             )
         }
-    }
 }

@@ -23,7 +23,10 @@ data class MucContext(
  */
 enum class DetailLevel { SUMMARY, FULL }
 
-/** [FlightRow] 的输入：一段航段在卡片上要显示的全部内容，由 [legUiModels] 从排班与 MUC 上下文算出。 */
+/** 实时时间的来源：飞常准的预计值或实际值。UI 用它决定"预计 / 实际"标签与灯色。 */
+enum class LiveKind { ESTIMATED, ACTUAL }
+
+/** 一段航段在信息条上要显示的全部内容，由 [legUiModels] 从排班与 MUC 上下文算出。 */
 data class FlightLegUiModel(
     val direction: LegDirection,
     val flight: String,
@@ -43,7 +46,17 @@ data class FlightLegUiModel(
     val aircraftRegistration: String?,
     val aircraftType: String?,
     val offBlock: LocalDateTime?,
-)
+) {
+    /** 实际优先、预计回退的实时时间。 */
+    val live: LocalDateTime? get() = actual ?: estimated
+
+    /** [live] 的来源；没有实时数据时为 null。 */
+    val liveKind: LiveKind? get() = when {
+        actual != null -> LiveKind.ACTUAL
+        estimated != null -> LiveKind.ESTIMATED
+        else -> null
+    }
+}
 
 /** 进港段在前、出港段在后；机号/机型只挂在最后一段上。 */
 fun RosterAssignment.legUiModels(muc: MucContext, level: DetailLevel): List<FlightLegUiModel> = buildList {

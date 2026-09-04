@@ -1,59 +1,17 @@
 package com.bradj.airshift.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.bradj.airshift.model.LegDirection
-import com.bradj.airshift.ui.theme.AirShiftRadius
-import com.bradj.airshift.ui.theme.CardTopHighlight
-import com.bradj.airshift.ui.theme.CeaRedSoft
-import com.bradj.airshift.ui.theme.InboundBlue
-import com.bradj.airshift.ui.theme.InboundBlueSoft
-import com.bradj.airshift.ui.theme.OnCeaRedSoft
-import com.bradj.airshift.ui.theme.SkeletonGray
-import com.bradj.airshift.ui.theme.SuccessGreen
-import com.bradj.airshift.ui.theme.TextHint
-import com.bradj.airshift.ui.theme.VipAmber
-import com.bradj.airshift.ui.theme.listCardShadow
 
-// ---------- 1.5px 线性图标构建器（Lucide 风格，统一线性，禁止填充混用） ----------
+// ---------- 1.5px 线性图标构建器（统一线性，禁止填充混用） ----------
 
 fun linearIcon(name: String, pathData: String): ImageVector =
     ImageVector.Builder(
@@ -67,7 +25,7 @@ fun linearIcon(name: String, pathData: String): ImageVector =
         stroke = SolidColor(Color.Black),
         strokeLineWidth = 1.5f,
         strokeLineCap = StrokeCap.Round,
-        strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
+        strokeLineJoin = StrokeJoin.Round,
     ).build()
 
 /** 共享线性图标集。 */
@@ -132,251 +90,6 @@ object LinearIcons {
         "M11.75 4.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0z " +
             "M10 8v4.5h6l2.5 5.5h2.5 " +
             "M14 16.5a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0z",
-    )
-}
-
-/**
- * 统一卡片：卡片底色随主题 + 1dp 微边框 + 一级列表卡阴影 + 16dp 圆角；
- * 顶部 1px 内高光（浅色 rgba(255,255,255,.6)，深色自动降为 8%）。
- */
-@Composable
-fun QuietCard(
-    modifier: Modifier = Modifier,
-    vip: Boolean = false,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val shape = MaterialTheme.shapes.large
-    val dark = isSystemInDarkTheme()
-    Card(
-        modifier = modifier.listCardShadow(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = if (vip) {
-            androidx.compose.foundation.BorderStroke(1.5.dp, VipAmber)
-        } else {
-            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().drawBehind {
-                val highlight = if (dark) Color.White.copy(alpha = 0.08f) else CardTopHighlight
-                val y = 0.5.dp.toPx()
-                val inset = AirShiftRadius.Card.toPx()
-                drawLine(
-                    color = highlight,
-                    start = Offset(inset, y),
-                    end = Offset(size.width - inset, y),
-                    strokeWidth = 1.dp.toPx(),
-                )
-            },
-        ) {
-            Column { content() }
-        }
-    }
-}
-
-/** 进出港方向 chip：全圆角胶囊；进港 蓝字浅蓝底 / 出港 红字浅红底。 */
-@Composable
-fun DirectionTag(direction: LegDirection, modifier: Modifier = Modifier) {
-    val isInbound = direction == LegDirection.INBOUND
-    Surface(
-        modifier = modifier,
-        color = if (isInbound) InboundBlueSoft else CeaRedSoft,
-        shape = CircleShape,
-    ) {
-        Text(
-            direction.label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-            color = if (isInbound) InboundBlue else OnCeaRedSoft,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-/**
- * 飞行状态 chip（与进出港 chip 同高同圆角，12sp Semibold）：
- * 未起飞：浅灰底 + 深灰字 + 停机小飞机；已起飞：10% 墨绿底 + 墨绿字 + 起飞小飞机。
- */
-@Composable
-fun FlightStatusChip(departed: Boolean, modifier: Modifier = Modifier) {
-    val background = if (departed) SuccessGreen.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant
-    val foreground = if (departed) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(
-        modifier = modifier,
-        color = background,
-        shape = CircleShape,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = if (departed) LinearIcons.PlaneTakeoff else LinearIcons.PlaneGround,
-                contentDescription = null,
-                modifier = Modifier.size(12.dp),
-                tint = foreground,
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                if (departed) "已起飞" else "未起飞",
-                color = foreground,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-/** 航线细线箭头：1dp 圆头细线 + 小箭头，连接起讫机场三字码（FIDS 质感）。 */
-@Composable
-fun RouteArrow(
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier) {
-        val strokeWidth = 1.dp.toPx()
-        val y = size.height / 2f
-        val headLength = 6.dp.toPx()
-        val headHalf = 3.5.dp.toPx()
-        val endX = size.width
-        drawLine(
-            color = color,
-            start = Offset(0f, y),
-            end = Offset(endX - headLength, y),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round,
-        )
-        val head = Path().apply {
-            moveTo(endX, y)
-            lineTo(endX - headLength, y - headHalf)
-            moveTo(endX, y)
-            lineTo(endX - headLength, y + headHalf)
-        }
-        drawPath(head, color = color, style = Stroke(width = strokeWidth, cap = StrokeCap.Round))
-    }
-}
-
-/** 登机牌撕线：1dp 虚线分隔（接续航班两段、卡片 meta 行之上）。 */
-@Composable
-fun BoardingPassDivider(modifier: Modifier = Modifier, color: Color? = null) {
-    val lineColor = color ?: MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
-    Canvas(modifier = modifier.fillMaxWidth().height(1.dp)) {
-        drawLine(
-            color = lineColor,
-            start = Offset(0f, size.height / 2f),
-            end = Offset(size.width, size.height / 2f),
-            strokeWidth = 1.dp.toPx(),
-            cap = StrokeCap.Round,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
-        )
-    }
-}
-
-/** "--" 占位骨架：浅灰短横线，不直接显示破折号。深色模式下自动切换为半透明白。 */
-@Composable
-fun SkeletonStub(
-    modifier: Modifier = Modifier,
-    width: Dp = 32.dp,
-    height: Dp = 10.dp,
-) {
-    val color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.14f) else SkeletonGray
-    Box(
-        modifier = modifier
-            .width(width)
-            .height(height)
-            .clip(RoundedCornerShape(height / 2))
-            .background(color),
-    )
-}
-
-/**
- * meta 行单项：13dp 线性图标 + 灰色小 label + 深色 Semibold value（tabular-nums）；
- * value 为 "--" 时渲染骨架短横线；hasChange 附"变更"提醒；
- * labelWidth 非空时 label 容器固定等宽（用于航线网格使数值列对齐）。
- */
-@Composable
-fun MetaItem(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    hasChange: Boolean = false,
-    labelWidth: Dp? = null,
-    alignEnd: Boolean = false,
-) {
-    Row(
-        modifier = if (alignEnd) modifier.fillMaxWidth() else modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(13.dp),
-            tint = TextHint,
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            label,
-            modifier = if (labelWidth != null) Modifier.width(labelWidth) else Modifier,
-            style = MaterialTheme.typography.labelSmall,
-            color = TextHint,
-        )
-        Spacer(Modifier.width(3.dp))
-        if (value == "--" || value == "--:--") {
-            SkeletonStub(width = 26.dp, height = 9.dp)
-        } else {
-            Text(
-                value,
-                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-        }
-        if (hasChange) {
-            ChangeIndicator(modifier = Modifier.padding(start = 4.dp))
-        }
-    }
-}
-
-/**
- * 头部燕子尾翼弧线装饰：低透明度（5–10%）同心弧线，极简线条，不喧宾夺主。
- */
-@Composable
-fun RouteArcsDecoration(
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier) {
-        val stroke = Stroke(width = 1.dp.toPx())
-        val base = size.minDimension
-        val center = Offset(size.width * 0.92f, size.height * 0.08f)
-        listOf(0.55f, 0.8f, 1.05f).forEach { factor ->
-            drawArc(
-                color = color,
-                startAngle = 90f,
-                sweepAngle = 140f,
-                useCenter = false,
-                topLeft = Offset(center.x - base * factor, center.y - base * factor),
-                size = androidx.compose.ui.geometry.Size(base * factor * 2f, base * factor * 2f),
-                style = stroke,
-            )
-        }
-    }
-}
-
-/** 卡片左侧 4dp 强调竖条（配合 IntrinsicSize.Min 的 Row 使用）。 */
-@Composable
-fun AccentBar(color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .width(4.dp)
-            .fillMaxHeight()
-            .background(color),
     )
 }
 

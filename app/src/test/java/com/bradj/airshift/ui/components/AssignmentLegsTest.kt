@@ -141,6 +141,20 @@ class AssignmentLegsTest {
     }
 
     @Test
+    fun `live time reports whether it is an estimate or an actual`() {
+        val legs = turnaround.legUiModels(MucContext(), DetailLevel.SUMMARY)
+        assertNull(legs[0].liveKind)
+        assertNull(legs[0].live)
+        assertEquals(LiveKind.ESTIMATED, legs[1].liveKind)
+        assertEquals(date.atTime(12, 20), legs[1].live)
+
+        val landed = turnaround.copy(actualArrival = date.atTime(9, 58), estimatedArrival = date.atTime(10, 5))
+        val inbound = landed.legUiModels(MucContext(), DetailLevel.SUMMARY)[0]
+        assertEquals(LiveKind.ACTUAL, inbound.liveKind)
+        assertEquals(date.atTime(9, 58), inbound.live)
+    }
+
+    @Test
     fun `a cancellation attaches only to the leg it names`() {
         val legs = turnaround.legUiModels(muc, DetailLevel.SUMMARY)
         assertEquals(cancellation, legs[0].flightCancellation)
