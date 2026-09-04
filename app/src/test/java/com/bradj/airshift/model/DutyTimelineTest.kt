@@ -34,22 +34,22 @@ class DutyTimelineTest {
     )
 
     @Test
-    fun `gateArrivalTime inbound uses scheduled arrival minus 10 minutes`() {
+    fun `gateArrivalTime inbound uses scheduled arrival minus 15 minutes`() {
         val target = assignment(inboundFlight = "MU5101", scheduledArrival = base)
-        assertEquals(base.minusMinutes(10), DutyTimeline.gateArrivalTime(target))
+        assertEquals(base.minusMinutes(15), DutyTimeline.gateArrivalTime(target))
     }
 
     @Test
     fun `gateArrivalTime inbound prefers actual over estimated over scheduled`() {
         val scheduledOnly = assignment(inboundFlight = "MU5101", scheduledArrival = base)
-        assertEquals(base.minusMinutes(10), DutyTimeline.gateArrivalTime(scheduledOnly))
+        assertEquals(base.minusMinutes(15), DutyTimeline.gateArrivalTime(scheduledOnly))
 
         val withEstimated = assignment(
             inboundFlight = "MU5101",
             scheduledArrival = base,
             estimatedArrival = base.plusMinutes(20),
         )
-        assertEquals(base.plusMinutes(10), DutyTimeline.gateArrivalTime(withEstimated))
+        assertEquals(base.plusMinutes(5), DutyTimeline.gateArrivalTime(withEstimated))
 
         val withActual = assignment(
             inboundFlight = "MU5101",
@@ -57,20 +57,20 @@ class DutyTimelineTest {
             estimatedArrival = base.plusMinutes(20),
             actualArrival = base.plusMinutes(35),
         )
-        assertEquals(base.plusMinutes(25), DutyTimeline.gateArrivalTime(withActual))
+        assertEquals(base.plusMinutes(20), DutyTimeline.gateArrivalTime(withActual))
     }
 
     @Test
-    fun `gateArrivalTime departure only uses live departure minus 1 hour`() {
+    fun `gateArrivalTime departure only uses live departure minus 70 minutes`() {
         val scheduledOnly = assignment(outboundFlight = "MU5102", scheduledDeparture = base)
-        assertEquals(base.minusHours(1), DutyTimeline.gateArrivalTime(scheduledOnly))
+        assertEquals(base.minusMinutes(70), DutyTimeline.gateArrivalTime(scheduledOnly))
 
         val withEstimated = assignment(
             outboundFlight = "MU5102",
             scheduledDeparture = base,
             estimatedDeparture = base.plusMinutes(30),
         )
-        assertEquals(base.minusMinutes(30), DutyTimeline.gateArrivalTime(withEstimated))
+        assertEquals(base.minusMinutes(40), DutyTimeline.gateArrivalTime(withEstimated))
 
         val withActual = assignment(
             outboundFlight = "MU5102",
@@ -78,7 +78,7 @@ class DutyTimelineTest {
             estimatedDeparture = base.plusMinutes(30),
             actualDeparture = base.plusMinutes(45),
         )
-        assertEquals(base.minusMinutes(15), DutyTimeline.gateArrivalTime(withActual))
+        assertEquals(base.minusMinutes(25), DutyTimeline.gateArrivalTime(withActual))
     }
 
     @Test
@@ -89,7 +89,7 @@ class DutyTimelineTest {
             scheduledArrival = base,
             scheduledDeparture = base.plusHours(2),
         )
-        assertEquals(base.minusMinutes(10), DutyTimeline.gateArrivalTime(target))
+        assertEquals(base.minusMinutes(15), DutyTimeline.gateArrivalTime(target))
     }
 
     @Test

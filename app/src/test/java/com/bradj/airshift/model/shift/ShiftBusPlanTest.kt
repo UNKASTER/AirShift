@@ -49,28 +49,28 @@ class ShiftBusPlanTest {
     // ---------- 到位时间 ----------
 
     @Test
-    fun `the expected report time subtracts an hour for an outbound first task`() {
-        // 早一在第 2、3 天的首个任务是 07:20 出港，故最晚 06:20 到位。
-        assertEquals(ShiftClock.of(6, 20), ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_SECOND, early1))
-        assertEquals(ShiftClock.of(6, 10), ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_SECOND, night1))
+    fun `the expected report time subtracts seventy minutes for an outbound first task`() {
+        // 早一在第 2、3 天的首个任务是 07:20 出港，故最晚 06:10 到位。
+        assertEquals(ShiftClock.of(6, 10), ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_SECOND, early1))
+        assertEquals(ShiftClock.of(6, 0), ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_SECOND, night1))
     }
 
     @Test
-    fun `the expected report time subtracts ten minutes for an inbound first task`() {
-        // 中二至中四下午上岗，首个任务是过站航班的进港段：12:50 进港 → 最晚 12:40 到位。
+    fun `the expected report time subtracts fifteen minutes for an inbound first task`() {
+        // 中二至中四下午上岗，首个任务是过站航班的进港段：12:50 进港 → 最晚 12:35 到位。
         assertEquals(
-            ShiftClock.of(12, 40),
+            ShiftClock.of(12, 35),
             ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_SECOND, ShiftSlot(ShiftTier.MID, 2)),
         )
         // 接班日的早班同样从进港航班接手。
         assertEquals(
-            ShiftClock.of(10, 45),
+            ShiftClock.of(10, 40),
             ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_FIRST, early1),
         )
     }
 
     @Test
-    fun `the morning slots keep the outbound hour of lead`() {
+    fun `the morning slots keep the outbound lead`() {
         assertFalse(ShiftBusPlan.expectedFirstTask(ShiftDayKind.WORK_SECOND, early1)!!.inbound)
         assertFalse(ShiftBusPlan.expectedFirstTask(ShiftDayKind.WORK_SECOND, mid1)!!.inbound)
         assertFalse(ShiftBusPlan.expectedFirstTask(ShiftDayKind.WORK_SECOND, night1)!!.inbound)
@@ -173,8 +173,8 @@ class ShiftBusPlanTest {
     fun `the default margin staggers the morning slots across the early runs`() {
         val kind = ShiftDayKind.WORK_SECOND
         assertEquals(bus(5, 25), ShiftBusPlan.recommend(kind, night1)!!.departure)
-        assertEquals(bus(5, 55), ShiftBusPlan.recommend(kind, night3)!!.departure)
-        assertEquals(bus(5, 55), ShiftBusPlan.recommend(kind, early1)!!.departure)
+        assertEquals(bus(5, 25), ShiftBusPlan.recommend(kind, night3)!!.departure)
+        assertEquals(bus(5, 25), ShiftBusPlan.recommend(kind, early1)!!.departure)
         assertEquals(bus(5, 55), ShiftBusPlan.recommend(kind, early2)!!.departure)
         assertEquals(bus(5, 55), ShiftBusPlan.recommend(kind, mid1)!!.departure)
     }
@@ -205,9 +205,9 @@ class ShiftBusPlanTest {
     @Test
     fun `the recommendation reports arrival and spare minutes`() {
         val recommendation = ShiftBusPlan.recommend(ShiftDayKind.WORK_SECOND, early1)!!
-        assertEquals(ShiftClock.of(6, 0), recommendation.arriveAtMinutes)
-        assertEquals(ShiftClock.of(6, 20), recommendation.reportByMinutes)
-        assertEquals(20, recommendation.spareMinutes)
+        assertEquals(ShiftClock.of(5, 30), recommendation.arriveAtMinutes)
+        assertEquals(ShiftClock.of(6, 10), recommendation.reportByMinutes)
+        assertEquals(40, recommendation.spareMinutes)
         assertEquals(ShiftEstimateSource.ESTIMATE, recommendation.source)
         assertFalse(recommendation.isFixedByRule)
     }
@@ -215,7 +215,7 @@ class ShiftBusPlanTest {
     @Test
     fun `the handover morning uses the early runs`() {
         assertEquals(bus(5, 25), ShiftBusPlan.recommend(ShiftDayKind.HANDOVER, early1)!!.departure)
-        assertEquals(bus(5, 55), ShiftBusPlan.recommend(ShiftDayKind.HANDOVER, early2)!!.departure)
+        assertEquals(bus(5, 25), ShiftBusPlan.recommend(ShiftDayKind.HANDOVER, early2)!!.departure)
         assertEquals(bus(5, 55), ShiftBusPlan.recommend(ShiftDayKind.HANDOVER, ShiftSlot(ShiftTier.MID, 4))!!.departure)
     }
 
@@ -268,17 +268,17 @@ class ShiftBusPlanTest {
             inbound("MU6813", day.plusDays(1).atTime(0, 40)),
         )
         assertEquals(day, ShiftRosterBridge.rosterDate(assignments))
-        // 最早任务 07:10 出港 → 到位 06:10。
-        assertEquals(ShiftClock.of(6, 10), ShiftRosterBridge.reportByMinutes(assignments))
+        // 最早任务 07:10 出港 → 到位 06:00。
+        assertEquals(ShiftClock.of(6, 0), ShiftRosterBridge.reportByMinutes(assignments))
         // 末项 00:40 次日 → 1480 分钟。
         assertEquals(ShiftClock.of(0, 40, nextDay = true), ShiftRosterBridge.lastTaskMinutes(assignments))
     }
 
     @Test
-    fun `the roster bridge applies the ten minute lead to an inbound first task`() {
+    fun `the roster bridge applies the fifteen minute lead to an inbound first task`() {
         val day = LocalDate.of(2026, 8, 29)
         val assignments = listOf(inbound("KN5621", day.atTime(10, 55)))
-        assertEquals(ShiftClock.of(10, 45), ShiftRosterBridge.reportByMinutes(assignments))
+        assertEquals(ShiftClock.of(10, 40), ShiftRosterBridge.reportByMinutes(assignments))
     }
 
     @Test

@@ -11,7 +11,7 @@ import java.time.LocalDateTime
  *
  * App 只保存一份当前排班，因此只有当排班自身的日期等于日历某一行的日期时，
  * 该行才能用真实航班时间代替历史规律推算。到位时间直接复用
- * [DutyTimeline.gateArrivalTime]（进港提前 10 分钟、纯出港提前 60 分钟），不另立规则。
+ * [DutyTimeline.gateArrivalTime]（进港提前 15 分钟、纯出港提前 70 分钟），不另立规则。
  */
 object ShiftRosterBridge {
 

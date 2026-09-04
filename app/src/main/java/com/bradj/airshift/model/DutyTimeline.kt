@@ -4,12 +4,14 @@ import java.time.LocalDateTime
 
 /**
  * 当前执勤页使用的纯函数时间计算。
- * 规则与 [com.bradj.airshift.reminder.ReminderPolicy] 保持一致，但不改动它：
- * 到达登机口时间 = 进港实时到达 - 10 分钟；仅出港 = 实时起飞 - 1 小时。
+ * 提前量常量同时供 [com.bradj.airshift.reminder.ReminderPolicy] 与 [com.bradj.airshift.model.shift.ShiftBusPlan] 复用，三处规则一致：
+ * 到达登机口时间 = 进港实时到达 - 15 分钟；仅出港 = 实时起飞 - 1 小时 10 分钟。
  */
 object DutyTimeline {
-    private const val INBOUND_GATE_ARRIVAL_LEAD_MINUTES = 10L
-    private const val DEPARTURE_GATE_ARRIVAL_LEAD_MINUTES = 60L
+    /** 进港到位提前量：实时到达前 15 分钟。 */
+    const val INBOUND_GATE_ARRIVAL_LEAD_MINUTES = 15L
+    /** 纯出港到位提前量：实时起飞前 70 分钟（1 小时 10 分钟）。 */
+    const val DEPARTURE_GATE_ARRIVAL_LEAD_MINUTES = 70L
     private const val BOARDING_START_LEAD_MINUTES = 40L
     private const val GATE_CLOSE_LEAD_MINUTES = 15L
 

@@ -89,9 +89,9 @@ class DutyWidgetModelTest {
 
         val currentPage = pages[1] as WidgetPage.Duty
         assertEquals(WidgetDutyStatus.COUNTDOWN, currentPage.status)
-        // 出港到位时间 = 计划起飞 - 1 小时
-        assertEquals(now.plusHours(2), currentPage.countdownTarget)
-        assertEquals("到位时钟格式", "14:00", currentPage.gateArrivalClock)
+        // 出港到位时间 = 计划起飞 - 1 小时 10 分钟
+        assertEquals(now.plusMinutes(110), currentPage.countdownTarget)
+        assertEquals("到位时钟格式", "13:50", currentPage.gateArrivalClock)
         assertEquals("执勤 2/2 · 出港保障 · B-0002", currentPage.header)
     }
 
@@ -125,7 +125,7 @@ class DutyWidgetModelTest {
         val page = pages.single() as WidgetPage.Duty
         assertEquals(WidgetDutyStatus.OVERDUE, page.status)
         assertNull(page.countdownTarget)
-        assertEquals("11:30", page.gateArrivalClock)
+        assertEquals("11:20", page.gateArrivalClock)
     }
 
     @Test

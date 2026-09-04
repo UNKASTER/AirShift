@@ -229,7 +229,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 #### 班车
 
 - 发车时刻 `04:50`、`05:25`、`05:55`，其后自 `08:00` 起每两小时一班；`WORK_FIRST` 与 `HANDOVER` 额外一班 `09:00`。`RIDE_MINUTES = 5`。
-- 到位时间沿用 `DutyTimeline` 规则：出港提前 60 分钟、进港提前 10 分钟，不另立规则。
+- 到位时间沿用 `DutyTimeline` 规则：出港提前 70 分钟、进港提前 15 分钟，不另立规则。
 - 选车 = 满足「发车 + 车程 ≤ 到位时间 − 到位余量」的最晚一班；余量可选 0/15/30，默认 15。
 - 固定习惯优先于推算：`WORK_FIRST` 早班/晚班坐 `09:00`、`WORK_FIRST` 中班坐 `12:00`；整班工作日的中二至中四坐 `12:00`。
 - 首个任务的时间与进出港方向都取自实测，方向在样本内完全一致：清晨上岗的槽位首个任务是出港，下午上岗的中二至中四以及接班日的早班/中班是过站进港。把它们误标为出港会让推荐班车晚于到位时间，`ShiftBusPlanTest` 有对应不变量断言。
@@ -344,7 +344,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 - 无排班时显示导入引导；没有未完成任务时显示今日完成态。
 - 页面使用第 4.3 节的窗口算法，展示当前与下一项未完成任务。
-- 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 10 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 60 分钟。
+- 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 15 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 70 分钟。
 - 出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。
 - 倒计时每分钟更新；到位点已过时显示“应立即到位”。
 - 页面展示完整特服、行程取消以及 MUC 机位新旧值；MUC 登机口变更是卡片内单独一行“登机口变更：原值 → 新值 · MUC 更新于 HH:mm”，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
@@ -464,8 +464,8 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 每项任务最多安排一条提醒：
 
-- 有进港航段（包括过站）：实际到达存在时不提醒；否则取预计到达优先/计划到达回退，提前 10 分钟；
-- 纯出港：实际出发存在时不提醒；否则取预计出发优先/计划出发回退，提前 1 小时；
+- 有进港航段（包括过站）：实际到达存在时不提醒；否则取预计到达优先/计划到达回退，提前 15 分钟；
+- 纯出港：实际出发存在时不提醒；否则取预计出发优先/计划出发回退，提前 1 小时 10 分钟；
 - 没有可用时间或目标时间已过：不安排。
 
 每次重排用 `stableId.hashCode()` 创建 PendingIntent，先取消同 ID 的旧闹钟。获得精确闹钟特殊访问时使用 `setExactAndAllowWhileIdle`，否则使用 `setAndAllowWhileIdle`。通知频道为高重要性，点击通知打开 `MainActivity`。
@@ -628,7 +628,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.4）把任务卡与小组件统一为只显示机位，MUC 登机口变更改为单独一行提示。`AssignmentLegsTest` 先按新规则改写并观察到 3 项失败，再改实现转绿；JVM 244 项通过、2 项条件跳过。detekt 与 Lint 各拦下一条新问题（`bindLeg` 参数过多因改名而脱离基线、小组件布局的硬编码 contentDescription），分别收成视图 id 组与字符串资源后归零。真机（vivo V2505A）跑小组件渲染/布局 3 项与当前执勤页 1 项通过；当前执勤页第 2 项 `importingANewNonEmptyRoster…` 在 `performScrollToNode` 处持续滚动直至 10 分钟超时，属本节此前记录的 vivo 滚动问题，与本次改动无关，未再复跑。教训：中断的 `connectedDebugAndroidTest` 走清理流程时把主应用连同本地数据一起卸载了（manifest 关闭备份，无法恢复），排班、校准、MUC 记录与 API 密钥需重新录入。为此 `gradle.properties` 加了 `android.injected.androidTest.leaveApksInstalledAfterRun=true`，此后真机测试不再卸载已安装的 APK。
+本轮（0.10.5）把到位提前量改为进港实时到达前 15 分钟、纯出港实时起飞前 70 分钟，并把提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用，因此系统提醒、当前执勤页倒计时、小组件倒计时与排班日历班车推荐同步变化。先按新规则改写 `DutyTimelineTest`、`ProjectSmokeTest`、`DutyWidgetModelTest`、`ShiftBusPlanTest`、`ShiftCalendarRowsTest` 的期望值（`ShiftCalendarRowsTest` 的“余量不改变班车”用例改用组 8 在 09-06 的早三，因原用例的早二在 30 分钟余量下已需提前一班），再改实现。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest`：JVM 244 项通过、0 项失败、2 项条件跳过；随后 `:app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，detekt 0 项、Lint 基线外零新增（Lint 另提示基线中有 2 条记录未在项目中找到，未查证来源）。班车推荐因到位提前而变化的推算场景：默认 15 分钟余量下，整班工作日的早一、晚三、晚四与交接班日的早二由 05:55 改为 05:25，其余槽位不变。真机（vivo V2505A，Android 16 / API 36）：以 `adb install -r` 覆盖安装 0.10.5（version code 46），排班、校准、MUC 记录与 API 密钥保留。先用 `notClass` 排除 4 个 Compose 测试类跑 `connectedDebugAndroidTest`：40 项执行、0 失败、4 项跳过（`FlightRefreshSchedulerInstrumentedTest` 因手机上配置了真实 API Key 按 `assumeFalse` 跳过），小组件渲染/布局 3 项通过。随后单独跑 Compose 的 16 项（仍排除此前记录会持续滚动的 `importingANewNonEmptyRoster…`）：首次尝试时宿主 Activity 始终没有拉起，等待 14 分钟仍是 0/16，手动 `am force-stop` 终止；在手机设置里为 AirShift 放开“后台弹出界面”后重跑，`DutyWindowRefreshInstrumentedTest` 9 项、`ForegroundFlightRefreshEffectInstrumentedTest` 5 项、`SharedExcelImportOwnerInstrumentedTest` 1 项与当前执勤页 `manualCompletionAndAutomaticCompletion…` 1 项全部通过（16/16，57 秒）。这说明此前几轮 Compose 用例无结果的原因是该权限，而非用例本身。重跑期间有一次因 vivo 安装确认被拒（`INSTALL_FAILED_ABORTED`）而未执行任何用例，允许安装后再跑即通过。测试 APK 已卸载，主应用与本地数据保留。AlarmManager 实际触发与通知展示未复跑。
+
+上一轮（0.10.4）把任务卡与小组件统一为只显示机位，MUC 登机口变更改为单独一行提示。`AssignmentLegsTest` 先按新规则改写并观察到 3 项失败，再改实现转绿；JVM 244 项通过、2 项条件跳过。detekt 与 Lint 各拦下一条新问题（`bindLeg` 参数过多因改名而脱离基线、小组件布局的硬编码 contentDescription），分别收成视图 id 组与字符串资源后归零。真机（vivo V2505A）跑小组件渲染/布局 3 项与当前执勤页 1 项通过；当前执勤页第 2 项 `importingANewNonEmptyRoster…` 在 `performScrollToNode` 处持续滚动直至 10 分钟超时，属本节此前记录的 vivo 滚动问题，与本次改动无关，未再复跑。教训：中断的 `connectedDebugAndroidTest` 走清理流程时把主应用连同本地数据一起卸载了（manifest 关闭备份，无法恢复），排班、校准、MUC 记录与 API 密钥需重新录入。为此 `gradle.properties` 加了 `android.injected.androidTest.leaveApksInstalledAfterRun=true`，此后真机测试不再卸载已安装的 APK。
 
 上一轮（0.10.3）是审查计划的收尾：MUC 归并层去重与 JSON 辅助函数收敛，属纯重构，现有 JVM 用例即回归锁。执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin`：JVM 243 项通过、2 项条件跳过；detekt 首次运行在新代码上报出 3 条基线外发现（LongParameterList、NestedBlockDepth、ReturnCount），按规则改写为 `FacilityReducer` + `fold` 与单一 `when` 表达式后归零，说明门禁对新代码有效；Lint 基线外零新增；Android 测试源码编译通过，未在设备上重跑。
 
@@ -758,7 +760,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 14.3 提醒、MUC、定位与 Widget
 
-- 进港/过站只建到达前 10 分钟提醒，纯出港只建出发前 1 小时提醒。
+- 进港/过站只建到达前 15 分钟提醒，纯出港只建出发前 1 小时 10 分钟提醒。
 - 无权限时功能按第 2.2 节降级，不阻断排班查看。
 - 只有 MUC 白名单包的新通知可进入解析；持久化 JSON 不含原文和个人敏感字段。
 - 更晚变更/取消按时序生效，旧摘要不能恢复已取消状态。
@@ -815,6 +817,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
 - 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。
 - 0.10.3 收尾：MUC 四类记录实现 `TimestampedRecord` 并共用 `applyLatest`，登机口/机位候选循环合并为 `reduceFacilityChanges`，过期清理基于 `Fingerprinted` 统一保鲜指纹；排班 JSON 与 MUC JSON 共用 `data/JsonSupport.kt`；移除旧人工确认流程残留的 `suggestedFlights` 与 `ProcessedFingerprint.ignored`（写入停止，读取忽略）。行为不变，现有 JVM 用例即回归锁。
 - 0.10.2 代码审查后的第四阶段（工程化）：Android Lint 基线 + `warningsAsErrors`、detekt 1.23.8 默认规则集 + 基线、GitHub Actions（单元测试 / Lint / detekt）、release 开启 R8 与资源裁剪并补 POI/ONNX/OpenCV keep 规则；git 历史用 `git filter-repo --replace-text` 把真实姓名改写为合成名。

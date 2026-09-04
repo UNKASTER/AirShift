@@ -1,5 +1,6 @@
 package com.bradj.airshift.reminder
 
+import com.bradj.airshift.model.DutyTimeline
 import com.bradj.airshift.model.RosterAssignment
 import java.time.LocalDateTime
 
@@ -16,9 +17,9 @@ object ReminderPolicy {
             val arrival = assignment.estimatedArrival ?: assignment.scheduledArrival ?: return null
             val gate = assignment.arrivalStand?.let { "，到达机位 $it" }.orEmpty()
             return ReminderSpec(
-                triggerAt = arrival.minusMinutes(10),
+                triggerAt = arrival.minusMinutes(DutyTimeline.INBOUND_GATE_ARRIVAL_LEAD_MINUTES),
                 title = "${assignment.inboundFlight} 即将进港",
-                message = "预计 10 分钟后落地$gate，请准备接机保障",
+                message = "预计 15 分钟后落地$gate，请准备接机保障",
             )
         }
 
@@ -26,9 +27,9 @@ object ReminderPolicy {
         if (assignment.actualDeparture != null) return null
         val departure = assignment.estimatedDeparture ?: assignment.scheduledDeparture ?: return null
         return ReminderSpec(
-            triggerAt = departure.minusHours(1),
+            triggerAt = departure.minusMinutes(DutyTimeline.DEPARTURE_GATE_ARRIVAL_LEAD_MINUTES),
             title = "$outbound 出港保障提醒",
-            message = "计划 1 小时后起飞，请开始出港保障准备",
+            message = "计划 1 小时 10 分钟后起飞，请开始出港保障准备",
         )
     }
 }

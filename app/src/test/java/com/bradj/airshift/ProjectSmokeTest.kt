@@ -150,12 +150,12 @@ class ProjectSmokeTest {
             departure = LocalDateTime.of(2026, 8, 20, 13, 0),
         )
         val reminder = ReminderPolicy.create(assignment)
-        assertEquals(LocalDateTime.of(2026, 8, 20, 11, 50), reminder?.triggerAt)
+        assertEquals(LocalDateTime.of(2026, 8, 20, 11, 45), reminder?.triggerAt)
         assertEquals("ZZ1001 即将进港", reminder?.title)
     }
 
     @Test
-    fun departureOnlyGetsOneHourReminder() {
+    fun departureOnlyGetsSeventyMinuteReminder() {
         val assignment = assignment(
             inbound = null,
             outbound = "QZ4001",
@@ -163,7 +163,7 @@ class ProjectSmokeTest {
             departure = LocalDateTime.of(2026, 8, 20, 12, 0),
         )
         assertEquals(
-            LocalDateTime.of(2026, 8, 20, 11, 0),
+            LocalDateTime.of(2026, 8, 20, 10, 50),
             ReminderPolicy.create(assignment)?.triggerAt,
         )
     }

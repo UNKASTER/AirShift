@@ -130,7 +130,7 @@ class ShiftCalendarRowsTest {
 
     @Test
     fun `the margin setting moves the recommended bus`() {
-        // 8-31 组 1 是晚二，首个任务 07:10 出港 → 最晚 06:10 到位，正好卡在两班之间。
+        // 8-31 组 1 是晚二，首个任务 07:10 出港 → 最晚 06:00 到位，余量为 0 时 05:55 班车恰好准点到达。
         val date = LocalDate.of(2026, 8, 31)
         assertEquals(ShiftSlot(ShiftTier.NIGHT, 2), rows()[date]!!.day.slot)
         assertEquals(LocalTime.of(5, 55), rows(margin = 0)[date]!!.bus?.departure)
@@ -140,10 +140,19 @@ class ShiftCalendarRowsTest {
 
     @Test
     fun `a slot with more slack keeps the same bus at every offered margin`() {
-        // 8-30 组 1 是早二，首个任务 07:30 出港，三档余量都还能赶上 05:55。
-        val date = LocalDate.of(2026, 8, 30)
+        // 组 8 在 9-6 是整班工作日的早三，首个任务 07:50 出港 → 最晚 06:40 到位，三档余量都还能赶上 05:55。
+        val date = LocalDate.of(2026, 9, 6)
         ShiftBusPlan.REPORT_MARGIN_OPTIONS.forEach { margin ->
-            assertEquals("余量 $margin", LocalTime.of(5, 55), rows(margin = margin)[date]!!.bus?.departure)
+            val row = ShiftCalendarRows.build(
+                schedule = schedule,
+                groupId = 8,
+                from = date,
+                toInclusive = date,
+                today = today,
+                marginMinutes = margin,
+            ).single()
+            assertEquals(ShiftSlot(ShiftTier.EARLY, 3), row.day.slot)
+            assertEquals("余量 $margin", LocalTime.of(5, 55), row.bus?.departure)
         }
     }
 
@@ -168,8 +177,8 @@ class ShiftCalendarRowsTest {
             reportBy = ShiftRosterBridge.reportByMinutes(assignments),
             lastTask = ShiftRosterBridge.lastTaskMinutes(assignments),
         )[date]!!
-        // 11:00 出港 → 最晚 10:00 到位 → 留 15 分钟余量 → 08:00 班车。
-        assertEquals(ShiftClock.of(10, 0), row.bus?.reportByMinutes)
+        // 11:00 出港 → 最晚 09:50 到位 → 留 15 分钟余量 → 08:00 班车。
+        assertEquals(ShiftClock.of(9, 50), row.bus?.reportByMinutes)
         assertEquals(LocalTime.of(8, 0), row.bus?.departure)
         assertEquals(ShiftEstimateSource.ROSTER, row.bus?.source)
     }
