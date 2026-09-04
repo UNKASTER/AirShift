@@ -17,20 +17,38 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.api.LiveFlightRefresher
+import com.bradj.airshift.api.LiveRefreshResult
 import com.bradj.airshift.data.RosterStore
+import com.bradj.airshift.duty.AirportLocatorPort
+import com.bradj.airshift.duty.ApiKeyTester
+import com.bradj.airshift.duty.DutyPorts
+import com.bradj.airshift.duty.DutyViewModel
+import com.bradj.airshift.duty.ReminderPort
+import com.bradj.airshift.duty.SpecialServicePort
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ReminderScheduler
+import com.bradj.airshift.reminder.ScheduleSummary
+import com.bradj.airshift.specialservice.NotificationAccess
 import com.bradj.airshift.specialservice.SpecialServiceRepository
+import com.bradj.airshift.specialservice.SpecialServiceState
+import com.bradj.airshift.ui.AirShiftApp
 import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.theme.AirShiftTheme
+import com.bradj.airshift.widget.DutyWidgetUpdater
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,11 +57,14 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
 
 @RunWith(AndroidJUnit4::class)
 class DutyWindowRefreshInstrumentedTest {
@@ -63,6 +84,10 @@ class DutyWindowRefreshInstrumentedTest {
     private lateinit var store: RosterStore
     private var showApp by mutableStateOf(true)
     private var contentSet = false
+    private var viewModelStore = ViewModelStore()
+    private var viewModel by mutableStateOf<DutyViewModel?>(null)
+    private lateinit var viewModelFactory: ViewModelProvider.Factory
+    private lateinit var excelReader: suspend (Uri, String) -> RosterParseResult
 
     @Before
     fun isolateStorageAndReplaceNetworkAndWorkerBoundaries() {
@@ -93,6 +118,7 @@ class DutyWindowRefreshInstrumentedTest {
             composeRule.mainClock.advanceTimeByFrame()
             composeRule.waitForIdle()
         }
+        composeRule.runOnIdle { viewModelStore.clear() }
         ReminderScheduler.cancelAll(isolatedContext, createdAssignments)
         isolatedPreferenceNames.forEach { name ->
             check(name.startsWith(preferencePrefix))
@@ -323,10 +349,7 @@ class DutyWindowRefreshInstrumentedTest {
         completeCurrentDuty()
         assertEquals(1, store.currentDutyIndex)
         assertEquals(1, requests.size)
-        composeRule.runOnIdle { showApp = false }
-        composeRule.mainClock.advanceTimeBy(100L)
-        composeRule.waitForIdle()
-        composeRule.runOnIdle { showApp = true }
+        recreateAppWithANewViewModel()
         awaitRequests(2)
 
         assertEquals(1, excelReadCount.get())
@@ -352,36 +375,75 @@ class DutyWindowRefreshInstrumentedTest {
         val repository = SpecialServiceRepository::class.java.getDeclaredConstructor(Context::class.java)
             .apply { isAccessible = true }
             .newInstance(isolatedContext)
+        val ports = DutyPorts(
+            store = store,
+            specialServices = object : SpecialServicePort {
+                override val state: StateFlow<SpecialServiceState> = repository.state
+                override fun onRosterChanged(assignments: List<RosterAssignment>) =
+                    repository.onRosterChanged(assignments)
+            },
+            reminders = object : ReminderPort {
+                override fun canScheduleExactAlarms(): Boolean = ReminderScheduler.canScheduleExactAlarms(isolatedContext)
+                override fun scheduleAll(assignments: List<RosterAssignment>): ScheduleSummary =
+                    ReminderScheduler.scheduleAll(isolatedContext, assignments)
+                override fun cancelAll(assignments: List<RosterAssignment>) =
+                    ReminderScheduler.cancelAll(isolatedContext, assignments)
+            },
+            flightRefresher = LiveFlightRefresher { generation, apiKey, targets, scope ->
+                assertEquals(TEST_API_KEY, apiKey)
+                suspendCancellableCoroutine { continuation ->
+                    requests += RecordedRefresh(generation, targets.toSet(), scope, continuation)
+                }
+            },
+            airportLocator = AirportLocatorPort { _, _ -> error("The fake response contains no airport candidates") },
+            apiKeyTester = ApiKeyTester { _, _, _, _ -> error("Connection tests were not requested") },
+            configureBackgroundRefresh = { refreshConfigurations += it },
+            notifyWidget = { DutyWidgetUpdater.notifyRosterChanged(isolatedContext) },
+            isNotificationAccessGranted = { NotificationAccess.isGranted(isolatedContext) },
+            hasPermission = { permission ->
+                ContextCompat.checkSelfPermission(isolatedContext, permission) == PackageManager.PERMISSION_GRANTED
+            },
+            refreshClock = { composeRule.mainClock.currentTime },
+            clock = Clock.systemDefaultZone(),
+        )
+        viewModelFactory = DutyViewModel.factory(ports)
+        excelReader = { _, name ->
+            excelReadCount.incrementAndGet()
+            assertEquals(TEST_USER_NAME, name)
+            checkNotNull(importResult)
+        }
+        viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[DutyViewModel::class.java]
         contentSet = true
         composeRule.setContent {
             val pending by queue.pending.collectAsStateWithLifecycle()
-            if (showApp) {
+            val activeViewModel = viewModel
+            if (showApp && activeViewModel != null) {
                 AirShiftTheme {
                     AirShiftApp(
-                        context = isolatedContext,
-                        store = store,
-                        specialServiceRepository = repository,
-                        readImageRoster = { _, _, _ -> error("Image import was not requested") },
-                        readExcelRoster = { _, name, callback ->
-                            excelReadCount.incrementAndGet()
-                            assertEquals(TEST_USER_NAME, name)
-                            callback(Result.success(checkNotNull(importResult)))
-                        },
-                        refreshLive = { generation, apiKey, targets, scope, callback ->
-                            assertEquals(TEST_API_KEY, apiKey)
-                            requests += RecordedRefresh(generation, targets.toSet(), scope, callback)
-                        },
-                        locateAirport = { _, _ -> error("The fake response contains no airport candidates") },
+                        viewModel = activeViewModel,
+                        readImageRoster = { _, _ -> error("Image import was not requested") },
+                        readExcelRoster = excelReader,
                         openExactAlarmSettings = { error("Exact alarm settings were not requested") },
                         openNotificationAccessSettings = { error("Notification settings were not requested") },
                         pendingSharedExcelImport = pending.firstOrNull(),
                         sharedExcelImportQueue = queue,
                         dutyNavigation = DutyNavigationViewModel(),
-                        configureRefresh = { refreshConfigurations += it },
-                        refreshClock = { composeRule.mainClock.currentTime },
                     )
                 }
             }
+        }
+    }
+
+    /** 模拟进程重建：旧 ViewModel 被清理（在途协程取消），新 ViewModel 从存储恢复。 */
+    private fun recreateAppWithANewViewModel() {
+        composeRule.runOnIdle { showApp = false }
+        composeRule.mainClock.advanceTimeBy(100L)
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            viewModelStore.clear()
+            viewModelStore = ViewModelStore()
+            viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[DutyViewModel::class.java]
+            showApp = true
         }
     }
 
@@ -395,7 +457,7 @@ class DutyWindowRefreshInstrumentedTest {
         val request = requests[index]
         val live = request.targets.associateWith { lookup -> listOf(flight(lookup.flightNumber)) }
         composeRule.runOnIdle {
-            request.callback(
+            request.continuation.resume(
                 LiveRefreshResult(
                     live = live,
                     airports = emptyList(),
@@ -471,7 +533,7 @@ class DutyWindowRefreshInstrumentedTest {
         val generation: Long,
         val targets: Set<FlightLookup>,
         val scope: FlightRefreshScope,
-        val callback: (LiveRefreshResult) -> Unit,
+        val continuation: Continuation<LiveRefreshResult>,
     )
 
     private companion object {

@@ -1,27 +1,38 @@
 package com.bradj.airshift
 
-import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.bradj.airshift.api.LiveFlightRefresher
 import com.bradj.airshift.data.RosterStore
+import com.bradj.airshift.duty.AirportLocatorPort
+import com.bradj.airshift.duty.ApiKeyTester
+import com.bradj.airshift.duty.DutyPorts
+import com.bradj.airshift.duty.DutyViewModel
+import com.bradj.airshift.duty.ReminderPort
+import com.bradj.airshift.duty.SpecialServicePort
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.RosterParseResult
+import com.bradj.airshift.reminder.ScheduleSummary
 import com.bradj.airshift.specialservice.SpecialServiceRepository
+import com.bradj.airshift.specialservice.SpecialServiceState
+import com.bradj.airshift.ui.AirShiftApp
 import com.bradj.airshift.ui.DutyNavigationViewModel
 import com.bradj.airshift.ui.theme.AirShiftTheme
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,26 +41,33 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
+/**
+ * 分享导入的“所有者”语义现在由 ViewModel 承担：ViewModel 被清理（进程重建）后，
+ * 在途读取的结果不能落库也不能消费队列事件；新 ViewModel 会重新发起读取。
+ */
 @RunWith(AndroidJUnit4::class)
 class SharedExcelImportOwnerInstrumentedTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private val preferencePrefix = "shared-excel-owner-${UUID.randomUUID()}-"
+    private val preferencePrefix = "shared-owner-${UUID.randomUUID()}-"
     private val isolatedPreferenceNames = mutableSetOf<String>()
     private lateinit var targetContext: Context
     private lateinit var isolatedContext: Context
     private lateinit var store: RosterStore
-    private var showApp by mutableStateOf(false)
+    private var viewModelStore = ViewModelStore()
+    private var viewModel by mutableStateOf<DutyViewModel?>(null)
+    private var showApp by mutableStateOf(true)
     private var contentSet = false
 
     @Before
-    fun isolatePreferencesWithoutConfiguringAnApiKey() {
+    fun isolatePreferences() {
         targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         isolatedContext = object : ContextWrapper(targetContext) {
             override fun getApplicationContext(): Context = this
@@ -72,6 +90,7 @@ class SharedExcelImportOwnerInstrumentedTest {
             composeRule.mainClock.advanceTimeByFrame()
             composeRule.waitForIdle()
         }
+        composeRule.runOnIdle { viewModelStore.clear() }
         isolatedPreferenceNames.forEach { name ->
             check(name.startsWith(preferencePrefix))
             // Flush this test's pending apply() writes before deleting its UUID-prefixed files.
@@ -81,7 +100,7 @@ class SharedExcelImportOwnerInstrumentedTest {
     }
 
     @Test
-    fun disposedOwnerCannotCommitBeforeOrAfterTheSameEventIsRetried() {
+    fun aClearedViewModelCannotCommitAndTheRecreatedOneReadsTheSharedFileAgain() {
         val repository = SpecialServiceRepository.get(isolatedContext)
         assertTrue(
             "The repository must be initialized with this test's isolated context",
@@ -95,28 +114,26 @@ class SharedExcelImportOwnerInstrumentedTest {
         })
         val originalPending = queue.pending.value
         val originalRoster = store.loadSnapshot()
-        val callbacks = CopyOnWriteArrayList<(Result<RosterParseResult>) -> Unit>()
+        val reads = CopyOnWriteArrayList<CompletableDeferred<RosterParseResult>>()
         val parsed = syntheticRoster()
+        val factory = DutyViewModel.factory(ports(repository))
+        fun newViewModel() = ViewModelProvider(viewModelStore, factory)[DutyViewModel::class.java]
 
-        showApp = true
+        viewModel = newViewModel()
         contentSet = true
         composeRule.setContent {
-            assertEquals(ComponentActivity::class.java, LocalContext.current.findActivity()?.javaClass)
             val pending by queue.pending.collectAsStateWithLifecycle()
-            if (showApp) {
+            val activeViewModel = viewModel
+            if (showApp && activeViewModel != null) {
                 AirShiftTheme {
                     AirShiftApp(
-                        context = isolatedContext,
-                        store = store,
-                        specialServiceRepository = repository,
-                        readImageRoster = { _, _, _ -> error("Image import was not requested") },
-                        readExcelRoster = { uri, name, callback ->
+                        viewModel = activeViewModel,
+                        readImageRoster = { _, _ -> error("Image import was not requested") },
+                        readExcelRoster = { uri, name ->
                             assertEquals(sharedUri, uri)
                             assertEquals(TEST_USER_NAME, name)
-                            callbacks += callback
+                            CompletableDeferred<RosterParseResult>().also { reads += it }.await()
                         },
-                        refreshLive = { _, _, _, _, _ -> error("No API key is configured") },
-                        locateAirport = { _, _ -> error("A stale import must not request location") },
                         openExactAlarmSettings = { error("Exact alarm settings were not requested") },
                         openNotificationAccessSettings = { error("Notification settings were not requested") },
                         pendingSharedExcelImport = pending.firstOrNull(),
@@ -127,33 +144,61 @@ class SharedExcelImportOwnerInstrumentedTest {
             }
         }
         composeRule.mainClock.autoAdvance = false
-        composeRule.waitUntil(timeoutMillis = 5_000) { callbacks.size == 1 }
-        val oldCallback = callbacks.single()
+        composeRule.waitUntil(timeoutMillis = 5_000) { reads.size == 1 }
+        val staleRead = reads.single()
 
+        // 进程重建：旧 ViewModel 被清理，在途读取随之取消。
         composeRule.runOnIdle { showApp = false }
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.waitForIdle()
+        composeRule.runOnIdle { viewModelStore.clear() }
+        staleRead.complete(parsed)
+        composeRule.mainClock.advanceTimeByFrame()
         composeRule.runOnIdle {
-            // No new read/attempt exists yet: only owner disposal can reject this callback.
-            assertEquals(1, callbacks.size)
-            oldCallback(Result.success(parsed))
             assertEquals(originalRoster.generation, store.rosterGeneration)
             assertEquals(originalRoster.assignments, store.loadAssignments())
             assertEquals(originalPending, queue.pending.value)
         }
 
-        composeRule.runOnIdle { showApp = true }
-        composeRule.mainClock.advanceTimeByFrame()
-        composeRule.waitUntil(timeoutMillis = 5_000) { callbacks.size == 2 }
+        // 新 ViewModel 从队列恢复同一事件并重新读取；旧结果无论何时到达都不能落库。
+        viewModelStore = ViewModelStore()
         composeRule.runOnIdle {
-            oldCallback(Result.success(parsed))
+            viewModel = newViewModel()
+            showApp = true
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitUntil(timeoutMillis = 5_000) { reads.size == 2 }
+        composeRule.runOnIdle {
             assertEquals(originalRoster.generation, store.rosterGeneration)
             assertEquals(originalRoster.assignments, store.loadAssignments())
             assertEquals(originalPending, queue.pending.value)
-            assertEquals(2, callbacks.size)
+            assertEquals(2, reads.size)
         }
-        // Do not complete callbacks[1]: a successful live owner would schedule reminders/permissions.
+        // 不完成 reads[1]：真实导入成功会安排提醒并请求权限。
     }
+
+    private fun ports(repository: SpecialServiceRepository) = DutyPorts(
+        store = store,
+        specialServices = object : SpecialServicePort {
+            override val state: StateFlow<SpecialServiceState> = repository.state
+            override fun onRosterChanged(assignments: List<RosterAssignment>) = repository.onRosterChanged(assignments)
+        },
+        reminders = object : ReminderPort {
+            override fun canScheduleExactAlarms(): Boolean = true
+            override fun scheduleAll(assignments: List<RosterAssignment>): ScheduleSummary =
+                error("A stale import must not schedule reminders")
+            override fun cancelAll(assignments: List<RosterAssignment>) = Unit
+        },
+        flightRefresher = LiveFlightRefresher { _, _, _, _ -> error("No API key is configured") },
+        airportLocator = AirportLocatorPort { _, _ -> error("A stale import must not request location") },
+        apiKeyTester = ApiKeyTester { _, _, _, _ -> error("Connection tests were not requested") },
+        configureBackgroundRefresh = {},
+        notifyWidget = {},
+        isNotificationAccessGranted = { false },
+        hasPermission = { true },
+        refreshClock = { composeRule.mainClock.currentTime },
+        clock = Clock.systemDefaultZone(),
+    )
 
     private fun syntheticRoster() = RosterParseResult(
         assignments = listOf(
@@ -173,12 +218,6 @@ class SharedExcelImportOwnerInstrumentedTest {
         rosterDate = LocalDate.of(2000, 1, 1),
         warnings = emptyList(),
     )
-
-    private tailrec fun Context.findActivity(): Activity? = when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
 
     private companion object {
         const val TEST_USER_NAME = "测试甲"

@@ -2,7 +2,7 @@
 
 AirShift 是面向航司地面服务保障人员的单用户 Android 排班助手。它在手机本机识别排班图片或 Excel，只留下当前用户的保障任务；在用户自行配置 API Key 后，手机会直接查询飞常准 Aviation MCP，并把实时航班、提醒、MUC 特服信息和当前执勤集中到一个界面中。它还按上三休三周期推算未来的上班日、班次和应乘班车。
 
-- 当前版本：`0.9.2`（version code `40`）
+- 当前版本：`0.10.0`（version code `41`）
 - 最低系统：Android 13（API 33）
 - 项目形态：单模块、端侧优先、无自建后端
 
@@ -183,10 +183,11 @@ MUC 原文只在内存中解析。持久化内容是航班、日期、结构化�
 MUC 新通知 ─→ 白名单/提取/解析/归并 ─→ SpecialServiceRepository ─→ Compose
 ```
 
-`MainActivity` / `AirShiftApp` 是当前 composition root 和应用编排层；项目没有引入导航框架或依赖注入框架。生产代码根目录是 `app/src/main/java/com/bradj/airshift/`，下表中的短路径均相对于它：
+`MainActivity` 只负责装配依赖、接收分享 Intent 和转发生命周期；业务编排在 `duty/DutyViewModel`，它只依赖 `duty/DutyPorts` 里的端口接口，因此可以在 JVM 上用假实现测试；`ui/AirShiftApp` 只渲染状态并转发用户动作。项目没有引入导航框架或依赖注入框架。生产代码根目录是 `app/src/main/java/com/bradj/airshift/`，下表中的短路径均相对于它：
 
 | 路径 | 职责 |
 |---|---|
+| `duty/` | 编排层：`DutyViewModel`、`DutyUiState`、端口接口与生产装配 `AppDutyPorts` |
 | `model/` | 排班模型、自动完成、当前/下一窗口、执勤时间线 |
 | `model/shift/` | 上三休三周期、班组轮转、班次槽位、班车规则（纯 Kotlin，可单测） |
 | `parser/` | OCR 表格恢复、`.xls/.xlsx` 解析和输入安全边界 |
@@ -245,7 +246,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 
 仪器测试中的 OCR 端到端用例使用仓库内无真实个人信息的 `testdata/synthetic_roster.png`。可选真实 `.xls` fixture 需配置 `AIRSHIFT_XLS_FIXTURES_DIR` 与 `AIRSHIFT_XLS_TEST_NAME`，默认跳过。
 
-当前源码包含 225 个 JVM `@Test` 和 57 个 Android `@Test`。覆盖排班解析、完成与窗口规则、排班周期与班组轮转、班车规则、飞常准载荷/缓存/限流、多经停映射、MUC 状态机、导航/前台刷新、generation 竞态、WPS 分享、小组件和合成 OCR；这两个数字是测试方法规模，不等同于某次运行结果。本轮验证快照见 [spec.md](spec.md#122-本轮验证)。
+当前源码包含 237 个 JVM `@Test` 和 57 个 Android `@Test`。覆盖排班解析、完成与窗口规则、排班周期与班组轮转、班车规则、飞常准载荷/缓存/限流、多经停映射、MUC 状态机、导航/前台刷新、generation 竞态、WPS 分享、小组件和合成 OCR；这两个数字是测试方法规模，不等同于某次运行结果。本轮验证快照见 [spec.md](spec.md#122-本轮验证)。
 
 ## 已知限制
 

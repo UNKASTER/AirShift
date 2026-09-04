@@ -10,10 +10,7 @@ import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
 import com.paddle.ocr.util.OpenCVUtils
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -22,30 +19,20 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 object OcrRosterReader {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val initializationMutex = Mutex()
     private val inferenceMutex = Mutex()
 
     @Volatile
     private var paddleOcr: PaddleOCR? = null
 
-    fun read(
-        context: Context,
-        uri: Uri,
-        userName: String,
-        onResult: (Result<RosterParseResult>) -> Unit,
-    ) {
+    /** 解码图片并在引擎互斥锁内识别；调用方的协程被取消时结果被丢弃。 */
+    suspend fun read(context: Context, uri: Uri, userName: String): RosterParseResult {
         val appContext = context.applicationContext
-        scope.launch {
-            val result = runCatching {
-                val bitmap = decodeBitmap(appContext, uri)
-                try {
-                    readBitmap(appContext, bitmap, userName)
-                } finally {
-                    bitmap.recycle()
-                }
-            }
-            onResult(result)
+        val bitmap = decodeBitmap(appContext, uri)
+        return try {
+            readBitmap(appContext, bitmap, userName)
+        } finally {
+            bitmap.recycle()
         }
     }
 

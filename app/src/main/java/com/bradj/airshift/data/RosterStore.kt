@@ -39,45 +39,45 @@ internal data class DutyCompletion(
  * 测试可注入固定时钟复现跨零点场景。遗留键的清理已移到 [LegacyMigrations]，构造本类不再触发
  * Keystore 访问；API Key 存储按需惰性创建。
  */
-class RosterStore(
+internal class RosterStore(
     context: Context,
     private val clock: Clock = Clock.systemDefaultZone(),
-) {
+) : RosterRepository {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val applicationContext = context.applicationContext
     private val variFlightApiKeyStore by lazy { VariFlightApiKeyStore(applicationContext) }
 
-    var userName: String?
+    override var userName: String?
         get() = preferences.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
         set(value) {
             preferences.edit { putString(KEY_USER_NAME, value?.trim()) }
         }
 
-    var variFlightApiKey: String?
+    override var variFlightApiKey: String?
         get() = variFlightApiKeyStore.value
         set(value) {
             variFlightApiKeyStore.value = value
         }
 
     /** 只看是否存有密文，不解密；Keystore 瞬时故障不会让后台刷新被误判为“没有 Key”而取消。 */
-    val hasVariFlightApiKey: Boolean
+    override val hasVariFlightApiKey: Boolean
         get() = variFlightApiKeyStore.hasValue
 
-    fun clearVariFlightApiKey() {
+    override fun clearVariFlightApiKey() {
         variFlightApiKeyStore.clear()
     }
 
     /**
      * 排班日历：到位余量（分钟）。到位要求本身是硬规定，余量是用户自己给班车留的富余。
      */
-    var shiftReportMarginMinutes: Int
+    override var shiftReportMarginMinutes: Int
         get() = preferences.getInt(KEY_SHIFT_REPORT_MARGIN, ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES)
         set(value) {
             preferences.edit { putInt(KEY_SHIFT_REPORT_MARGIN, value.coerceIn(0, MAX_SHIFT_REPORT_MARGIN)) }
         }
 
     /** 排班日历：手动指定班组，仅在姓名匹配不到任何班组时作为兜底。 */
-    var manualShiftGroupId: Int?
+    override var manualShiftGroupId: Int?
         get() = preferences.getInt(KEY_SHIFT_MANUAL_GROUP, 0).takeIf { it > 0 }
         set(value) {
             preferences.edit {
@@ -89,7 +89,7 @@ class RosterStore(
      * 排班日历：最近一次从 Excel“候机早班/中班/夜班”行读到的真实分组。
      * 用于校正内置班组表与轮转相位；解析不到时保持原值，内置表继续生效。
      */
-    var shiftCalibration: ShiftCalibration?
+    override var shiftCalibration: ShiftCalibration?
         get() = preferences.getString(KEY_SHIFT_CALIBRATION, null)?.let(::decodeShiftCalibration)
         set(value) {
             preferences.edit {
@@ -113,10 +113,10 @@ class RosterStore(
             }
         }
 
-    val currentDutyIndex: Int
+    override val currentDutyIndex: Int
         get() = synchronized(rosterLock) { readDutyIndex(dutyDay()) }
 
-    val rosterGeneration: Long
+    override val rosterGeneration: Long
         get() = synchronized(rosterLock) { preferences.getLong(KEY_ROSTER_GENERATION, 0L) }
 
     fun setCurrentDutyIndex(index: Int) {
@@ -132,10 +132,10 @@ class RosterStore(
      * Completes exactly the duty shown by the caller. The generation and index guards make a
      * repeated tap from stale UI a no-op instead of completing the following duty.
      */
-    internal fun completeCurrentDuty(
+    override fun completeCurrentDuty(
         expectedGeneration: Long,
         expectedDutyIndex: Int,
-        now: LocalDateTime = LocalDateTime.now(clock),
+        now: LocalDateTime,
     ): DutyCompletion? = synchronized(rosterLock) {
         if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized null
         val before = loadSnapshot()
@@ -154,7 +154,7 @@ class RosterStore(
         )
     }
 
-    fun loadSnapshot(): RosterSnapshot = synchronized(rosterLock) {
+    override fun loadSnapshot(): RosterSnapshot = synchronized(rosterLock) {
         RosterSnapshot(
             assignments = loadAssignments(),
             generation = preferences.getLong(KEY_ROSTER_GENERATION, 0L),
@@ -162,7 +162,7 @@ class RosterStore(
         )
     }
 
-    fun replaceAssignments(assignments: List<RosterAssignment>): Long {
+    override fun replaceAssignments(assignments: List<RosterAssignment>): Long {
         val encoded = encodeAssignments(assignments)
         return synchronized(rosterLock) {
             val generation = Math.addExact(preferences.getLong(KEY_ROSTER_GENERATION, 0L), 1L)
@@ -199,12 +199,12 @@ class RosterStore(
         }
     }
 
-    internal fun mergeLiveInfoIfGeneration(
+    override fun mergeLiveInfoIfGeneration(
         live: Map<FlightLookup, List<FlightInfo>>,
         expectedGeneration: Long,
         fallbackDate: LocalDate,
-        refreshedAtEpochMillis: Long? = null,
-        scope: FlightRefreshScope = FlightRefreshScope.DUTY_WINDOW,
+        refreshedAtEpochMillis: Long?,
+        scope: FlightRefreshScope,
     ): RosterSnapshot? = synchronized(rosterLock) {
         val current = loadSnapshot()
         if (current.generation != expectedGeneration) return@synchronized null
@@ -226,7 +226,7 @@ class RosterStore(
     }
 
     // Keep short follow-up effects ordered with imports; never perform network work in this block.
-    internal fun runIfGenerationCurrent(expectedGeneration: Long, action: () -> Unit): Boolean =
+    override fun runIfGenerationCurrent(expectedGeneration: Long, action: () -> Unit): Boolean =
         synchronized(rosterLock) {
             if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized false
             action()

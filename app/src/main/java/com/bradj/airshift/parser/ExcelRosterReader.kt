@@ -2,10 +2,7 @@ package com.bradj.airshift.parser
 
 import android.content.Context
 import android.net.Uri
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.File
@@ -17,35 +14,28 @@ object ExcelRosterReader {
         0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(),
         0xA1.toByte(), 0xB1.toByte(), 0x1A, 0xE1.toByte(),
     )
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    fun read(
-        context: Context,
-        uri: Uri,
-        userName: String,
-        onResult: (Result<RosterParseResult>) -> Unit,
-    ) {
+    /**
+     * 在 IO 线程读取并解析 `.xls` / `.xlsx`。按文件签名分流，不信任扩展名或 MIME。
+     * 调用方的协程被取消时结果被丢弃，不会再落库。
+     */
+    suspend fun read(context: Context, uri: Uri, userName: String): RosterParseResult {
         val appContext = context.applicationContext
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    appContext.contentResolver.openInputStream(uri)?.use { input ->
-                        val buffered = BufferedInputStream(input)
-                        val signature = readSignature(buffered)
-                        when {
-                            signature.contentEquals(oleSignature) -> parseXls(
-                                buffered,
-                                appContext.cacheDir,
-                                userName,
-                            )
-                            signature.size >= 2 && signature[0] == 0x50.toByte() && signature[1] == 0x4B.toByte() ->
-                                ExcelRosterParser.parse(buffered, userName)
-                            else -> error("文件不是有效的 .xls 或 .xlsx Excel 工作簿")
-                        }
-                    } ?: error("无法打开所选 Excel 文件")
+        return withContext(Dispatchers.IO) {
+            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                val buffered = BufferedInputStream(input)
+                val signature = readSignature(buffered)
+                when {
+                    signature.contentEquals(oleSignature) -> parseXls(
+                        buffered,
+                        appContext.cacheDir,
+                        userName,
+                    )
+                    signature.size >= 2 && signature[0] == 0x50.toByte() && signature[1] == 0x4B.toByte() ->
+                        ExcelRosterParser.parse(buffered, userName)
+                    else -> error("文件不是有效的 .xls 或 .xlsx Excel 工作簿")
                 }
-            }
-            onResult(result)
+            } ?: error("无法打开所选 Excel 文件")
         }
     }
 

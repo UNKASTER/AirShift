@@ -20,7 +20,7 @@ class DutyWidgetActionReceiver : BroadcastReceiver() {
 
         val appContext = context.applicationContext
         val store = RosterStore(appContext)
-        val completion = store.completeCurrentDuty(generation, dutyIndex)
+        val completion = store.completeCurrentDuty(generation, dutyIndex, LocalDateTime.now())
         if (completion == null) {
             DutyWidgetUpdater.notifyRosterChanged(appContext)
             return
