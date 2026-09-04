@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import com.bradj.airshift.R
+import com.bradj.airshift.model.LegDirection
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -111,9 +112,9 @@ internal object DutyWidgetRenderer {
             views.setViewVisibility(blockId, View.GONE)
             return
         }
-        val inbound = leg.directionLabel.startsWith("进")
+        val inbound = leg.direction == LegDirection.INBOUND
         views.setViewVisibility(blockId, View.VISIBLE)
-        views.setTextViewText(tagId, leg.directionLabel.take(1))
+        views.setTextViewText(tagId, leg.direction.shortLabel)
         views.setInt(
             tagId,
             "setBackgroundResource",

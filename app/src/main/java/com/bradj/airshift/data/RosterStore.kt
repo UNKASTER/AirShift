@@ -119,14 +119,6 @@ class RosterStore(
     val rosterGeneration: Long
         get() = synchronized(rosterLock) { preferences.getLong(KEY_ROSTER_GENERATION, 0L) }
 
-    fun resetDutyProgress() = setCurrentDutyIndex(0)
-
-    fun advanceDutyIndex() {
-        synchronized(rosterLock) {
-            setCurrentDutyIndex(readDutyIndex(dutyDay()) + 1)
-        }
-    }
-
     fun setCurrentDutyIndex(index: Int) {
         synchronized(rosterLock) {
             preferences.edit {

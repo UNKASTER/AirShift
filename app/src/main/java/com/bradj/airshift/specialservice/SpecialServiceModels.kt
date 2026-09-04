@@ -24,7 +24,6 @@ enum class Confidence {
 enum class ReviewStatus {
     CONFIRMED,
     NEEDS_REVIEW,
-    IGNORED,
 }
 
 enum class CandidateAction {
@@ -90,10 +89,12 @@ data class GateChangeRecord(
         get() = "$flightNumber|$operationDate"
 }
 
+private val gateCodeRegex = Regex("([A-Z]*)(\\d+)([A-Z]*)")
+
 /** 登机口/机位编号归一化：大写、去空格、数字部分去前导零（A08 与 A8 视为同一登机口）。 */
 fun normalizeGateCode(value: String): String {
     val compact = value.trim().uppercase().replace(" ", "")
-    val match = Regex("([A-Z]*)(\\d+)([A-Z]*)").matchEntire(compact) ?: return compact
+    val match = gateCodeRegex.matchEntire(compact) ?: return compact
     val digits = match.groupValues[2].trimStart('0')
     return "${match.groupValues[1]}${digits.ifEmpty { "0" }}${match.groupValues[3]}"
 }

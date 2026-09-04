@@ -66,6 +66,7 @@ import java.time.LocalDate
 fun AllDutyScreen(
     userName: String,
     currentAirport: String?,
+    today: LocalDate,
     isWorking: Boolean,
     isLiveRefreshing: Boolean,
     statusMessage: String?,
@@ -92,7 +93,7 @@ fun AllDutyScreen(
             contentPadding = PaddingValues(all = AirShiftSpacing.M),
             verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.M),
         ) {
-            item { AllDutyHeader(userName, currentAirport) }
+            item { AllDutyHeader(userName, currentAirport, today) }
             item {
                 ImportCard(
                     isWorking = isWorking,
@@ -167,8 +168,7 @@ fun AllDutyScreen(
  * 问候语缩小、日期信息放大、位置做成 chip。
  */
 @Composable
-private fun AllDutyHeader(name: String, airport: String?) {
-    val today = LocalDate.now()
+private fun AllDutyHeader(name: String, airport: String?, today: LocalDate) {
     val weekdays = listOf("一", "二", "三", "四", "五", "六", "日")
     val dateText = "${today.monthValue}月${today.dayOfMonth}日 星期${weekdays[today.dayOfWeek.value - 1]}"
     Box(

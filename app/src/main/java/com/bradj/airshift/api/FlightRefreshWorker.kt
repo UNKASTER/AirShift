@@ -130,6 +130,14 @@ object FlightRefreshScheduler {
         }
     }
 
+    /**
+     * 在同一串行执行器上排队，保证在此前提交的 [configure] 完成后执行；
+     * 供广播接收器在 `goAsync()` 之后决定何时 `finish()`。
+     */
+    internal fun runAfterPendingWork(action: () -> Unit) {
+        executor.execute(action)
+    }
+
     /** Refresh only flights newly entering the two-duty window after a manual completion. */
     internal fun refreshNow(
         context: Context,

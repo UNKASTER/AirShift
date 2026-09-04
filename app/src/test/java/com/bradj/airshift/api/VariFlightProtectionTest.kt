@@ -90,6 +90,45 @@ class VariFlightProtectionTest {
     }
 
     @Test
+    fun aSlowLoadForOneFlightDoesNotBlockAnotherFlightInTheSameHashBin() {
+        // 一个航班的上游请求最长 20 秒；它不能把与之同桶的其他航班一起挂住。
+        val cache = FlightResponseCache(ttlMillis = 1_000L)
+        val date = LocalDate.of(2026, 8, 23)
+        val slow = FlightLookup.of("MU1234", date)
+        val neighbour = (1000..9999).asSequence()
+            .map { FlightLookup.of("MU$it", date) }
+            .first { it != slow && hashBin(it) == hashBin(slow) }
+        val slowStarted = CountDownLatch(1)
+        val releaseSlow = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val slowFuture = pool.submit<List<FlightInfo>> {
+                cache.getOrFetch(slow) {
+                    slowStarted.countDown()
+                    assertTrue(releaseSlow.await(5, TimeUnit.SECONDS))
+                    listOf(flight("slow"))
+                }
+            }
+            assertTrue(slowStarted.await(2, TimeUnit.SECONDS))
+            val neighbourFuture = pool.submit<List<FlightInfo>> {
+                cache.getOrFetch(neighbour) { listOf(flight("neighbour")) }
+            }
+            assertEquals("neighbour", neighbourFuture.get(1, TimeUnit.SECONDS).first().arrivalBridge)
+            releaseSlow.countDown()
+            assertEquals("slow", slowFuture.get(2, TimeUnit.SECONDS).first().arrivalBridge)
+        } finally {
+            releaseSlow.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    /** ConcurrentHashMap 默认 16 个桶，桶号 = spread(hash) & 15，spread(h) = (h ^ (h >>> 16)) & 0x7fffffff。 */
+    private fun hashBin(lookup: FlightLookup): Int {
+        val h = lookup.hashCode()
+        return ((h xor (h ushr 16)) and 0x7fffffff) and 15
+    }
+
+    @Test
     fun protectionCountsCacheHitsBeforeServingCachedResponses() {
         val protection = VariFlightRequestProtection(
             rateLimiter = SlidingWindowRateLimiter(limit = 1),
@@ -148,12 +187,13 @@ class VariFlightProtectionTest {
                 }
             }
             assertTrue(secondCheckedWindow.await(2, TimeUnit.SECONDS))
-            // Confirm actual cache-lock contention, rather than only racing two task submissions.
+            // Confirm the second caller is really parked on the in-flight load, rather than only racing two submissions.
+            val parkedStates = setOf(Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING)
             val blockedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
-            while (secondThread.get().state != Thread.State.BLOCKED && System.nanoTime() < blockedDeadline) {
+            while (secondThread.get().state !in parkedStates && System.nanoTime() < blockedDeadline) {
                 Thread.yield()
             }
-            assertEquals(Thread.State.BLOCKED, secondThread.get().state)
+            assertTrue(secondThread.get().state in parkedStates)
             stillCurrent.set(false)
             releaseFirst.countDown()
 

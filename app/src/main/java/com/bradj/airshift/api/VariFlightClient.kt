@@ -13,6 +13,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.ArrayDeque
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -27,17 +28,6 @@ class VariFlightClient(apiKey: String) {
 
     init {
         require(this.apiKey.isNotEmpty()) { "飞常准 API Key 不能为空" }
-    }
-
-    fun fetchFlight(
-        flightNumber: String,
-        date: LocalDate,
-        callback: (Result<List<FlightInfo>>) -> Unit,
-    ) {
-        executor.execute {
-            val result = runCatching { fetchFlightBlocking(flightNumber, date) }
-            mainHandler.post { callback(result) }
-        }
     }
 
     fun testConnection(
@@ -285,7 +275,7 @@ internal object VariFlightPayloadParser {
 
     /** Returns the region between the brackets of the `data` array, quotes/braces aware. */
     private fun dataArrayRegion(payload: String): String? {
-        val match = Regex("['\"]data['\"]\\s*:\\s*\\[").find(payload) ?: return null
+        val match = dataArrayStartRegex.find(payload) ?: return null
         var depth = 1
         var quote: Char? = null
         var index = match.range.last + 1
@@ -342,32 +332,42 @@ internal object VariFlightPayloadParser {
         return elements
     }
 
+    // 字段名是固定的常量集合；每个字段的正则只编译一次，而不是每个航段的每个字段都重新编译。
+    private val dataArrayStartRegex = Regex("['\"]data['\"]\\s*:\\s*\\[")
+    private val stringFieldRegexes = ConcurrentHashMap<String, Regex>()
+    private val numberFieldRegexes = ConcurrentHashMap<String, Regex>()
+    private val pythonDateTimeRegexes = ConcurrentHashMap<String, Regex>()
+    private val isoDateTimeRegexes = ConcurrentHashMap<String, Regex>()
+
+    private fun valueStart(key: String): String = "['\"]${Regex.escape(key)}['\"]\\s*:\\s*"
+
     private fun stringField(payload: String, key: String): String? =
-        Regex("['\"]${Regex.escape(key)}['\"]\\s*:\\s*['\"]([^'\"]*)['\"]")
+        stringFieldRegexes.getOrPut(key) { Regex(valueStart(key) + "['\"]([^'\"]*)['\"]") }
             .find(payload)
             ?.groupValues
             ?.get(1)
             ?.takeIf { it.isNotBlank() }
 
     private fun numberField(payload: String, key: String): Double? =
-        Regex("['\"]${Regex.escape(key)}['\"]\\s*:\\s*['\"]?(-?\\d+(?:\\.\\d+)?)['\"]?")
+        numberFieldRegexes.getOrPut(key) { Regex(valueStart(key) + "['\"]?(-?\\d+(?:\\.\\d+)?)['\"]?") }
             .find(payload)
             ?.groupValues
             ?.get(1)
             ?.toDoubleOrNull()
 
     private fun dateTimeField(payload: String, key: String): LocalDateTime? {
-        val valueStart = "['\"]${Regex.escape(key)}['\"]\\s*:\\s*"
-        val datetime = Regex(
-            valueStart + "datetime\\.datetime\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*(\\d+))?",
-        ).find(payload)
+        val datetime = pythonDateTimeRegexes.getOrPut(key) {
+            Regex(valueStart(key) + "datetime\\.datetime\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*(\\d+))?")
+        }.find(payload)
         if (datetime != null) {
             val parts = datetime.groupValues.drop(1).map { it.toIntOrNull() ?: 0 }
             return runCatching {
                 LocalDateTime.of(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5])
             }.getOrNull()
         }
-        val text = Regex(valueStart + "['\"](\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2}(?::\\d{2})?)['\"]")
+        val text = isoDateTimeRegexes.getOrPut(key) {
+            Regex(valueStart(key) + "['\"](\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2}(?::\\d{2})?)['\"]")
+        }
             .find(payload)
             ?.let { match -> "${match.groupValues[1]}T${match.groupValues[2]}" }
             ?: return null
@@ -388,13 +388,21 @@ internal object VariFlightPayloadParser {
     )
 }
 
+/**
+ * 按「航班号 + 日期」缓存成功响应，并把同一 key 的并发请求合并为一次上游调用。
+ *
+ * 表里存放的是 [CompletableFuture]：加载方只在 `compute` 里登记自己（回调保持简短，
+ * 不在 ConcurrentHashMap 的桶锁内做网络 I/O，同桶的其他航班不会被挂住），随后在锁外执行 [loader]；
+ * 等待方在 future 上等待。上游失败不缓存也不共享：等待方会重新竞争成为加载方，
+ * 并在自己的 loader 里重新复查执勤窗口。
+ */
 internal class FlightResponseCache(
     private val ttlMillis: Long,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private data class CacheEntry(val legs: List<FlightInfo>, val expiresAtMillis: Long)
 
-    private val entries = ConcurrentHashMap<FlightLookup, CacheEntry>()
+    private val entries = ConcurrentHashMap<FlightLookup, CompletableFuture<CacheEntry>>()
 
     init {
         require(ttlMillis >= 0) { "Cache TTL must not be negative" }
@@ -402,15 +410,34 @@ internal class FlightResponseCache(
 
     fun getOrFetch(lookup: FlightLookup, loader: () -> List<FlightInfo>): List<FlightInfo> {
         if (ttlMillis == 0L) return loader()
-        val entry = entries.compute(lookup) { _, existing ->
+        while (true) {
             val now = nowMillis()
-            if (existing != null && existing.expiresAtMillis > now) {
-                existing
-            } else {
-                CacheEntry(loader(), now + ttlMillis)
+            val mine = CompletableFuture<CacheEntry>()
+            // 回调只做登记与过期判断，从不返回 null（返回 null 会删除映射），所以结果必然非空。
+            val active = checkNotNull(
+                entries.compute(lookup) { _, existing ->
+                    when {
+                        existing == null -> mine
+                        existing.isCompletedExceptionally -> mine
+                        !existing.isDone -> existing
+                        existing.join().expiresAtMillis > now -> existing
+                        else -> mine
+                    }
+                },
+            )
+            if (active === mine) {
+                return try {
+                    CacheEntry(loader(), nowMillis() + ttlMillis).also(mine::complete).legs
+                } catch (error: Throwable) {
+                    entries.remove(lookup, mine)
+                    mine.completeExceptionally(error)
+                    throw error
+                }
             }
-        } ?: error("Cache entry was not created")
-        return entry.legs
+            val shared = runCatching { active.join() }.getOrNull()
+            if (shared != null) return shared.legs
+            // 加载方失败：不共享失败，回到循环重新竞争加载权。
+        }
     }
 
     fun clear() {

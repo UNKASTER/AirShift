@@ -49,6 +49,11 @@ object RosterTableParser {
     private val dateRegex = Regex("(?<!\\d)(\\d{1,2})[.。/月-](\\d{1,2})(?:日)?(?!\\d)")
     private val registrationRegex = Regex("B[A-Z0-9]{4}")
     private val flightRegex = Regex("[A-Z]{2,3}\\d{3,4}")
+    // 逐 token 调用的清洗正则只编译一次。
+    private val nonAlphanumericRegex = Regex("[^A-Z0-9]")
+    private val nonTimeCharsRegex = Regex("[^0-9+]")
+    private val nameNoiseRegex = Regex("[\\s\\p{P}\\p{S}]")
+    private val locationNoiseRegex = Regex("[0-9+\\s]")
 
     fun parse(
         tokens: List<OcrToken>,
@@ -129,7 +134,7 @@ object RosterTableParser {
     }
 
     fun cleanFlightNumber(raw: String): String? {
-        val cleaned = raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val cleaned = raw.uppercase().replace(nonAlphanumericRegex, "")
         val flightNumber = flightRegex.find(cleaned)?.value ?: return null
         return if (flightNumber.startsWith("CES")) {
             "MU${flightNumber.removePrefix("CES")}"
@@ -139,7 +144,7 @@ object RosterTableParser {
     }
 
     fun parseRosterTime(raw: String, date: LocalDate): LocalDateTime? {
-        val normalized = raw.replace(Regex("[^0-9+]"), "")
+        val normalized = raw.replace(nonTimeCharsRegex, "")
         val digits = normalized.filter(Char::isDigit)
         if (digits.length !in 3..4) return null
         val padded = digits.padStart(4, '0')
@@ -364,18 +369,18 @@ object RosterTableParser {
     }
 
     private fun cleanRegistration(raw: String): String {
-        val normalized = raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val normalized = raw.uppercase().replace(nonAlphanumericRegex, "")
         return findRegistration(normalized) ?: normalized
     }
 
     private fun findRegistration(raw: String): String? =
-        registrationRegex.find(raw.uppercase().replace(Regex("[^A-Z0-9]"), ""))?.value
+        registrationRegex.find(raw.uppercase().replace(nonAlphanumericRegex, ""))?.value
 
     private fun normalizeName(raw: String): String =
-        raw.replace(Regex("[\\s\\p{P}\\p{S}]"), "")
+        raw.replace(nameNoiseRegex, "")
 
     private fun cleanLocation(raw: String): String? =
-        raw.replace(Regex("[0-9+\\s]"), "").takeIf { it.isNotBlank() }
+        raw.replace(locationNoiseRegex, "").takeIf { it.isNotBlank() }
 
     private fun recoverTime(precedingCell: String, timeCell: String): String {
         val timeDigits = timeCell.filter(Char::isDigit)

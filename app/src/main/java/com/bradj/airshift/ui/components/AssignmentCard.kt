@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.AssignmentKind
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
@@ -126,7 +127,7 @@ fun AssignmentCard(
                     val gateChange = gateChanges.gateForFlight(flight, operationDate)
                     val standChange = standChanges.standForFlight(flight, operationDate)
                     FlightRow(
-                        direction = "进港",
+                        direction = LegDirection.INBOUND,
                         flight = flight,
                         fromCode = assignment.originCode,
                         fromName = assignment.origin,
@@ -139,23 +140,23 @@ fun AssignmentCard(
                         flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
                         originDetails = listOf(
                             DetailEntry(
-                                label = "登机口",
+                                kind = DetailKind.GATE,
                                 value = assignment.inboundBoardingGate ?: "--",
                                 hasChange = gateChange != null,
                             ),
-                            DetailEntry(label = "机位", value = assignment.inboundDepartureStand ?: "--"),
+                            DetailEntry(kind = DetailKind.STAND, value = assignment.inboundDepartureStand ?: "--"),
                         ),
                         destinationDetails = listOf(
-                            DetailEntry(label = "登机口", value = "--"),
+                            DetailEntry(kind = DetailKind.GATE, value = "--"),
                             DetailEntry(
-                                label = "机位",
+                                kind = DetailKind.STAND,
                                 value = assignment.arrivalStand ?: "--",
                                 hasChange = standChange != null,
                             ),
                         ),
                         details = listOf(
-                            DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()),
-                            DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()),
+                            DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.inboundGateClosedObservedAt.formatClock()),
+                            DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.inboundActualOffBlock.formatClock()),
                         ),
                         aircraftRegistration = if (assignment.outboundFlight == null) assignment.aircraftRegistration else null,
                         aircraftType = if (assignment.outboundFlight == null) assignment.aircraftType ?: "--" else null,
@@ -172,7 +173,7 @@ fun AssignmentCard(
                     val gateChange = gateChanges.gateForFlight(flight, operationDate)
                     val standChange = standChanges.standForFlight(flight, operationDate)
                     FlightRow(
-                        direction = "出港",
+                        direction = LegDirection.OUTBOUND,
                         flight = flight,
                         fromCode = assignment.localAirportCode,
                         fromName = assignment.localAirportName,
@@ -185,23 +186,23 @@ fun AssignmentCard(
                         flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
                         originDetails = listOf(
                             DetailEntry(
-                                label = "登机口",
+                                kind = DetailKind.GATE,
                                 value = assignment.boardingGate ?: "--",
                                 hasChange = gateChange != null,
                             ),
                             DetailEntry(
-                                label = "机位",
+                                kind = DetailKind.STAND,
                                 value = assignment.departureStand ?: "--",
                                 hasChange = standChange != null,
                             ),
                         ),
                         destinationDetails = listOf(
-                            DetailEntry(label = "登机口", value = "--"),
-                            DetailEntry(label = "机位", value = assignment.outboundArrivalStand ?: "--"),
+                            DetailEntry(kind = DetailKind.GATE, value = "--"),
+                            DetailEntry(kind = DetailKind.STAND, value = assignment.outboundArrivalStand ?: "--"),
                         ),
                         details = listOf(
-                            DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()),
-                            DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()),
+                            DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.outboundGateClosedObservedAt.formatClock()),
+                            DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.outboundActualOffBlock.formatClock()),
                         ),
                         aircraftRegistration = assignment.aircraftRegistration,
                         aircraftType = assignment.aircraftType ?: "--",

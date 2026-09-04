@@ -441,7 +441,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 7.5 缓存、限流与失败
 
-- 同航班同日期成功结果缓存 120 秒；失败不缓存；相同 key 的并发 loader 由 `ConcurrentHashMap.compute` 合并。
+- 同航班同日期成功结果缓存 120 秒；失败不缓存也不共享。相同 key 的并发请求以 `CompletableFuture` 合并为一次上游调用：加载方只在 `ConcurrentHashMap.compute` 里登记自己，网络 I/O 在桶锁之外执行（同桶的其他航班不会被挂住），等待方在 future 上等待；加载失败后等待方重新竞争加载权，并在自己的 loader 里复查执勤窗口。
 - 进程级滑动窗口最多接受每分钟 30 次调用。
 - 容量在查询缓存之前获取，因此缓存命中也计数；测试连接绕过缓存但计数；窗口移动后在 HTTP 前跳过的调用也已占用本地容量。
 - 缓存和限流状态由 App 前台、Worker 和测试连接共享，但只存在于当前进程。
@@ -621,7 +621,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.9.1）是代码审查后的第一阶段修复，没有连接设备。在 JDK 17 下执行 `.\gradlew.bat :app:testDebugUnitTest --rerun`：JVM 报告共 224 项，222 项通过、0 项失败、2 项因未配置真实 `.xls` fixture 而跳过；新增的 `DutyProgressDayTest`、`ApiKeyDecryptFailureTest` 与改写后的 `ShiftGroupTableTest` 均先观察到失败再转绿。`connectedDebugAndroidTest` 未执行：新增或修改的 5 个 Android 用例（执勤日跨零点、更早执勤日的进度不复用、遗留键一次性清理、已完成迁移不重跑、构造不触碰遗留键）只完成了编译，需在下次接入设备时补跑。
+本轮（0.9.2）是代码审查后的第二阶段（性能与健壮性），没有连接设备。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 225 项，223 项通过、0 项失败、2 项条件跳过；新增的 `aSlowLoadForOneFlightDoesNotBlockAnotherFlightInTheSameHashBin` 先在旧实现上以 `TimeoutException` 失败，改为 future 合并后转绿；Lint 保持 0 error。Android 用例只完成编译。
+
+上一轮（0.9.1）是代码审查后的第一阶段修复，没有连接设备。在 JDK 17 下执行 `.\gradlew.bat :app:testDebugUnitTest --rerun`：JVM 报告共 224 项，222 项通过、0 项失败、2 项因未配置真实 `.xls` fixture 而跳过；新增的 `DutyProgressDayTest`、`ApiKeyDecryptFailureTest` 与改写后的 `ShiftGroupTableTest` 均先观察到失败再转绿。`connectedDebugAndroidTest` 未执行：新增或修改的 5 个 Android 用例（执勤日跨零点、更早执勤日的进度不复用、遗留键一次性清理、已完成迁移不重跑、构造不触碰遗留键）只完成了编译，需在下次接入设备时补跑。
 
 上一轮（0.9.0）新增排班日历，并在 JDK 17 下执行：
 
@@ -650,7 +652,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 | 范围 | `@Test` | 主要覆盖 |
 |---|---:|---|
-| JVM `api` | 41 | 两项窗口、batch、字段/多经停映射、JSON-RPC/SSE、脱敏错误、缓存/限流/并发 |
+| JVM `api` | 42 | 两项窗口、batch、字段/多经停映射、JSON-RPC/SSE、脱敏错误、缓存/限流/并发（含同桶航班不互相阻塞） |
 | JVM `model` | 24 | 时间线、自动完成、人工前缀和窗口、执勤日 06:00 边界 |
 | JVM `data` | 5 | API Key 解密失败的永久/瞬时分类 |
 | JVM `parser` | 12 | XLSX/XLS、模板变体、姓名隔离、班次行解析；含 2 个条件式真实 fixture |
@@ -762,6 +764,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
 | 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
 | 执勤日边界 | `model/DutyProgressDay.kt` |
+| 航段方向枚举 | `model/LegDirection.kt`；详情条目类型 `ui/components/Lookups.kt` 的 `DetailKind` |
 | 遗留清理与解密失败分类 | `data/LegacyMigrations.kt`、`data/ApiKeyDecryptFailure.kt` |
 | 当前执勤时间线 | `app/src/main/java/com/bradj/airshift/model/DutyTimeline.kt` |
 | OCR 接入/表格恢复 | `parser/OcrRosterReader.kt`、`parser/RosterTableParser.kt` |
@@ -791,4 +794,5 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.9.2 代码审查后的第二阶段：飞常准响应缓存改为 `CompletableFuture` 合并，网络请求移出 `ConcurrentHashMap` 桶锁；Excel/OCR/飞常准载荷/MUC 解析中逐单元格、逐字段重新编译的 Regex 全部提升为常量或按字段名缓存；小组件“完成”广播用 `goAsync()` 等待 WorkManager 配置完成；进出港方向与详情条目改为 `LegDirection` / `DetailKind` 枚举，不再按中文文案分派；MUC 可见列表按状态与分钟 tick 记忆，避免每次重组都让全部任务卡重组；删除无调用的 `fetchFlight`、`resetDutyProgress`、`advanceDutyIndex`、`ReviewStatus.IGNORED` 与 7 个未使用的主题 token。
 - 0.9.1 代码审查后的第一阶段修复：人工进度改按 06:00 切换的执勤日保存（修复夜班跨零点后已完成任务重新出现）；内置班组表移除全部成员姓名，测试改用合成姓名；遗留键清理改为 `LegacyMigrations` 一次性迁移，`RosterStore` 构造不再访问 Keystore；API Key 解密区分永久/瞬时失败，`hasVariFlightApiKey` 不再解密；设置页只在进入时解密一次。

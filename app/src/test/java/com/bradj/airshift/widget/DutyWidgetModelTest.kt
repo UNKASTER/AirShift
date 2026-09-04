@@ -1,5 +1,6 @@
 package com.bradj.airshift.widget
 
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -181,13 +182,13 @@ class DutyWidgetModelTest {
         assertEquals("执勤 1/1 · 进港后接续出港 · B-1234", page.header)
         assertEquals(2, page.legs.size)
         val inbound = page.legs[0]
-        assertEquals("进港", inbound.directionLabel)
+        assertEquals(LegDirection.INBOUND, inbound.direction)
         assertEquals("MU5101", inbound.flight)
         // 进港：始发地中文名 + 三字码，行尾为到达站机位。
         assertEquals("北京首都 PEK", inbound.place)
         assertEquals("机位 105", inbound.gate)
         val outbound = page.legs[1]
-        assertEquals("出港", outbound.directionLabel)
+        assertEquals(LegDirection.OUTBOUND, outbound.direction)
         // 出港：目的地中文名 + 三字码，行尾为出发机位（即使有登机口也用机位）。
         assertEquals("广州白云 CAN", outbound.place)
         assertEquals("机位 358", outbound.gate)
@@ -205,7 +206,7 @@ class DutyWidgetModelTest {
         val page = (listOf(target).toWidgetPages(manuallyCompletedCount = 0, now = now).single() as WidgetPage.Duty)
 
         val outbound = page.legs.single()
-        assertEquals("出港", outbound.directionLabel)
+        assertEquals(LegDirection.OUTBOUND, outbound.direction)
         assertEquals("机位 358", outbound.gate)
     }
 

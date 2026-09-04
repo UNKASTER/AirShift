@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightCancellationScope
 import com.bradj.airshift.specialservice.FlightServiceRecord
@@ -35,9 +36,6 @@ import com.bradj.airshift.ui.theme.OnCeaRedSoft
 import com.bradj.airshift.ui.theme.SuccessGreen
 import com.bradj.airshift.ui.theme.TextHint
 import java.time.LocalDateTime
-
-/** 归位到卡片底部 meta 区的时间类条目（带时钟图标）。 */
-private val ClockMetaLabels = setOf("登机口关闭", "实际离位")
 
 /** 航线网格标签容器等宽（以三字宽的「登机口」为准），使两侧数值列各自对齐成竖线。 */
 private val RouteMetaLabelWidth = 38.dp
@@ -53,7 +51,7 @@ private val RouteMetaLabelWidth = 38.dp
  */
 @Composable
 fun FlightRow(
-    direction: String,
+    direction: LegDirection,
     flight: String,
     fromCode: String?,
     fromName: String?,
@@ -120,7 +118,7 @@ fun FlightRow(
                 left = {
                     originDetails.getOrNull(index)?.let { entry ->
                         MetaItem(
-                            icon = metaIconFor(entry.label),
+                            icon = metaIconFor(entry.kind),
                             label = entry.label,
                             value = entry.value,
                             hasChange = entry.hasChange,
@@ -131,7 +129,7 @@ fun FlightRow(
                 right = {
                     destinationDetails.getOrNull(index)?.let { entry ->
                         MetaItem(
-                            icon = metaIconFor(entry.label),
+                            icon = metaIconFor(entry.kind),
                             label = entry.label,
                             value = entry.value,
                             hasChange = entry.hasChange,
@@ -159,8 +157,8 @@ fun FlightRow(
             SpecialServiceDetails(specialServices)
         }
         // 非时间类详情行（如 MUC 变更来源、预计登机开始/关闭）保持紧凑 label-value 行
-        val clockEntries = details.filter { it.label in ClockMetaLabels }
-        val otherDetails = details.filterNot { it.label in ClockMetaLabels }
+        val clockEntries = details.filter { it.kind.clockMeta }
+        val otherDetails = details.filterNot { it.kind.clockMeta }
         if (otherDetails.isNotEmpty()) {
             Spacer(Modifier.height(AirShiftSpacing.M))
             Column(verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S)) {
@@ -252,10 +250,9 @@ private fun RouteGridRow(
     }
 }
 
-/** meta 行图标映射：按 label 语义选择线性图标。 */
-private fun metaIconFor(label: String) = when {
-    label.contains("登机口") -> LinearIcons.Gate
-    label.contains("机位") -> LinearIcons.Stand
+/** meta 行图标映射：按条目类型选择线性图标。 */
+private fun metaIconFor(kind: DetailKind) = when (kind) {
+    DetailKind.GATE -> LinearIcons.Gate
     else -> LinearIcons.Stand
 }
 

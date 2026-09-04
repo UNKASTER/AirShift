@@ -44,9 +44,7 @@ class SpecialServiceRepository private constructor(context: Context) {
             val recognizedCount = parsed.serviceCandidates.size + parsed.gateChanges.size +
                 parsed.standChanges.size + parsed.flightCancellations.size
             if (recognizedCount == 0) {
-                val onlySummary = texts.any { text ->
-                    Regex("新消息|NEW MESSAGE|收到.{0,4}消息", RegexOption.IGNORE_CASE).containsMatchIn(text)
-                }
+                val onlySummary = texts.any(summaryOnlyRegex::containsMatchIn)
                 publish(
                     current.copy(
                         lastProcessedEpochMillis = now,
@@ -163,6 +161,7 @@ class SpecialServiceRepository private constructor(context: Context) {
         private const val KEY_STATE = "state"
         private const val KEY_FINGERPRINT_KEY = "fingerprint_key"
         private const val PENDING_TTL_MILLIS = 24L * 60L * 60L * 1000L
+        private val summaryOnlyRegex = Regex("新消息|NEW MESSAGE|收到.{0,4}消息", RegexOption.IGNORE_CASE)
 
         @Volatile
         private var instance: SpecialServiceRepository? = null

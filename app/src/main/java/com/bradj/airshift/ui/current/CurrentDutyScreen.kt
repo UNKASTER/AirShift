@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.DutyTimeline
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.specialservice.FlightCancellationRecord
@@ -53,6 +54,7 @@ import com.bradj.airshift.specialservice.StandChangeRecord
 import com.bradj.airshift.ui.components.AccentBar
 import com.bradj.airshift.ui.components.BoardingPassDivider
 import com.bradj.airshift.ui.components.DetailEntry
+import com.bradj.airshift.ui.components.DetailKind
 import com.bradj.airshift.ui.components.FlightRow
 import com.bradj.airshift.ui.components.LinearIcons
 import com.bradj.airshift.ui.components.QuietCard
@@ -472,7 +474,7 @@ private fun CurrentAssignmentCard(
                     val gateChange = gateChanges.gateForFlight(flight, operationDate)
                     val standChange = standChanges.standForFlight(flight, operationDate)
                     FlightRow(
-                        direction = "进港",
+                        direction = LegDirection.INBOUND,
                         flight = flight,
                         fromCode = assignment.originCode,
                         fromName = assignment.origin,
@@ -486,20 +488,20 @@ private fun CurrentAssignmentCard(
                         originDetails = buildList {
                             add(
                                 DetailEntry(
-                                    label = "登机口",
+                                    kind = DetailKind.GATE,
                                     value = gateChange?.let {
                                         gateChangeDisplayValue(assignment.inboundBoardingGate, it)
                                     } ?: (assignment.inboundBoardingGate ?: "--"),
                                     hasChange = gateChange != null,
                                 ),
                             )
-                            add(DetailEntry(label = "机位", value = assignment.inboundDepartureStand ?: "--"))
+                            add(DetailEntry(kind = DetailKind.STAND, value = assignment.inboundDepartureStand ?: "--"))
                         },
                         destinationDetails = buildList {
-                            add(DetailEntry(label = "登机口", value = "--"))
+                            add(DetailEntry(kind = DetailKind.GATE, value = "--"))
                             add(
                                 DetailEntry(
-                                    label = "机位",
+                                    kind = DetailKind.STAND,
                                     value = standChange?.let {
                                         "${assignment.arrivalStand ?: "--"} → ${it.stand}"
                                     } ?: (assignment.arrivalStand ?: "--"),
@@ -509,13 +511,13 @@ private fun CurrentAssignmentCard(
                         },
                         details = buildList {
                             gateChange?.let {
-                                add(DetailEntry(label = "登机口变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                                add(DetailEntry(kind = DetailKind.GATE_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
                             }
                             standChange?.let {
-                                add(DetailEntry(label = "机位变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                                add(DetailEntry(kind = DetailKind.STAND_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
                             }
-                            add(DetailEntry(label = "登机口关闭", value = assignment.inboundGateClosedObservedAt.formatClock()))
-                            add(DetailEntry(label = "实际离位", value = assignment.inboundActualOffBlock.formatClock()))
+                            add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.inboundGateClosedObservedAt.formatClock()))
+                            add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.inboundActualOffBlock.formatClock()))
                         },
                         aircraftRegistration = if (assignment.outboundFlight == null) assignment.aircraftRegistration else null,
                         aircraftType = if (assignment.outboundFlight == null) assignment.aircraftType ?: "--" else null,
@@ -532,7 +534,7 @@ private fun CurrentAssignmentCard(
                     val gateChange = gateChanges.gateForFlight(flight, operationDate)
                     val standChange = standChanges.standForFlight(flight, operationDate)
                     FlightRow(
-                        direction = "出港",
+                        direction = LegDirection.OUTBOUND,
                         flight = flight,
                         fromCode = assignment.localAirportCode,
                         fromName = assignment.localAirportName,
@@ -546,7 +548,7 @@ private fun CurrentAssignmentCard(
                         originDetails = buildList {
                             add(
                                 DetailEntry(
-                                    label = "登机口",
+                                    kind = DetailKind.GATE,
                                     value = gateChange?.let {
                                         gateChangeDisplayValue(assignment.boardingGate, it)
                                     } ?: (assignment.boardingGate ?: "--"),
@@ -555,7 +557,7 @@ private fun CurrentAssignmentCard(
                             )
                             add(
                                 DetailEntry(
-                                    label = "机位",
+                                    kind = DetailKind.STAND,
                                     value = standChange?.let {
                                         "${assignment.departureStand ?: "--"} → ${it.stand}"
                                     } ?: (assignment.departureStand ?: "--"),
@@ -564,20 +566,20 @@ private fun CurrentAssignmentCard(
                             )
                         },
                         destinationDetails = buildList {
-                            add(DetailEntry(label = "登机口", value = "--"))
-                            add(DetailEntry(label = "机位", value = assignment.outboundArrivalStand ?: "--"))
+                            add(DetailEntry(kind = DetailKind.GATE, value = "--"))
+                            add(DetailEntry(kind = DetailKind.STAND, value = assignment.outboundArrivalStand ?: "--"))
                         },
                         details = buildList {
-                            add(DetailEntry(label = "预计登机开始", value = DutyTimeline.boardingStartTime(assignment).formatClock()))
-                            add(DetailEntry(label = "预计登机口关闭", value = DutyTimeline.gateCloseTime(assignment).formatClock()))
+                            add(DetailEntry(kind = DetailKind.BOARDING_START, value = DutyTimeline.boardingStartTime(assignment).formatClock()))
+                            add(DetailEntry(kind = DetailKind.BOARDING_END, value = DutyTimeline.gateCloseTime(assignment).formatClock()))
                             gateChange?.let {
-                                add(DetailEntry(label = "登机口变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                                add(DetailEntry(kind = DetailKind.GATE_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
                             }
                             standChange?.let {
-                                add(DetailEntry(label = "机位变更", value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
+                                add(DetailEntry(kind = DetailKind.STAND_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
                             }
-                            add(DetailEntry(label = "登机口关闭", value = assignment.outboundGateClosedObservedAt.formatClock()))
-                            add(DetailEntry(label = "实际离位", value = assignment.outboundActualOffBlock.formatClock()))
+                            add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.outboundGateClosedObservedAt.formatClock()))
+                            add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.outboundActualOffBlock.formatClock()))
                         },
                         aircraftRegistration = assignment.aircraftRegistration,
                         aircraftType = assignment.aircraftType ?: "--",

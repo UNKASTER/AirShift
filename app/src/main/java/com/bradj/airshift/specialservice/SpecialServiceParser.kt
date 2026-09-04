@@ -44,6 +44,27 @@ object SpecialServiceParser {
         "(?:全部|所有)?特服.{0,6}?(?:取消|撤销|放弃)(?:服务)?|(?:取消|撤销|放弃)(?:全部|所有)?特服(?:服务)?",
     )
 
+    // 每条通知都要跑一遍的正则，全部只编译一次。
+    private val segmentSeparatorRegex = Regex("[\\n；;。！？!?]+")
+    private val inlineWhitespaceRegex = Regex("[\\t\\r ]+")
+    private val gateClosedGuardRegex = Regex("登机口(?:关闭|开放|开启|截止|时间)")
+    private val standClosedGuardRegex = Regex("机位(?:关闭|开放|开启|截止|时间)")
+    private val nonFlightPrefixRegex = Regex("(?:时间|时刻|日期|电话|手机|票号|座位|登机口)$")
+    private val nonFlightSuffixRegex = Regex("^(?:点|时|分|分钟|号|年|月|日)")
+    private val timeContextRegex = Regex("(?:计划|预计|实际|到达|起飞|落地|时间)")
+    private val wheelchairCodeRegex = Regex("WCHR|WCHS|WCHC")
+    private val wheelchairWordRegex = Regex("轮椅")
+    private val unaccompaniedMinorRegex = Regex("(?<![A-Z])UM(?![A-Z])|无陪伴儿童|无成人陪伴儿童|无人陪儿童")
+    private val maasRegex = Regex("(?<![A-Z])MAAS(?![A-Z])|全流程陪伴")
+    private val cabinPetRegex = Regex("客舱宠物|宠物(?:进入|进)客舱|小动物(?:进入|进)客舱")
+    private val disabilityRegex = Regex("残障|残疾|行动不便")
+    private val unescortedRegex = Regex("无随行")
+    private val countAfterCorrectionRegex = Regex("($COUNT_TOKEN)\\s*(?:位|名|个|人|只)")
+    private val countBeforeMentionRegex = Regex("($COUNT_TOKEN)\\s*(?:位|名|个|人|只)\\s*$")
+    private val countAfterMentionRegex =
+        Regex("^[,:，：\\s]*(?:儿童|旅客|乘客|人员)?\\s*(?:[X×*]\\s*)?($COUNT_TOKEN)\\s*(?:位|名|个|人|只)")
+    private val singlePassengerWheelchairRegex = Regex("旅客.{0,4}(?:轮椅|WCHR|WCHS|WCHC)")
+
     fun parse(
         texts: List<String>,
         sourceEpochMillis: Long,
@@ -72,7 +93,7 @@ object SpecialServiceParser {
         val explicitDate = extractDate(combined, notificationDate)
         val fingerprint = fingerprint(combined, fingerprintKey)
         val expiresAt = sourceEpochMillis + ChronoUnit.HOURS.duration.multipliedBy(24).toMillis()
-        val segments = combined.split(Regex("[\\n；;。！？!?]+"))
+        val segments = combined.split(segmentSeparatorRegex)
             .map(String::trim)
             .filter(String::isNotBlank)
         val serviceCandidates = buildList {
@@ -133,8 +154,8 @@ object SpecialServiceParser {
 
     fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
         .uppercase()
-        .replace('\u00a0', ' ')
-        .replace(Regex("[\\t\\r ]+"), " ")
+        .replace(' ', ' ')
+        .replace(inlineWhitespaceRegex, " ")
         .trim()
 
     private fun parseSegment(
@@ -196,17 +217,16 @@ object SpecialServiceParser {
         sourceEpochMillis: Long,
         expiresAtEpochMillis: Long,
     ): List<ParsedGateChangeCandidate> {
-        val closedGuard = Regex("登机口(?:关闭|开放|开启|截止|时间)")
         val boardingGate: String
         val previousGate: String?
-        val chain = gateChangeChainRegex.find(segment)?.takeIf { !closedGuard.containsMatchIn(it.value) }
+        val chain = gateChangeChainRegex.find(segment)?.takeIf { !gateClosedGuardRegex.containsMatchIn(it.value) }
         if (chain != null) {
             previousGate = chain.groupValues[1].trim().uppercase()
             boardingGate = gateTokenRegex.findAll(chain.groupValues[2]).lastOrNull()?.value
                 ?.trim()?.uppercase() ?: return emptyList()
         } else {
             val gateChange = gateChangeRegex.find(segment) ?: return emptyList()
-            if (closedGuard.containsMatchIn(gateChange.value)) return emptyList()
+            if (gateClosedGuardRegex.containsMatchIn(gateChange.value)) return emptyList()
             boardingGate = gateChange.groupValues[1].trim().uppercase()
             previousGate = null
         }
@@ -269,7 +289,7 @@ object SpecialServiceParser {
         expiresAtEpochMillis: Long,
     ): List<ParsedStandChangeCandidate> {
         val standChange = standChangeRegex.find(segment) ?: return emptyList()
-        if (Regex("机位(?:关闭|开放|开启|截止|时间)").containsMatchIn(standChange.value)) return emptyList()
+        if (standClosedGuardRegex.containsMatchIn(standChange.value)) return emptyList()
         val stand = standChange.groupValues[1].trim().uppercase()
         val localFlights = findFlightTokens(segment)
         val flightTokens = if (localFlights.isNotEmpty()) localFlights else findFlightTokens(fallbackText)
@@ -313,16 +333,16 @@ object SpecialServiceParser {
         if (facilityChangeRanges.any { changeRange -> range.first >= changeRange.first && range.last <= changeRange.last }) return true
         val before = text.substring(maxOf(0, range.first - 5), range.first)
         val after = text.substring(range.last + 1, minOf(text.length, range.last + 6))
-        if (Regex("(?:时间|时刻|日期|电话|手机|票号|座位|登机口)$").containsMatchIn(before)) return true
-        if (Regex("^(?:点|时|分|分钟|号|年|月|日)").containsMatchIn(after)) return true
+        if (nonFlightPrefixRegex.containsMatchIn(before)) return true
+        if (nonFlightSuffixRegex.containsMatchIn(after)) return true
         val digits = text.substring(range)
         return digits.length == 4 && digits.take(2).toIntOrNull() in 0..23 &&
             digits.takeLast(2).toIntOrNull() in 0..59 &&
-            Regex("(?:计划|预计|实际|到达|起飞|落地|时间)").containsMatchIn(before)
+            timeContextRegex.containsMatchIn(before)
     }
 
     private fun findServiceMentions(text: String): List<ServiceMention> = buildList {
-        val wheelchairCodes = Regex("WCHR|WCHS|WCHC").findAll(text).toList()
+        val wheelchairCodes = wheelchairCodeRegex.findAll(text).toList()
         wheelchairCodes.forEach { match ->
             val level = when (match.value) {
                 "WCHR" -> WheelchairLevel.WCHR
@@ -333,24 +353,24 @@ object SpecialServiceParser {
             add(ServiceMention(ServiceType.WHEELCHAIR, level, Confidence.HIGH, match.range.first, match.range.last))
         }
         if (wheelchairCodes.isEmpty()) {
-            Regex("轮椅").findAll(text).forEach { match ->
+            wheelchairWordRegex.findAll(text).forEach { match ->
                 add(ServiceMention(ServiceType.WHEELCHAIR, null, Confidence.LOW, match.range.first, match.range.last))
             }
         }
-        Regex("(?<![A-Z])UM(?![A-Z])|无陪伴儿童|无成人陪伴儿童|无人陪儿童").findAll(text).forEach { match ->
+        unaccompaniedMinorRegex.findAll(text).forEach { match ->
             add(ServiceMention(ServiceType.UNACCOMPANIED_MINOR, null, Confidence.HIGH, match.range.first, match.range.last))
         }
-        Regex("(?<![A-Z])MAAS(?![A-Z])|全流程陪伴").findAll(text).forEach { match ->
+        maasRegex.findAll(text).forEach { match ->
             add(ServiceMention(ServiceType.MAAS, null, Confidence.HIGH, match.range.first, match.range.last))
         }
-        Regex("客舱宠物|宠物(?:进入|进)客舱|小动物(?:进入|进)客舱").findAll(text).forEach { match ->
+        cabinPetRegex.findAll(text).forEach { match ->
             add(ServiceMention(ServiceType.CABIN_PET, null, Confidence.HIGH, match.range.first, match.range.last))
         }
-        Regex("残障|残疾|行动不便").findAll(text).forEach { match ->
+        disabilityRegex.findAll(text).forEach { match ->
             add(ServiceMention(ServiceType.DISABILITY, null, Confidence.HIGH, match.range.first, match.range.last))
         }
         if (none { it.type == ServiceType.UNACCOMPANIED_MINOR }) {
-            Regex("无随行").findAll(text).forEach { match ->
+            unescortedRegex.findAll(text).forEach { match ->
                 add(ServiceMention(ServiceType.UNACCOMPANIED_MINOR, null, Confidence.LOW, match.range.first, match.range.last))
             }
         }
@@ -367,18 +387,15 @@ object SpecialServiceParser {
     private fun extractCount(text: String, mention: ServiceMention): Int? {
         correctionRegex.findAll(text).lastOrNull()?.let { marker ->
             val tail = text.substring(marker.range.last + 1)
-            Regex("($COUNT_TOKEN)\\s*(?:位|名|个|人|只)")
-                .find(tail)?.groupValues?.get(1)?.let(::parseCount)?.let { return it }
+            countAfterCorrectionRegex.find(tail)?.groupValues?.get(1)?.let(::parseCount)?.let { return it }
         }
         val prefix = text.substring(maxOf(0, mention.start - 12), mention.start)
-        Regex("($COUNT_TOKEN)\\s*(?:位|名|个|人|只)\\s*$")
-            .find(prefix)?.groupValues?.get(1)?.let(::parseCount)?.let { count ->
-                if (count in 1..99) return count
-            }
+        countBeforeMentionRegex.find(prefix)?.groupValues?.get(1)?.let(::parseCount)?.let { count ->
+            if (count in 1..99) return count
+        }
         val suffix = text.substring(mention.end + 1, minOf(text.length, mention.end + 18))
-        Regex("^[,:，：\\s]*(?:儿童|旅客|乘客|人员)?\\s*(?:[X×*]\\s*)?($COUNT_TOKEN)\\s*(?:位|名|个|人|只)")
-            .find(suffix)?.groupValues?.get(1)?.let(::parseCount)?.let { return it }
-        if (mention.type == ServiceType.WHEELCHAIR && Regex("旅客.{0,4}(?:轮椅|WCHR|WCHS|WCHC)").containsMatchIn(text)) {
+        countAfterMentionRegex.find(suffix)?.groupValues?.get(1)?.let(::parseCount)?.let { return it }
+        if (mention.type == ServiceType.WHEELCHAIR && singlePassengerWheelchairRegex.containsMatchIn(text)) {
             return 1
         }
         return null

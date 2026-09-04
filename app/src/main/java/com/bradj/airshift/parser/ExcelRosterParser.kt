@@ -37,6 +37,12 @@ internal object ExcelRosterParser {
     private val assigneeDelimiterRegex = Regex("[\\s\\u00A0,，、;；/|]+")
     private val parentheticalNoteRegex = Regex("[（(][^）)]*[）)]")
     private val shiftGroupEntryRegex = Regex("(\\d{1,2})\\s*([^\\d]+)")
+    // 单元格级热路径：findHeader 对每张表的每个单元格调用 normalizeHeader，正则必须只编译一次。
+    private val nameNoiseRegex = Regex("[\\s\\p{P}\\p{S}]")
+    private val nonAlphanumericRegex = Regex("[^A-Z0-9]")
+    private val nonTimeCharsRegex = Regex("[^0-9+]")
+    private val locationNoiseRegex = Regex("[0-9+\\s]")
+    private val worksheetIndexRegex = Regex("sheet(\\d+)\\.xml$")
 
     fun parse(
         input: InputStream,
@@ -249,7 +255,7 @@ internal object ExcelRosterParser {
     }
 
     private fun parseRosterTime(raw: String, date: LocalDate): LocalDateTime? {
-        val normalized = raw.replace(Regex("[^0-9+]"), "")
+        val normalized = raw.replace(nonTimeCharsRegex, "")
         val digits = normalized.filter(Char::isDigit)
         if (digits.length !in 3..4) return null
         val padded = digits.padStart(4, '0')
@@ -369,14 +375,14 @@ internal object ExcelRosterParser {
     }
 
     private fun cleanRegistration(raw: String): String? {
-        val normalized = raw.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val normalized = raw.uppercase().replace(nonAlphanumericRegex, "")
         return registrationRegex.find(normalized)?.value
     }
 
     private fun cleanFlightNumber(raw: String): String? = RosterTableParser.cleanFlightNumber(raw)
 
     private fun cleanLocation(raw: String): String? =
-        raw.replace(Regex("[0-9+\\s]"), "").takeIf(String::isNotBlank)
+        raw.replace(locationNoiseRegex, "").takeIf(String::isNotBlank)
 
     private fun containsAssignee(raw: String, userName: String): Boolean {
         val compactUserName = normalizeName(userName)
@@ -392,9 +398,9 @@ internal object ExcelRosterParser {
             (compactAssignees.length >= compactUserName.length * 2 && compactAssignees.contains(compactUserName))
     }
 
-    private fun normalizeName(raw: String): String = raw.replace(Regex("[\\s\\p{P}\\p{S}]"), "")
+    private fun normalizeName(raw: String): String = raw.replace(nameNoiseRegex, "")
 
-    private fun normalizeHeader(raw: String): String = raw.replace(Regex("[\\s\\p{P}\\p{S}]"), "").trim()
+    private fun normalizeHeader(raw: String): String = raw.replace(nameNoiseRegex, "").trim()
 
     private fun readWorkbookPackage(input: InputStream): WorkbookPackage {
         var hasContentTypes = false
@@ -477,7 +483,7 @@ internal object ExcelRosterParser {
     }
 
     private fun worksheetSortKey(path: String): Int =
-        Regex("sheet(\\d+)\\.xml$").find(path)?.groupValues?.get(1)?.toIntOrNull() ?: Int.MAX_VALUE
+        worksheetIndexRegex.find(path)?.groupValues?.get(1)?.toIntOrNull() ?: Int.MAX_VALUE
 
     private fun ExcelRow.cell(columnIndex: Int?): ExcelCell? = columnIndex?.let(cells::get)
 

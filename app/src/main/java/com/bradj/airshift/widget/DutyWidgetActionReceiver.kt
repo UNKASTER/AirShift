@@ -35,6 +35,9 @@ class DutyWidgetActionReceiver : BroadcastReceiver() {
                 now = LocalDateTime.now(),
                 manuallyCompletedCount = snapshot.manuallyCompletedCount,
             )
+        // configure 在串行执行器上做阻塞的 WorkManager 调用；桌面点击时进程里可能没有其他活动组件，
+        // goAsync 让进程在配置完成前保持存活（系统给约 10 秒），否则新窗口的周期刷新可能没被登记。
+        val pending = goAsync()
         FlightRefreshScheduler.configure(appContext, refreshEnabled)
         if (refreshEnabled && completion.newlyTrackedFlights.isNotEmpty()) {
             FlightRefreshScheduler.refreshNow(
@@ -43,6 +46,7 @@ class DutyWidgetActionReceiver : BroadcastReceiver() {
                 completion.newlyTrackedFlights,
             )
         }
+        FlightRefreshScheduler.runAfterPendingWork { pending.finish() }
     }
 
     companion object {

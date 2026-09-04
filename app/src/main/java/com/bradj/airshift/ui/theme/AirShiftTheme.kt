@@ -2,7 +2,6 @@ package com.bradj.airshift.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -40,9 +39,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 /** 东航品牌红。仅用于：主行动按钮、当前任务强调、紧急状态、品牌点缀、"出港"标签。 */
 val CeaRed = Color(0xFFC8102E)
 
-/** 东航红深色端（按压态 / 深色模式容器）。 */
-val CeaRedDeep = Color(0xFFA00D24)
-
 /** 出港标签浅红底。 */
 val CeaRedSoft = Color(0xFFFDECEE)
 
@@ -79,9 +75,6 @@ val FieldFill = Color(0xFFF0F2F5)
 /** 藏青灰阶 · 主文字（不用纯黑）。 */
 val TextPrimary = Color(0xFF14284B)
 
-/** 藏青灰阶 · 正文。 */
-val TextBody = Color(0xFF4A5568)
-
 /** 藏青灰阶 · 说明文字（13sp 起，白底对比度 ≥ 7:1，满足 WCAG AA/AAA）。 */
 val TextSecondary = Color(0xFF4A5568)
 
@@ -105,9 +98,6 @@ val InboundBlueSoft = Color(0xFFEAF1FB)
 
 /** 正常 / 完成：墨绿。 */
 val SuccessGreen = Color(0xFF0F7B5F)
-
-/** 正常 / 完成浅绿底。 */
-val SuccessGreenSoft = Color(0xFFE3F2EC)
 
 /** 延误 / 紧急 / "需要留意"：琥珀。 */
 val AmberAccent = Color(0xFFD97706)
@@ -138,9 +128,6 @@ val DarkTextSecondary = Color(0xFF9AA7BD)
 // ---------- 圆角 Radius ----------
 
 object AirShiftRadius {
-    /** 标签 chip / 状态胶囊：全圆角。 */
-    val Chip: Dp = 999.dp
-
     /** 小标签 / 输入框。 */
     val Tag: Dp = 12.dp
 
@@ -195,14 +182,6 @@ fun Modifier.heroShadow(shape: Shape): Modifier = shadow(
     spotColor = ShadowNavy.copy(alpha = 0.16f),
 )
 
-/** 兼容别名：一级列表卡阴影。 */
-@Stable
-fun Modifier.softShadow(shape: Shape): Modifier = listCardShadow(shape)
-
-/** 白卡统一边框。 */
-val CardBorder: BorderStroke
-    @Composable get() = BorderStroke(1.dp, BorderSoft)
-
 // ---------- 动效 Motion ----------
 
 object AirShiftMotion {
@@ -243,16 +222,6 @@ val NumericLarge = TextStyle(
     fontWeight = FontWeight.Bold,
     fontSize = 28.sp,
     lineHeight = 34.sp,
-    fontFeatureSettings = TabularNums,
-    color = TextPrimary,
-)
-
-/** 中号数字：航段实时时间。 */
-val NumericMedium = TextStyle(
-    fontFamily = FontFamily.Default,
-    fontWeight = FontWeight.Bold,
-    fontSize = 24.sp,
-    lineHeight = 30.sp,
     fontFeatureSettings = TabularNums,
     color = TextPrimary,
 )

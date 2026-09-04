@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.CardTopHighlight
 import com.bradj.airshift.ui.theme.CeaRedSoft
@@ -173,15 +174,15 @@ fun QuietCard(
 
 /** 进出港方向 chip：全圆角胶囊；进港 蓝字浅蓝底 / 出港 红字浅红底。 */
 @Composable
-fun DirectionTag(direction: String, modifier: Modifier = Modifier) {
-    val isInbound = direction == "进港"
+fun DirectionTag(direction: LegDirection, modifier: Modifier = Modifier) {
+    val isInbound = direction == LegDirection.INBOUND
     Surface(
         modifier = modifier,
         color = if (isInbound) InboundBlueSoft else CeaRedSoft,
         shape = CircleShape,
     ) {
         Text(
-            direction,
+            direction.label,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
             color = if (isInbound) InboundBlue else OnCeaRedSoft,
             style = MaterialTheme.typography.labelMedium,

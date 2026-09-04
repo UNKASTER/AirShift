@@ -15,8 +15,25 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** 航段详情行：label 灰字小标签 + value 深色值；hasChange 为 true 时附加"变更"提醒。 */
-data class DetailEntry(val label: String, val value: String, val hasChange: Boolean = false)
+/**
+ * 航段详情条目类型。文案与“是否归到卡片底部的时钟 meta 区”都由类型决定，
+ * 不再按中文标签字符串分派。
+ */
+enum class DetailKind(val label: String, val clockMeta: Boolean = false) {
+    GATE("登机口"),
+    STAND("机位"),
+    GATE_CLOSED("登机口关闭", clockMeta = true),
+    OFF_BLOCK("实际离位", clockMeta = true),
+    GATE_CHANGE_SOURCE("登机口变更"),
+    STAND_CHANGE_SOURCE("机位变更"),
+    BOARDING_START("预计登机开始"),
+    BOARDING_END("预计登机口关闭"),
+}
+
+/** 航段详情行：灰字小标签 + 深色值；hasChange 为 true 时附加"变更"提醒。 */
+data class DetailEntry(val kind: DetailKind, val value: String, val hasChange: Boolean = false) {
+    val label: String get() = kind.label
+}
 
 internal fun LocalDateTime?.formatClock(): String =
     this?.format(DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)) ?: "--:--"

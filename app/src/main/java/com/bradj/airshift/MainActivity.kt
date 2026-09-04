@@ -627,10 +627,11 @@ internal fun AirShiftApp(
         }
     }
 
-    val visibleSpecialServiceRecords = specialServiceState.activeRecords()
-    val visibleGateChanges = specialServiceState.activeGateChanges()
-    val visibleStandChanges = specialServiceState.activeStandChanges()
-    val visibleFlightCancellations = specialServiceState.activeFlightCancellations()
+    // 只在 MUC 状态或分钟 tick 变化时重新过滤：每次重组都产生新 List 会让全部任务卡跟着重组。
+    val visibleSpecialServiceRecords = remember(specialServiceState, dutyNow) { specialServiceState.activeRecords() }
+    val visibleGateChanges = remember(specialServiceState, dutyNow) { specialServiceState.activeGateChanges() }
+    val visibleStandChanges = remember(specialServiceState, dutyNow) { specialServiceState.activeStandChanges() }
+    val visibleFlightCancellations = remember(specialServiceState, dutyNow) { specialServiceState.activeFlightCancellations() }
 
     AirShiftRoot(
         section = section,
@@ -640,6 +641,7 @@ internal fun AirShiftApp(
             DutySection.ALL -> AllDutyScreen(
                 userName = userName.orEmpty(),
                 currentAirport = currentAirport,
+                today = dutyNow.toLocalDate(),
                 isWorking = isWorking,
                 isLiveRefreshing = isLiveRefreshing,
                 statusMessage = statusMessage,

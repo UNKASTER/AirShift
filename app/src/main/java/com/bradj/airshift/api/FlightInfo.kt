@@ -37,9 +37,11 @@ internal data class FlightLookup(
     val date: LocalDate,
 ) {
     companion object {
+        private val FLIGHT_NUMBER_FORMAT = Regex("[A-Z]{2,3}\\d{3,4}")
+
         fun of(flightNumber: String, date: LocalDate): FlightLookup {
             val normalized = flightNumber.trim().uppercase(Locale.ROOT)
-            require(Regex("[A-Z]{2,3}\\d{3,4}").matches(normalized)) { "航班号格式无效" }
+            require(FLIGHT_NUMBER_FORMAT.matches(normalized)) { "航班号格式无效" }
             return FlightLookup(normalized, date)
         }
     }

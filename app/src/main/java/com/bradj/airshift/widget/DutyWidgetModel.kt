@@ -2,6 +2,7 @@ package com.bradj.airshift.widget
 
 import com.bradj.airshift.model.AssignmentKind
 import com.bradj.airshift.model.DutyTimeline
+import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.isDutyComplete
 import com.bradj.airshift.model.nextIncompleteDutyIndex
@@ -38,7 +39,7 @@ enum class WidgetDutyStatus {
 }
 
 data class WidgetFlightLeg(
-    val directionLabel: String,
+    val direction: LegDirection,
     val flight: String,
     val place: String,
     val gate: String,
@@ -103,7 +104,7 @@ private fun RosterAssignment.toWidgetPage(
             inboundFlight?.let { flight ->
                 add(
                     WidgetFlightLeg(
-                        directionLabel = "进港",
+                        direction = LegDirection.INBOUND,
                         flight = flight,
                         place = airportDisplay(origin, originCode),
                         // 进港行尾显示到达站（本站）机位；到达侧无登机口字段。
@@ -114,7 +115,7 @@ private fun RosterAssignment.toWidgetPage(
             outboundFlight?.let { flight ->
                 add(
                     WidgetFlightLeg(
-                        directionLabel = "出港",
+                        direction = LegDirection.OUTBOUND,
                         flight = flight,
                         place = airportDisplay(destination, destinationCode),
                         // 出港行尾同样显示本站机位（出发机位），与进港行保持一致。
