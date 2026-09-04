@@ -17,15 +17,16 @@ import javax.crypto.spec.GCMParameterSpec
 internal class VariFlightApiKeyStore(context: Context) {
     private val preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    init {
-        clearLegacyGatewayCredential()
-    }
+    /** 是否存有密文；不触发解密，也不访问 Keystore。 */
+    val hasValue: Boolean
+        get() = preferences.contains(KEY_ENCRYPTED_API_KEY) && preferences.contains(KEY_IV)
 
     var value: String?
         get() {
             val encrypted = preferences.getString(KEY_ENCRYPTED_API_KEY, null) ?: return null
             val iv = preferences.getString(KEY_IV, null) ?: return null
             return try {
+                // 密文尚在而密钥已不存在，永远解不开：清掉密文而不是每次都失败。
                 val key = loadKey() ?: return clearAndReturnNull()
                 val cipher = Cipher.getInstance(TRANSFORMATION)
                 cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(iv, Base64.NO_WRAP)))
@@ -33,12 +34,12 @@ internal class VariFlightApiKeyStore(context: Context) {
                 String(cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)), StandardCharsets.UTF_8)
                     .trim()
                     .takeIf { it.isNotEmpty() }
-            } catch (_: GeneralSecurityException) {
-                clearAndReturnNull()
-            } catch (_: IllegalArgumentException) {
-                clearAndReturnNull()
-            } catch (_: IOException) {
-                clearAndReturnNull()
+            } catch (error: GeneralSecurityException) {
+                onReadFailure(error)
+            } catch (error: IllegalArgumentException) {
+                onReadFailure(error)
+            } catch (error: IOException) {
+                onReadFailure(error)
             }
         }
         set(apiKey) {
@@ -99,13 +100,12 @@ internal class VariFlightApiKeyStore(context: Context) {
         return null
     }
 
-    private fun clearLegacyGatewayCredential() {
-        preferences.edit {
-            remove(KEY_LEGACY_GATEWAY_IV)
-            remove(KEY_LEGACY_GATEWAY_TOKEN)
-        }
-        deleteKey(KEY_LEGACY_GATEWAY_ALIAS)
-    }
+    /**
+     * 只有永久性失败（标签不符、密钥失效、密文损坏）才清除；Keystore 瞬时故障保留密文，
+     * 本次返回 null，下次读取再试。不记录异常内容。
+     */
+    private fun onReadFailure(error: Throwable): String? =
+        if (ApiKeyDecryptFailure.isPermanent(error)) clearAndReturnNull() else null
 
     private fun deleteKey(alias: String) {
         try {
@@ -121,6 +121,24 @@ internal class VariFlightApiKeyStore(context: Context) {
     }
 
     companion object {
+        /** 早期版本的 gateway 凭据；由 [LegacyMigrations] 一次性清理，不再在构造时执行。 */
+        internal fun clearLegacyGatewayCredential(context: Context) {
+            context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE).edit {
+                remove(KEY_LEGACY_GATEWAY_IV)
+                remove(KEY_LEGACY_GATEWAY_TOKEN)
+            }
+            try {
+                KeyStore.getInstance(ANDROID_KEYSTORE).run {
+                    load(null)
+                    if (containsAlias(KEY_LEGACY_GATEWAY_ALIAS)) deleteEntry(KEY_LEGACY_GATEWAY_ALIAS)
+                }
+            } catch (_: GeneralSecurityException) {
+                // 密文已删除，残留的旧密钥无法泄露任何信息。
+            } catch (_: IOException) {
+                // 同上。
+            }
+        }
+
         private const val FILE_NAME = "air_shift_secrets"
         private const val KEY_IV = "variflight_api_key_iv"
         private const val KEY_ENCRYPTED_API_KEY = "variflight_api_key_ciphertext"

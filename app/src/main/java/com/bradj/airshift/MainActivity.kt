@@ -44,6 +44,7 @@ import com.bradj.airshift.api.dutyWindowLookups
 import com.bradj.airshift.api.refreshFlightBatch
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.VariFlightClient
+import com.bradj.airshift.data.LegacyMigrations
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.location.AirportLocator
 import com.bradj.airshift.model.RosterAssignment
@@ -102,6 +103,7 @@ class MainActivity : ComponentActivity() {
         setIntent(Intent(Intent.ACTION_MAIN))
         enableEdgeToEdge()
         ReminderReceiver.createChannel(this)
+        LegacyMigrations.runOnce(this)
         val store = RosterStore(this)
         val specialServiceRepository = SpecialServiceRepository.get(this)
         val roster = store.loadSnapshot()
@@ -696,7 +698,8 @@ internal fun AirShiftApp(
             }
             DutySection.SETTINGS -> SettingsScreen(
                 currentName = userName.orEmpty(),
-                currentApiKey = store.variFlightApiKey.orEmpty(),
+                // 只在进入设置页或 Key 变化时解密一次；重组（每分钟 tick、任何状态写入）不再触发 Keystore。
+                currentApiKey = remember(hasVariFlightApiKey) { store.variFlightApiKey.orEmpty() },
                 hasStoredApiKey = hasVariFlightApiKey,
                 notificationAccessGranted = notificationAccessGranted,
                 lastSuccessfulRecognitionEpochMillis = specialServiceState.lastSuccessfulRecognitionEpochMillis,

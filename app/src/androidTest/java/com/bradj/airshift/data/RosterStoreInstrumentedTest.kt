@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.model.DutyProgressDay
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.allDutiesComplete
 import org.junit.After
@@ -19,8 +20,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -93,17 +96,34 @@ class RosterStoreInstrumentedTest {
     }
 
     @Test
-    fun progressIsClampedAndPreviousDayProgressIsNotReused() {
+    fun progressIsClampedAndAnEarlierDutyDayProgressIsNotReused() {
         store.replaceAssignments(listOf(assignment("B0001"), assignment("B0002")))
         store.setCurrentDutyIndex(10)
         assertEquals(2, store.currentDutyIndex)
         val preferences = isolatedContext.getSharedPreferences("air_shift", Context.MODE_PRIVATE)
-        preferences.edit().putString("duty_progress_date", LocalDate.now().minusDays(1).toString()).commit()
+        val dutyDay = DutyProgressDay.of(LocalDateTime.now())
+        preferences.edit().putString("duty_progress_date", dutyDay.minusDays(1).toString()).commit()
         assertEquals(0, store.loadSnapshot().manuallyCompletedCount)
 
         store.setCurrentDutyIndex(-1)
         assertEquals(0, store.currentDutyIndex)
-        assertEquals(LocalDate.now().toString(), preferences.getString("duty_progress_date", null))
+        assertEquals(dutyDay.toString(), preferences.getString("duty_progress_date", null))
+    }
+
+    @Test
+    fun manualProgressSurvivesMidnightUntilTheMorningRollover() {
+        // 晚班 23:50 手动完成一项，次日凌晨到 05:59 都不能清零；06:00 起才算新的执勤日。
+        val zone = ZoneId.systemDefault()
+        fun storeAt(dateTime: LocalDateTime) =
+            RosterStore(isolatedContext, Clock.fixed(dateTime.atZone(zone).toInstant(), zone))
+        val evening = LocalDateTime.of(2026, 9, 4, 23, 50)
+        storeAt(evening).replaceAssignments(listOf(assignment("B0001"), assignment("B0002")))
+        storeAt(evening).setCurrentDutyIndex(1)
+
+        assertEquals(1, storeAt(LocalDateTime.of(2026, 9, 5, 0, 5)).currentDutyIndex)
+        assertEquals(1, storeAt(LocalDateTime.of(2026, 9, 5, 1, 35)).currentDutyIndex)
+        assertEquals(1, storeAt(LocalDateTime.of(2026, 9, 5, 5, 59)).currentDutyIndex)
+        assertEquals(0, storeAt(LocalDateTime.of(2026, 9, 5, 6, 0)).currentDutyIndex)
     }
 
     @Test

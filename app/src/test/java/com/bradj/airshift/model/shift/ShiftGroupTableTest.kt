@@ -6,26 +6,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ShiftGroupTableTest {
-    private val table = ShiftGroupTable.DEFAULT
+    /** 合成姓名（天干地支），与真实人员无关；组 8 用三字名以覆盖前缀不命中的情况。 */
+    private val members = mapOf(
+        1 to listOf("甲子", "甲丑"),
+        2 to listOf("己子", "己丑"),
+        3 to listOf("癸子", "癸丑", "癸寅"),
+        4 to listOf("辛子", "辛丑"),
+        5 to listOf("乙子", "乙丑", "乙寅"),
+        6 to listOf("庚子", "庚丑"),
+        8 to listOf("丁子明", "丁丑明", "丁寅明"),
+        9 to listOf("戊子", "戊丑"),
+        10 to listOf("壬子", "壬丑", "壬寅"),
+        11 to listOf("丙子", "丙丑", "丙寅"),
+    )
+
+    /** 与内置表同一环形顺序，但带合成成员，模拟一次 Excel 校准之后的班组表。 */
+    private val table = ShiftGroupTable(
+        cycleOrder = ShiftGroupTable.DEFAULT_CYCLE_ORDER,
+        groups = members.mapValues { (id, names) -> ShiftGroup(id, names) },
+        tierSizes = ShiftTierSizes.DEFAULT,
+    )
 
     @Test
-    fun `every built in name resolves to exactly one group`() {
-        val expected = mapOf(
-            "甲子" to 1, "甲丑" to 1,
-            "己子" to 2, "己丑" to 2,
-            "癸子" to 3, "癸丑" to 3, "癸寅" to 3,
-            "辛子" to 4, "辛丑" to 4,
-            "乙子" to 5, "乙丑" to 5, "乙寅" to 5,
-            "庚子" to 6, "庚丑" to 6,
-            "丁子明" to 8, "丁丑明" to 8, "丁寅明" to 8,
-            "戊子" to 9, "戊丑" to 9,
-            "壬子" to 10, "壬丑" to 10, "壬寅" to 10,
-            "丙子" to 11, "丙丑" to 11, "丙寅" to 11,
-        )
-        expected.forEach { (name, group) ->
-            assertEquals(name, group, table.findGroupIdForName(name))
+    fun `the built in table carries no member names`() {
+        // 真实姓名不得进入公开仓库；成员只能来自导入 Excel 的班次行校准。
+        assertTrue(ShiftGroupTable.DEFAULT.groups.values.all { it.members.isEmpty() })
+        assertNull(ShiftGroupTable.DEFAULT.findGroupIdForName("甲子"))
+    }
+
+    @Test
+    fun `the built in cycle order covers every group exactly once`() {
+        val builtIn = ShiftGroupTable.DEFAULT
+        assertEquals(10, builtIn.size)
+        assertEquals(builtIn.size, builtIn.cycleOrder.distinct().size)
+        assertEquals(builtIn.cycleOrder.toSet(), builtIn.groups.keys)
+    }
+
+    @Test
+    fun `vacant group numbers are absent`() {
+        assertNull(ShiftGroupTable.DEFAULT.cycleIndexOf(7))
+        assertNull(ShiftGroupTable.DEFAULT.cycleIndexOf(12))
+        assertTrue(ShiftGroupTable.DEFAULT.membersOf(7).isEmpty())
+    }
+
+    @Test
+    fun `every member resolves to exactly one group`() {
+        var checked = 0
+        members.forEach { (group, names) ->
+            names.forEach { name ->
+                assertEquals(name, group, table.findGroupIdForName(name))
+                checked++
+            }
         }
-        assertEquals(25, expected.size)
+        assertEquals(25, checked)
     }
 
     @Test
@@ -42,9 +75,9 @@ class ShiftGroupTableTest {
 
     @Test
     fun `a partial name does not match a longer colleague`() {
-        assertNull(table.findGroupIdForName("朱"))
-        assertNull(table.findGroupIdForName("李"))
-        assertNull(table.findGroupIdForName("李华"))
+        assertNull(table.findGroupIdForName("甲"))
+        assertNull(table.findGroupIdForName("丁寅"))
+        assertEquals(8, table.findGroupIdForName("丁寅明"))
     }
 
     @Test
@@ -52,20 +85,6 @@ class ShiftGroupTableTest {
         assertNull(table.findGroupIdForName("张三"))
         assertNull(table.findGroupIdForName(""))
         assertNull(table.findGroupIdForName("   "))
-    }
-
-    @Test
-    fun `the cycle order covers every group exactly once`() {
-        assertEquals(10, table.size)
-        assertEquals(table.size, table.cycleOrder.distinct().size)
-        assertEquals(table.cycleOrder.toSet(), table.groups.keys)
-    }
-
-    @Test
-    fun `vacant group numbers are absent`() {
-        assertNull(table.cycleIndexOf(7))
-        assertNull(table.cycleIndexOf(12))
-        assertTrue(table.membersOf(7).isEmpty())
     }
 
     @Test
@@ -82,15 +101,15 @@ class ShiftGroupTableTest {
     }
 
     @Test
-    fun `a member absent from the observed sheet keeps the built in group`() {
-        // 8.29 起癸子病假，班次行里只剩癸丑和癸寅，但癸子仍应留在组 3。
+    fun `a member absent from the observed sheet keeps the group from the base table`() {
+        // 某人病假，班次行里组 3 只剩两人，但此人仍应留在组 3。
         val observed = ObservedShiftGroups(
             early = listOf(6, 4, 10),
             mid = listOf(3, 1, 5, 11),
             night = listOf(8, 9, 2),
             members = mapOf(3 to listOf("癸丑", "癸寅")),
         )
-        val calibrated = ShiftGroupTable.from(observed)
+        val calibrated = ShiftGroupTable.from(observed, base = table)
         assertEquals(3, calibrated.findGroupIdForName("癸子"))
         assertTrue(calibrated.membersOf(3).containsAll(listOf("癸丑", "癸寅", "癸子")))
     }
@@ -106,8 +125,21 @@ class ShiftGroupTableTest {
                 5 to listOf("乙子", "乙丑", "乙寅", "癸子"),
             ),
         )
-        val calibrated = ShiftGroupTable.from(observed)
+        val calibrated = ShiftGroupTable.from(observed, base = table)
         assertEquals(5, calibrated.findGroupIdForName("癸子"))
+    }
+
+    @Test
+    fun `without a base table only observed members are known`() {
+        val observed = ObservedShiftGroups(
+            early = listOf(6, 4, 10),
+            mid = listOf(3, 1, 5, 11),
+            night = listOf(8, 9, 2),
+            members = mapOf(3 to listOf("癸丑", "癸寅")),
+        )
+        val calibrated = ShiftGroupTable.from(observed)
+        assertEquals(listOf("癸丑", "癸寅"), calibrated.membersOf(3))
+        assertNull(calibrated.findGroupIdForName("癸子"))
     }
 
     @Test
@@ -132,6 +164,7 @@ class ShiftGroupTableTest {
             members = emptyMap(),
         )
         assertEquals(ShiftGroupTable.DEFAULT.cycleOrder, ShiftGroupTable.from(observed).cycleOrder)
+        assertEquals(table, ShiftGroupTable.from(observed, base = table))
     }
 
     @Test

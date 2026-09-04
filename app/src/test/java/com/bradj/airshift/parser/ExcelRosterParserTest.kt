@@ -138,7 +138,7 @@ class ExcelRosterParserTest {
 
         val result = ExcelRosterParser.parse(
             input = workbook(rows, useSharedStrings = true),
-            userName = "张宇",
+            userName = "丁寅",
             clock = Clock.fixed(Instant.parse("2026-08-26T00:00:00Z"), ZoneId.of("Asia/Shanghai")),
         )
 

@@ -14,7 +14,7 @@ class ShiftCalendarRowsTest {
     private val schedule = ShiftSchedule()
     private val today = LocalDate.of(2026, 9, 4)
 
-    /** 组 1（甲子）：8-30 是早二，8-31 是晚二，9-1 交接班日因此不到岗。 */
+    /** 组 1：8-30 是早二，8-31 是晚二，9-1 交接班日因此不到岗。 */
     private fun rows(
         from: LocalDate = LocalDate.of(2026, 8, 29),
         to: LocalDate = LocalDate.of(2026, 9, 3),

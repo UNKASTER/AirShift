@@ -9,6 +9,7 @@ import com.bradj.airshift.api.dutyWindowLookups
 import com.bradj.airshift.api.refreshIndices
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.withLiveInfo
+import com.bradj.airshift.model.DutyProgressDay
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.model.shift.ObservedShiftGroups
@@ -16,6 +17,7 @@ import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -30,18 +32,20 @@ internal data class DutyCompletion(
     val newlyTrackedFlights: Set<FlightLookup>,
 )
 
-class RosterStore(context: Context) {
-    private val preferences = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
-    private val variFlightApiKeyStore = VariFlightApiKeyStore(context.applicationContext)
-
-    init {
-        if (preferences.contains(KEY_LEGACY_SUPPLEMENT) || preferences.contains(KEY_LEGACY_GATEWAY_URL)) {
-            preferences.edit {
-                remove(KEY_LEGACY_SUPPLEMENT)
-                remove(KEY_LEGACY_GATEWAY_URL)
-            }
-        }
-    }
+/**
+ * 排班、人工进度与 generation 的本地存储。
+ *
+ * [clock] 决定“现在”：人工进度按 [DutyProgressDay] 归属执勤日（06:00 切换，而非自然日零点），
+ * 测试可注入固定时钟复现跨零点场景。遗留键的清理已移到 [LegacyMigrations]，构造本类不再触发
+ * Keystore 访问；API Key 存储按需惰性创建。
+ */
+class RosterStore(
+    context: Context,
+    private val clock: Clock = Clock.systemDefaultZone(),
+) {
+    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val applicationContext = context.applicationContext
+    private val variFlightApiKeyStore by lazy { VariFlightApiKeyStore(applicationContext) }
 
     var userName: String?
         get() = preferences.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
@@ -55,8 +59,9 @@ class RosterStore(context: Context) {
             variFlightApiKeyStore.value = value
         }
 
+    /** 只看是否存有密文，不解密；Keystore 瞬时故障不会让后台刷新被误判为“没有 Key”而取消。 */
     val hasVariFlightApiKey: Boolean
-        get() = variFlightApiKey != null
+        get() = variFlightApiKeyStore.hasValue
 
     fun clearVariFlightApiKey() {
         variFlightApiKeyStore.clear()
@@ -109,7 +114,7 @@ class RosterStore(context: Context) {
         }
 
     val currentDutyIndex: Int
-        get() = synchronized(rosterLock) { readDutyIndex(LocalDate.now()) }
+        get() = synchronized(rosterLock) { readDutyIndex(dutyDay()) }
 
     val rosterGeneration: Long
         get() = synchronized(rosterLock) { preferences.getLong(KEY_ROSTER_GENERATION, 0L) }
@@ -118,14 +123,14 @@ class RosterStore(context: Context) {
 
     fun advanceDutyIndex() {
         synchronized(rosterLock) {
-            setCurrentDutyIndex(readDutyIndex(LocalDate.now()) + 1)
+            setCurrentDutyIndex(readDutyIndex(dutyDay()) + 1)
         }
     }
 
     fun setCurrentDutyIndex(index: Int) {
         synchronized(rosterLock) {
             preferences.edit {
-                putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+                putString(KEY_DUTY_PROGRESS_DATE, dutyDay().toString())
                 putInt(KEY_DUTY_INDEX, index.coerceIn(0, loadAssignments().size))
             }
         }
@@ -138,7 +143,7 @@ class RosterStore(context: Context) {
     internal fun completeCurrentDuty(
         expectedGeneration: Long,
         expectedDutyIndex: Int,
-        now: LocalDateTime = LocalDateTime.now(),
+        now: LocalDateTime = LocalDateTime.now(clock),
     ): DutyCompletion? = synchronized(rosterLock) {
         if (preferences.getLong(KEY_ROSTER_GENERATION, 0L) != expectedGeneration) return@synchronized null
         val before = loadSnapshot()
@@ -161,7 +166,7 @@ class RosterStore(context: Context) {
         RosterSnapshot(
             assignments = loadAssignments(),
             generation = preferences.getLong(KEY_ROSTER_GENERATION, 0L),
-            manuallyCompletedCount = readDutyIndex(LocalDate.now()),
+            manuallyCompletedCount = readDutyIndex(dutyDay()),
         )
     }
 
@@ -171,7 +176,7 @@ class RosterStore(context: Context) {
             val generation = Math.addExact(preferences.getLong(KEY_ROSTER_GENERATION, 0L), 1L)
             preferences.edit {
                 putString(KEY_ASSIGNMENTS, encoded)
-                putString(KEY_DUTY_PROGRESS_DATE, LocalDate.now().toString())
+                putString(KEY_DUTY_PROGRESS_DATE, dutyDay().toString())
                 putInt(KEY_DUTY_INDEX, 0)
                 putLong(KEY_ROSTER_GENERATION, generation)
             }
@@ -211,7 +216,7 @@ class RosterStore(context: Context) {
     ): RosterSnapshot? = synchronized(rosterLock) {
         val current = loadSnapshot()
         if (current.generation != expectedGeneration) return@synchronized null
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(clock)
         val targetIndices = current.assignments.refreshIndices(current.manuallyCompletedCount, scope, now).toSet()
         val allowedLookups = current.assignments.refreshLookups(current.manuallyCompletedCount, scope, now)
         val relevantLive = live.filterKeys { it in allowedLookups }
@@ -236,10 +241,13 @@ class RosterStore(context: Context) {
             true
         }
 
-    private fun readDutyIndex(today: LocalDate): Int {
+    /** 当前执勤日：06:00 之前仍属前一天，夜班跨零点后的人工完成不会被清零。 */
+    private fun dutyDay(): LocalDate = DutyProgressDay.of(LocalDateTime.now(clock))
+
+    private fun readDutyIndex(dutyDay: LocalDate): Int {
         val progressDate = preferences.getString(KEY_DUTY_PROGRESS_DATE, null)
             ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        if (progressDate != today) return 0
+        if (progressDate != dutyDay) return 0
         return preferences.getInt(KEY_DUTY_INDEX, 0).coerceAtLeast(0)
     }
 
@@ -374,7 +382,7 @@ class RosterStore(context: Context) {
 
     companion object {
         private val rosterLock = Any()
-        private const val FILE_NAME = "air_shift"
+        internal const val PREFERENCES_NAME = "air_shift"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_LAST_LIVE_REFRESH = "last_live_refresh"
         private const val KEY_DUTY_PROGRESS_DATE = "duty_progress_date"
@@ -385,7 +393,5 @@ class RosterStore(context: Context) {
         private const val KEY_SHIFT_MANUAL_GROUP = "shift_manual_group_id"
         private const val KEY_SHIFT_CALIBRATION = "shift_group_calibration"
         private const val MAX_SHIFT_REPORT_MARGIN = 120
-        private const val KEY_LEGACY_SUPPLEMENT = "roster_supplement"
-        private const val KEY_LEGACY_GATEWAY_URL = "gateway_url"
     }
 }

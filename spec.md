@@ -173,7 +173,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 当前有效起点为人工前缀末尾；
 - 从该位置继续跳过自动完成项，得到当前未完成任务；
 - 再从当前之后跳过自动完成项，得到下一项未完成任务；
-- 跨日读取时前缀视为 0；新排班导入显式写 0；实时刷新不改变它；
+- 前缀随执勤日保存：`DutyProgressDay` 以 06:00 为界（夜班跨零点后的凌晨仍属前一天），执勤日变化时前缀视为 0；新排班导入显式写 0；实时刷新不改变它；`RosterStore` 通过注入的 `Clock` 取“现在”；
 - 自动跳过不会写大人工前缀，因此后续实时数据修正后，任务可以重新变为未完成。
 
 ### 4.4 成功导入的原子语义
@@ -234,7 +234,9 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 #### 校准
 
-`ShiftCalibration` 承载一次真实观测（日期 + 有序分组）。有校准数据时以观测当天的顺序为相位基准，其余日期相对它旋转；成员按“观测优先、未被任何观测行认领的内置成员保留”合并，因此病假缺席的人不会丢失归属，真正换组的人也不会留在旧组。只有整班工作日的表格带班次行，故只有这类日期能作为校准点。
+`ShiftCalibration` 承载一次真实观测（日期 + 有序分组）。有校准数据时以观测当天的顺序为相位基准，其余日期相对它旋转；成员按“观测优先、未被任何观测行认领的基表成员保留”合并（`ShiftGroupTable.from(observed, base)`，基表默认为内置表），因此病假缺席的人不会丢失归属，真正换组的人也不会留在旧组。只有整班工作日的表格带班次行，故只有这类日期能作为校准点。
+
+内置表 `ShiftGroupTable.DEFAULT` 只含环形顺序与 3/4/3 槽位分层，成员名单为空：仓库公开，真实姓名只存在于用户设备上的校准数据。校准前 `findGroupIdForName` 恒为 null，排班日历依赖设置中的手动班组。
 
 ## 5. 排班导入规格
 
@@ -549,7 +551,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 | 存储 | 内容 | 兼容/保护 |
 |---|---|---|
-| `air_shift` | `user_name`、`last_live_refresh`、`duty_progress_date`、`duty_index`、`roster_generation`、`assignments`、`shift_report_margin_minutes`、`shift_manual_group_id`、`shift_group_calibration` | 应用私有 JSON/标量 |
+| `air_shift` | `user_name`、`last_live_refresh`、`duty_progress_date`、`duty_index`、`roster_generation`、`assignments`、`shift_report_margin_minutes`、`shift_manual_group_id`、`shift_group_calibration`、`migration_version` | 应用私有 JSON/标量 |
 | `air_shift_secrets` | API Key IV 与密文 | Android Keystore AES-GCM、128-bit tag、AAD |
 | `air_shift_special_services` | version 1–3 结构化 MUC 状态、随机 HMAC key | 应用私有，不含正文 |
 | `SavedStateHandle` | 分享 FIFO、URI 字符串、错误、ID、attempt token | 临时尽力恢复，不是永久业务存储 |
@@ -563,7 +565,9 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 排班日历的三个键独立于 generation 与 `rosterLock` 不变量：`shift_report_margin_minutes` 写入时收敛到 0–120；`shift_group_calibration` 解析失败时返回 null 并回退内置班组表，不抛错；`shift_manual_group_id` 只在姓名匹配不到班组时参与判定。
 
-API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。Keystore/密文损坏或解密失败时清除密文和对应 key，不返回不可信明文。旧 gateway URL、supplement 和旧 gateway 凭据在初始化时清理。
+API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败由 `ApiKeyDecryptFailure` 分类：GCM 标签不符、密钥失效/不可恢复（含 `KeyPermanentlyInvalidatedException`）、密文 Base64 损坏为永久失败，清除密文和对应 key；Keystore 服务暂不可用、Provider 或 I/O 错误为瞬时失败，保留密文、本次返回 null。任何情况下都不返回不可信明文。`hasVariFlightApiKey` 只检查密文是否存在，不解密、不访问 Keystore，因此瞬时故障不会让后台刷新被取消。
+
+旧 gateway URL、supplement 和旧 gateway 凭据由 `LegacyMigrations.runOnce` 在 `MainActivity.onCreate` 一次性清理，并以 `migration_version = 1` 记录；`RosterStore` 的构造不再触发这段清理，其 API Key 存储按需惰性创建，小组件重绘、MUC 通知、后台 Worker 构造 `RosterStore` 时不会访问 Keystore。
 
 ### 11.2 Manifest 权限与组件
 
@@ -591,6 +595,7 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。Keystore/密�
 - 飞常准请求只包含航班号、日期、JSON-RPC/MCP 字段和鉴权头；应用不记录 Key、完整请求头或原始错误载荷。
 - 设备位置不写入持久化，也不由应用发送给飞常准；定位来源仍是 Google Play Services。
 - MUC 原文不持久化，见第 9.5 节。
+- 源码、测试与文档不含真实员工姓名：内置班组表只有组号与轮转顺序，测试 fixture 使用天干地支合成名；成员名单只存在于用户设备的校准数据中。
 
 ## 12. 工程、构建与验证
 
@@ -616,7 +621,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮新增排班日历，并在 JDK 17 下执行：
+本轮（0.9.1）是代码审查后的第一阶段修复，没有连接设备。在 JDK 17 下执行 `.\gradlew.bat :app:testDebugUnitTest --rerun`：JVM 报告共 224 项，222 项通过、0 项失败、2 项因未配置真实 `.xls` fixture 而跳过；新增的 `DutyProgressDayTest`、`ApiKeyDecryptFailureTest` 与改写后的 `ShiftGroupTableTest` 均先观察到失败再转绿。`connectedDebugAndroidTest` 未执行：新增或修改的 5 个 Android 用例（执勤日跨零点、更早执勤日的进度不复用、遗留键一次性清理、已完成迁移不重跑、构造不触碰遗留键）只完成了编译，需在下次接入设备时补跑。
+
+上一轮（0.9.0）新增排班日历，并在 JDK 17 下执行：
 
 ```powershell
 .\gradlew.bat test lintDebug assembleDebug --console=plain
@@ -644,14 +651,16 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | 范围 | `@Test` | 主要覆盖 |
 |---|---:|---|
 | JVM `api` | 41 | 两项窗口、batch、字段/多经停映射、JSON-RPC/SSE、脱敏错误、缓存/限流/并发 |
-| JVM `model` | 19 | 时间线、自动完成、人工前缀和窗口 |
+| JVM `model` | 24 | 时间线、自动完成、人工前缀和窗口、执勤日 06:00 边界 |
+| JVM `data` | 5 | API Key 解密失败的永久/瞬时分类 |
 | JVM `parser` | 12 | XLSX/XLS、模板变体、姓名隔离、班次行解析；含 2 个条件式真实 fixture |
-| JVM `model/shift` | 83 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并、日历行装配 |
+| JVM `model/shift` | 85 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配 |
 | JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
 | JVM `widget` | 11 | 当前页选择、空/完成/倒计时、VIP、机场和机位 |
 | JVM `ui` | 8 | 默认页、前后台恢复、配置变化和排班日历页选中 |
 | JVM smoke | 9 | OCR 表格、姓名、VIP、提醒基础 |
-| Android 数据层 | 18 | generation、进度、scope 合并、旧 JSON、扩展机位、班组校准 JSON 往返与余量收敛 |
+| Android 数据层 | 19 | generation、进度、执勤日跨零点、scope 合并、旧 JSON、扩展机位、班组校准 JSON 往返与余量收敛 |
+| Android 迁移 | 3 | 遗留键一次性清理、已完成迁移不重跑、构造 `RosterStore` 不触碰遗留键 |
 | Android 刷新编排 | 14 | duty-window 9 项、foreground effect 5 项 |
 | Android WorkManager | 4 | KEEP、generation、停止和旧任务迁移 |
 | Android Excel 分享 | 11 | Manifest/Intent/FIFO/恢复 10 项、owner 隔离 1 项 |
@@ -705,6 +714,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 21. **排班规律为外推**：六天周期、轮转步长 3、槽位分层和交接班到岗规则由六份实测排班表反推，样本内零反例但属外推；实际排班调整后需靠导入 Excel 的班次行自校正，应用不会主动发现漂移。
 22. **日历班车多为预估**：只有与当前已导入排班同一天的那一行使用真实航班时间；其余行按实测的典型首个任务推算，个别日期观测到首任务时间离群（如 08-24 晚二 10:40、08-30 晚一 08:25）。
 23. **单份排班的限制**：App 只保存一份当前排班，因此日历无法为多个日期同时提供真实数据。
+24. **内置班组表无成员**：校准前无法按姓名自动识别班组，只能手动指定；这是为了不让真实姓名进入公开仓库而有意为之。
+25. **执勤日固定 06:00 切换**：`DutyProgressDay.ROLLOVER_HOUR` 不可配置；延误到 06:00 之后才手动完成的夜班任务会在切换后重新显示，直到 3 小时自动完成生效。
 
 ## 14. 当前验收标准
 
@@ -750,6 +761,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | 前台刷新 effect | `app/src/main/java/com/bradj/airshift/ForegroundFlightRefreshEffect.kt` |
 | WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
 | 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
+| 执勤日边界 | `model/DutyProgressDay.kt` |
+| 遗留清理与解密失败分类 | `data/LegacyMigrations.kt`、`data/ApiKeyDecryptFailure.kt` |
 | 当前执勤时间线 | `app/src/main/java/com/bradj/airshift/model/DutyTimeline.kt` |
 | OCR 接入/表格恢复 | `parser/OcrRosterReader.kt`、`parser/RosterTableParser.kt` |
 | XLS/XLSX | `parser/ExcelRosterReader.kt`、`parser/ExcelRosterParser.kt`、`parser/XlsRosterParser.kt` |
@@ -778,3 +791,4 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.9.1 代码审查后的第一阶段修复：人工进度改按 06:00 切换的执勤日保存（修复夜班跨零点后已完成任务重新出现）；内置班组表移除全部成员姓名，测试改用合成姓名；遗留键清理改为 `LegacyMigrations` 一次性迁移，`RosterStore` 构造不再访问 Keystore；API Key 解密区分永久/瞬时失败，`hasVariFlightApiKey` 不再解密；设置页只在进入时解密一次。
