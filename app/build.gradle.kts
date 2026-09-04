@@ -24,8 +24,8 @@ android {
         applicationId = "com.bradj.airshift"
         minSdk = 33
         targetSdk = 37
-        versionCode = 46
-        versionName = "0.10.5"
+        versionCode = 47
+        versionName = "0.10.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

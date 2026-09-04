@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,6 +29,7 @@ import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightCancellationScope
 import com.bradj.airshift.specialservice.FlightServiceRecord
+import com.bradj.airshift.specialservice.ServiceType
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.AmberAccent
 import com.bradj.airshift.ui.theme.CeaRedSoft
@@ -317,34 +320,65 @@ private fun RouteName(name: String?, alignEnd: Boolean) {
     }
 }
 
-/** 特服详情：徽章 + 每条记录的类型/置信度/确认状态/更新时间。 */
+/**
+ * 特服详情：徽章 + 每条记录的类型/置信度/确认状态/更新时间。
+ * 轮椅记录不显示 WCHR/WCHS/WCHC 全称，一律为轮椅线性图标 + 等级字母（C/R/S）。
+ */
 @Composable
 fun SpecialServiceDetails(records: List<FlightServiceRecord>) {
+    val sorted = records.sortedBy { it.serviceType.ordinal }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
         verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
     ) {
-        records.sortedBy { it.serviceType.ordinal }.forEach { record ->
+        sorted.forEach { record ->
             Surface(
                 color = MaterialTheme.colorScheme.tertiaryContainer,
                 shape = CircleShape,
             ) {
-                Text(
-                    record.badgeLabel(),
+                Row(
                     modifier = Modifier.padding(horizontal = AirShiftSpacing.S, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (record.serviceType == ServiceType.WHEELCHAIR) {
+                        Icon(
+                            imageVector = LinearIcons.Wheelchair,
+                            contentDescription = "轮椅",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                        Spacer(Modifier.width(3.dp))
+                    }
+                    val label = record.badgeLabel()
+                    if (label.isNotEmpty()) {
+                        Text(
+                            label,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
         }
     }
     Spacer(Modifier.height(AirShiftSpacing.S))
-    records.sortedBy { it.serviceType.ordinal }.forEach { record ->
-        Text(
-            "${record.typeLabel()} · ${record.confidence.label()} · 已确认 · 更新 ${record.updatedAtEpochMillis.formatEpoch("MM-dd HH:mm")}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    sorted.forEach { record ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (record.serviceType == ServiceType.WHEELCHAIR) {
+                Icon(
+                    imageVector = LinearIcons.Wheelchair,
+                    contentDescription = "轮椅",
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(3.dp))
+            }
+            Text(
+                "${record.typeLabel()} · ${record.confidence.label()} · 已确认 · 更新 ${record.updatedAtEpochMillis.formatEpoch("MM-dd HH:mm")}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

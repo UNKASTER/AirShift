@@ -10,10 +10,16 @@ enum class ServiceType {
     CABIN_PET,
 }
 
-enum class WheelchairLevel {
-    WCHR,
-    WCHS,
-    WCHC,
+/** 轮椅等级。`shortCode` 是 MUC 口语简称（R轮/S轮/C轮）与 UI 角标共用的单字母。 */
+enum class WheelchairLevel(val shortCode: String) {
+    WCHR("R"),
+    WCHS("S"),
+    WCHC("C"),
+    ;
+
+    companion object {
+        fun fromShortCode(code: String): WheelchairLevel? = entries.firstOrNull { it.shortCode == code }
+    }
 }
 
 enum class Confidence {

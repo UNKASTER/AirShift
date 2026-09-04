@@ -84,6 +84,32 @@ class SpecialServiceParserTest {
     }
 
     @Test
+    fun parsesMucWheelchairShorthandLetters() {
+        val cLevel = parse("MU9670 C轮").single()
+        assertEquals(WheelchairLevel.WCHC, cLevel.wheelchairLevel)
+        assertEquals(Confidence.HIGH, cLevel.confidence)
+
+        val rLevel = parse("2473一位r轮").single()
+        assertEquals(WheelchairLevel.WCHR, rLevel.wheelchairLevel)
+        assertEquals(1, rLevel.count)
+
+        val sLevel = parse("MU2473旅客S 轮，33J").single()
+        assertEquals(WheelchairLevel.WCHS, sLevel.wheelchairLevel)
+        assertEquals(1, sLevel.count)
+
+        // 代码与简称可在同一句混用
+        val changed = parse("MU2473 WCHR改为S轮").associateBy { it.wheelchairLevel }
+        assertEquals(CandidateAction.CANCEL, changed.getValue(WheelchairLevel.WCHR).action)
+        assertEquals(CandidateAction.UPSERT, changed.getValue(WheelchairLevel.WCHS).action)
+
+        // 座位号「32C」后接“轮椅”不是 C 轮；代码「WCHS」后接“轮”不会再识别出一条 S 轮
+        val seat = parse("MU9670 座位32C轮椅").single()
+        assertNull(seat.wheelchairLevel)
+        assertEquals(Confidence.LOW, seat.confidence)
+        assertEquals(WheelchairLevel.WCHS, parse("MU9670 WCHS轮椅").single().wheelchairLevel)
+    }
+
+    @Test
     fun handlesCancellationCorrectionAndTypeChange() {
         assertEquals(CandidateAction.CANCEL, parse("MU2473取消UM服务").single().action)
 

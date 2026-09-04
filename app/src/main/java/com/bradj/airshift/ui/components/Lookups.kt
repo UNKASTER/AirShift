@@ -87,17 +87,24 @@ internal fun List<FlightCancellationRecord>.cancellationForFlight(
     return firstOrNull { it.flightNumber == normalizedFlight && it.operationDate == operationDate }
 }
 
-internal fun FlightServiceRecord.badgeLabel(): String =
-    "${when (serviceType) {
+/**
+ * 特服角标文字。轮椅只给等级字母（C/R/S），轮椅图标由调用方渲染在字母左侧，
+ * 不展示 WCHR/WCHS/WCHC 全称；等级缺失时只剩数量（或空串，即只显示图标）。
+ */
+internal fun FlightServiceRecord.badgeLabel(): String = listOfNotNull(
+    when (serviceType) {
         ServiceType.DISABILITY -> "障残"
-        ServiceType.WHEELCHAIR -> wheelchairLevel?.name ?: "轮椅"
+        ServiceType.WHEELCHAIR -> wheelchairLevel?.shortCode
         ServiceType.UNACCOMPANIED_MINOR -> "UM"
         ServiceType.MAAS -> "MAAS"
         ServiceType.CABIN_PET -> "客舱宠物"
-    }}${count?.let { " ×$it" }.orEmpty()}"
+    },
+    count?.let { "×$it" },
+).joinToString(" ")
 
+/** 详情行的类型文案；轮椅同样只用等级字母，配合左侧轮椅图标。 */
 internal fun FlightServiceRecord.typeLabel(): String = when (serviceType) {
-    ServiceType.WHEELCHAIR -> "轮椅旅客${wheelchairLevel?.let { "（${it.name}）" }.orEmpty()}"
+    ServiceType.WHEELCHAIR -> wheelchairLevel?.shortCode ?: serviceType.label()
     else -> serviceType.label()
 }
 

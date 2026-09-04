@@ -347,7 +347,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 15 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 70 分钟。
 - 出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。
 - 倒计时每分钟更新；到位点已过时显示“应立即到位”。
-- 页面展示完整特服、行程取消以及 MUC 机位新旧值；MUC 登机口变更是卡片内单独一行“登机口变更：原值 → 新值 · MUC 更新于 HH:mm”，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
+- 页面展示完整特服（轮椅记录以轮椅线性图标 + 等级字母 C/R/S 表示，角标与详情行都不显示 WCHR/WCHS/WCHC 全称）、行程取消以及 MUC 机位新旧值；MUC 登机口变更是卡片内单独一行“登机口变更：原值 → 新值 · MUC 更新于 HH:mm”，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
 - “执勤完成”没有确认、撤销或回退；原子 guard 只防止旧页面和重复点击完成错误任务。
 - 尚未整体完成的过站任务始终按进港到位规则显示，即使进港已有实际时间而出港仍未完成。
 
@@ -499,7 +499,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 文本先执行 NFKC、大小写、全半角和空白规范化。支持：
 
 - 残障旅客；
-- 轮椅 `WCHR`、`WCHS`、`WCHC`；
+- 轮椅 `WCHR`、`WCHS`、`WCHC`，以及 MUC 口语简称 `R轮`、`S轮`、`C轮`（字母与“轮”之间可有一个空格；字母前紧贴字母数字时不算，如座位 `32C` 后接“轮椅”或代码 `WCHS` 后接“轮”）。代码与简称可在同一句混用，如「WCHR改为S轮」按更正处理；
 - UM 无陪伴儿童；
 - MAAS 全流程陪伴；
 - 客舱宠物；
@@ -516,7 +516,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 航班 token 必须有 3–4 位数字；按完整数字部分找候选。
 - 消息带承运人且存在完整航班号匹配时优先该承运人；随后按明确日期或通知日期的距离、日期方向、日期和航班号稳定排序。
 - 没有最大日期距离阈值；跨承运人同数字也会自动稳定选择一个候选。
-- 明确服务代码/正式类别可形成高置信；普通“轮椅”“无随行”等弱表达为低置信。
+- 明确服务代码/正式类别（含 R轮/S轮/C轮 简称）可形成高置信；普通“轮椅”“无随行”等弱表达为低置信。
 - 低置信特服直接忽略，不提供人工确认 UI。
 - 高置信特服、登机口、机位和取消候选都可在无排班匹配时暂存，并在排班变化后重试。
 
@@ -628,7 +628,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.5）把到位提前量改为进港实时到达前 15 分钟、纯出港实时起飞前 70 分钟，并把提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用，因此系统提醒、当前执勤页倒计时、小组件倒计时与排班日历班车推荐同步变化。先按新规则改写 `DutyTimelineTest`、`ProjectSmokeTest`、`DutyWidgetModelTest`、`ShiftBusPlanTest`、`ShiftCalendarRowsTest` 的期望值（`ShiftCalendarRowsTest` 的“余量不改变班车”用例改用组 8 在 09-06 的早三，因原用例的早二在 30 分钟余量下已需提前一班），再改实现。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest`：JVM 244 项通过、0 项失败、2 项条件跳过；随后 `:app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，detekt 0 项、Lint 基线外零新增（Lint 另提示基线中有 2 条记录未在项目中找到，未查证来源）。班车推荐因到位提前而变化的推算场景：默认 15 分钟余量下，整班工作日的早一、晚三、晚四与交接班日的早二由 05:55 改为 05:25，其余槽位不变。真机（vivo V2505A，Android 16 / API 36）：以 `adb install -r` 覆盖安装 0.10.5（version code 46），排班、校准、MUC 记录与 API 密钥保留。先用 `notClass` 排除 4 个 Compose 测试类跑 `connectedDebugAndroidTest`：40 项执行、0 失败、4 项跳过（`FlightRefreshSchedulerInstrumentedTest` 因手机上配置了真实 API Key 按 `assumeFalse` 跳过），小组件渲染/布局 3 项通过。随后单独跑 Compose 的 16 项（仍排除此前记录会持续滚动的 `importingANewNonEmptyRoster…`）：首次尝试时宿主 Activity 始终没有拉起，等待 14 分钟仍是 0/16，手动 `am force-stop` 终止；在手机设置里为 AirShift 放开“后台弹出界面”后重跑，`DutyWindowRefreshInstrumentedTest` 9 项、`ForegroundFlightRefreshEffectInstrumentedTest` 5 项、`SharedExcelImportOwnerInstrumentedTest` 1 项与当前执勤页 `manualCompletionAndAutomaticCompletion…` 1 项全部通过（16/16，57 秒）。这说明此前几轮 Compose 用例无结果的原因是该权限，而非用例本身。重跑期间有一次因 vivo 安装确认被拒（`INSTALL_FAILED_ABORTED`）而未执行任何用例，允许安装后再跑即通过。测试 APK 已卸载，主应用与本地数据保留。AlarmManager 实际触发与通知展示未复跑。
+本轮（0.10.6）让 MUC 解析兼容轮椅口语简称 C轮/R轮/S轮，并把任务卡上的轮椅记录改为轮椅线性图标 + 等级字母。先在 `SpecialServiceParserTest` 增加简称用例（小写 `r轮` 经规范化识别、字母与“轮”之间一个空格、`旅客S 轮` 按单人计数、`WCHR改为S轮` 的代码与简称混用按更正处理、座位 `32C轮椅` 不误判为 C 轮、`WCHS轮椅` 不重复识别出 S 轮），新增 `SpecialServiceLabelsTest` 锁定角标与详情行文案只给单字母（等级缺失时只剩数量或空串），再改实现。`:app:testDebugUnitTest`（`--rerun`）：JVM 248 项通过、0 项失败、2 项条件跳过。detekt 首次运行拦下 2 条基线外发现：新增私有 Composable `WheelchairGlyph` 触发 FunctionNaming（默认规则集未豁免 `@Composable`，既有 Composable 都在基线里），以及图标路径字符串超过行宽；分别改为在两处内联 `Icon` 与拆分字符串拼接后归零。随后 `:app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，Lint 基线外零新增（仍提示基线中 2 条记录未在项目中找到）。图标形状用同一路径在浏览器里按 192/48/24/14/12px 渲染核对。真机（vivo V2505A）以 `adb install -r` 覆盖安装 0.10.6（version code 47），`dumpsys package` 确认版本，拉起应用无崩溃；排班、校准、MUC 记录与 API 密钥保留。未复跑仪器测试。
+
+上一轮（0.10.5）把到位提前量改为进港实时到达前 15 分钟、纯出港实时起飞前 70 分钟，并把提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用，因此系统提醒、当前执勤页倒计时、小组件倒计时与排班日历班车推荐同步变化。先按新规则改写 `DutyTimelineTest`、`ProjectSmokeTest`、`DutyWidgetModelTest`、`ShiftBusPlanTest`、`ShiftCalendarRowsTest` 的期望值（`ShiftCalendarRowsTest` 的“余量不改变班车”用例改用组 8 在 09-06 的早三，因原用例的早二在 30 分钟余量下已需提前一班），再改实现。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest`：JVM 244 项通过、0 项失败、2 项条件跳过；随后 `:app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug` 全部成功，detekt 0 项、Lint 基线外零新增（Lint 另提示基线中有 2 条记录未在项目中找到，未查证来源）。班车推荐因到位提前而变化的推算场景：默认 15 分钟余量下，整班工作日的早一、晚三、晚四与交接班日的早二由 05:55 改为 05:25，其余槽位不变。真机（vivo V2505A，Android 16 / API 36）：以 `adb install -r` 覆盖安装 0.10.5（version code 46），排班、校准、MUC 记录与 API 密钥保留。先用 `notClass` 排除 4 个 Compose 测试类跑 `connectedDebugAndroidTest`：40 项执行、0 失败、4 项跳过（`FlightRefreshSchedulerInstrumentedTest` 因手机上配置了真实 API Key 按 `assumeFalse` 跳过），小组件渲染/布局 3 项通过。随后单独跑 Compose 的 16 项（仍排除此前记录会持续滚动的 `importingANewNonEmptyRoster…`）：首次尝试时宿主 Activity 始终没有拉起，等待 14 分钟仍是 0/16，手动 `am force-stop` 终止；在手机设置里为 AirShift 放开“后台弹出界面”后重跑，`DutyWindowRefreshInstrumentedTest` 9 项、`ForegroundFlightRefreshEffectInstrumentedTest` 5 项、`SharedExcelImportOwnerInstrumentedTest` 1 项与当前执勤页 `manualCompletionAndAutomaticCompletion…` 1 项全部通过（16/16，57 秒）。这说明此前几轮 Compose 用例无结果的原因是该权限，而非用例本身。重跑期间有一次因 vivo 安装确认被拒（`INSTALL_FAILED_ABORTED`）而未执行任何用例，允许安装后再跑即通过。测试 APK 已卸载，主应用与本地数据保留。AlarmManager 实际触发与通知展示未复跑。
 
 上一轮（0.10.4）把任务卡与小组件统一为只显示机位，MUC 登机口变更改为单独一行提示。`AssignmentLegsTest` 先按新规则改写并观察到 3 项失败，再改实现转绿；JVM 244 项通过、2 项条件跳过。detekt 与 Lint 各拦下一条新问题（`bindLeg` 参数过多因改名而脱离基线、小组件布局的硬编码 contentDescription），分别收成视图 id 组与字符串资源后归零。真机（vivo V2505A）跑小组件渲染/布局 3 项与当前执勤页 1 项通过；当前执勤页第 2 项 `importingANewNonEmptyRoster…` 在 `performScrollToNode` 处持续滚动直至 10 分钟超时，属本节此前记录的 vivo 滚动问题，与本次改动无关，未再复跑。教训：中断的 `connectedDebugAndroidTest` 走清理流程时把主应用连同本地数据一起卸载了（manifest 关闭备份，无法恢复），排班、校准、MUC 记录与 API 密钥需重新录入。为此 `gradle.properties` 加了 `android.injected.androidTest.leaveApksInstalledAfterRun=true`，此后真机测试不再卸载已安装的 APK。
 
@@ -817,6 +819,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.6 MUC 轮椅简称与角标：解析器兼容口语简称 `C轮/R轮/S轮`（与 WCHC/WCHR/WCHS 同为高置信，可与代码在同一句混用，如「WCHR改为S轮」）；`WheelchairLevel` 增加 `shortCode` 单字母；任务卡特服角标与详情行的轮椅记录改为轮椅线性图标 + 等级字母，不再显示 WCHR/WCHS/WCHC 全称。数据层与 JSON 不变。
 - 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
 - 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。
 - 0.10.3 收尾：MUC 四类记录实现 `TimestampedRecord` 并共用 `applyLatest`，登机口/机位候选循环合并为 `reduceFacilityChanges`，过期清理基于 `Fingerprinted` 统一保鲜指纹；排班 JSON 与 MUC JSON 共用 `data/JsonSupport.kt`；移除旧人工确认流程残留的 `suggestedFlights` 与 `ProcessedFingerprint.ignored`（写入停止，读取忽略）。行为不变，现有 JVM 用例即回归锁。

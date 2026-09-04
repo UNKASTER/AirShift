@@ -52,7 +52,9 @@ object SpecialServiceParser {
     private val nonFlightPrefixRegex = Regex("(?:时间|时刻|日期|电话|手机|票号|座位|登机口)$")
     private val nonFlightSuffixRegex = Regex("^(?:点|时|分|分钟|号|年|月|日)")
     private val timeContextRegex = Regex("(?:计划|预计|实际|到达|起飞|落地|时间)")
-    private val wheelchairCodeRegex = Regex("WCHR|WCHS|WCHC")
+    private val wheelchairCodeRegex = Regex("WCH[RSC]")
+    // MUC 口语简称「C轮 / R轮 / S轮」；前面紧贴字母数字时不算（座位「32C」后接“轮椅”、代码「WCHS」后接“轮”）。
+    private val wheelchairShorthandRegex = Regex("(?<![A-Z0-9])([CRS]) ?轮")
     private val wheelchairWordRegex = Regex("轮椅")
     private val unaccompaniedMinorRegex = Regex("(?<![A-Z])UM(?![A-Z])|无陪伴儿童|无成人陪伴儿童|无人陪儿童")
     private val maasRegex = Regex("(?<![A-Z])MAAS(?![A-Z])|全流程陪伴")
@@ -63,7 +65,7 @@ object SpecialServiceParser {
     private val countBeforeMentionRegex = Regex("($COUNT_TOKEN)\\s*(?:位|名|个|人|只)\\s*$")
     private val countAfterMentionRegex =
         Regex("^[,:，：\\s]*(?:儿童|旅客|乘客|人员)?\\s*(?:[X×*]\\s*)?($COUNT_TOKEN)\\s*(?:位|名|个|人|只)")
-    private val singlePassengerWheelchairRegex = Regex("旅客.{0,4}(?:轮椅|WCHR|WCHS|WCHC)")
+    private val singlePassengerWheelchairRegex = Regex("旅客.{0,4}(?:轮椅|WCH[RSC]|[CRS] ?轮)")
 
     fun parse(
         texts: List<String>,
@@ -342,17 +344,9 @@ object SpecialServiceParser {
     }
 
     private fun findServiceMentions(text: String): List<ServiceMention> = buildList {
-        val wheelchairCodes = wheelchairCodeRegex.findAll(text).toList()
-        wheelchairCodes.forEach { match ->
-            val level = when (match.value) {
-                "WCHR" -> WheelchairLevel.WCHR
-                "WCHS" -> WheelchairLevel.WCHS
-                "WCHC" -> WheelchairLevel.WCHC
-                else -> null
-            }
-            add(ServiceMention(ServiceType.WHEELCHAIR, level, Confidence.HIGH, match.range.first, match.range.last))
-        }
-        if (wheelchairCodes.isEmpty()) {
+        val explicitWheelchairs = findExplicitWheelchairMentions(text)
+        addAll(explicitWheelchairs)
+        if (explicitWheelchairs.isEmpty()) {
             wheelchairWordRegex.findAll(text).forEach { match ->
                 add(ServiceMention(ServiceType.WHEELCHAIR, null, Confidence.LOW, match.range.first, match.range.last))
             }
@@ -374,6 +368,28 @@ object SpecialServiceParser {
                 add(ServiceMention(ServiceType.UNACCOMPANIED_MINOR, null, Confidence.LOW, match.range.first, match.range.last))
             }
         }
+    }
+
+    /**
+     * 带明确等级的轮椅表达：IATA 代码 WCHR/WCHS/WCHC，或 MUC 简称 R轮/S轮/C轮，都是高置信；
+     * 两种写法可在同一句里混用（如「WCHR改为S轮」），按出现位置排序以便更正逻辑判断先后。
+     */
+    private fun findExplicitWheelchairMentions(text: String): List<ServiceMention> {
+        val coded = wheelchairCodeRegex.findAll(text).map { match ->
+            ServiceMention(
+                ServiceType.WHEELCHAIR,
+                WheelchairLevel.valueOf(match.value),
+                Confidence.HIGH,
+                match.range.first,
+                match.range.last,
+            )
+        }
+        val shorthand = wheelchairShorthandRegex.findAll(text).mapNotNull { match ->
+            WheelchairLevel.fromShortCode(match.groupValues[1])?.let { level ->
+                ServiceMention(ServiceType.WHEELCHAIR, level, Confidence.HIGH, match.range.first, match.range.last)
+            }
+        }
+        return (coded + shorthand).sortedBy(ServiceMention::start).toList()
     }
 
     private fun cancellationApplies(text: String, mention: ServiceMention): Boolean {
