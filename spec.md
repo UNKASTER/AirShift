@@ -623,7 +623,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.0）是代码审查后的第三阶段（结构），连接 vivo `V2505A`（Android 16 / API 36）。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 237 项，235 项通过、0 项失败、2 项条件跳过；新增 `DutyViewModelTest` 12 项（从真机 duty-window / owner 场景移植，含"清理后的 ViewModel 不落库"）。真机：非 Compose 的 44 项（数据层、迁移、调度、小组件、分享 Intent、OCR）通过，其中 `FlightRefreshSchedulerInstrumentedTest` 4 项因手机上的正式应用已配置真实 API Key 而按 `assumeFalse` 主动跳过；17 项 Compose 用例在该机仍被阻止从后台拉起宿主，改用"预启动宿主 + `--no-restart`"后又因预启动进程已初始化 kotlinx-coroutines、测试 APK 的 `ExceptionCollector` 无法经 ServiceLoader 注册而全部报错，因此本轮 Compose 用例没有得到结果，需在放开"后台弹出界面"权限后重跑。Lint 0 error、29 warning（新增 1 条为 `kotlinx-coroutines-test` 依赖的版本提示）。
+本轮（0.10.0–0.10.1）是代码审查后的第三阶段（结构），连接 vivo `V2505A`（Android 16 / API 36）。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 243 项，241 项通过、0 项失败、2 项条件跳过；新增 `DutyViewModelTest` 12 项与 `AssignmentLegsTest` 6 项（从真机 duty-window / owner 场景移植，含"清理后的 ViewModel 不落库"）。真机：非 Compose 的 44 项（数据层、迁移、调度、小组件、分享 Intent、OCR）通过，其中 `FlightRefreshSchedulerInstrumentedTest` 4 项因手机上的正式应用已配置真实 API Key 而按 `assumeFalse` 主动跳过；17 项 Compose 用例在该机仍被阻止从后台拉起宿主，改用"预启动宿主 + `--no-restart`"后又因预启动进程已初始化 kotlinx-coroutines、测试 APK 的 `ExceptionCollector` 无法经 ServiceLoader 注册而全部报错，因此本轮 Compose 用例没有得到结果，需在放开"后台弹出界面"权限后重跑。Lint 0 error、29 warning（新增 1 条为 `kotlinx-coroutines-test` 依赖的版本提示）。
 
 上一轮（0.9.2）是代码审查后的第二阶段（性能与健壮性），没有连接设备。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 225 项，223 项通过、0 项失败、2 项条件跳过；新增的 `aSlowLoadForOneFlightDoesNotBlockAnotherFlightInTheSameHashBin` 先在旧实现上以 `TimeoutException` 失败，改为 future 合并后转绿；Lint 保持 0 error。Android 用例只完成编译。
 
@@ -663,6 +663,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | JVM `parser` | 12 | XLSX/XLS、模板变体、姓名隔离、班次行解析；含 2 个条件式真实 fixture |
 | JVM `model/shift` | 85 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配 |
 | JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
+| JVM `ui/components` | 6 | 任务卡航段模型：进出港顺序与本站机场、SUMMARY 只打角标、FULL 展开原值 → 新值/登机时刻/特服、取消归属、机号机型落在末段、日期不符不采用 |
 | JVM `widget` | 11 | 当前页选择、空/完成/倒计时、VIP、机场和机位 |
 | JVM `ui` | 8 | 默认页、前后台恢复、配置变化和排班日历页选中 |
 | JVM smoke | 9 | OCR 表格、姓名、VIP、提醒基础 |
@@ -767,6 +768,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | Composition root | `app/src/main/java/com/bradj/airshift/MainActivity.kt` |
 | 编排层与端口 | `duty/DutyViewModel.kt`、`duty/DutyUiState.kt`、`duty/DutyPorts.kt`、`data/RosterRepository.kt`、`api/LiveFlightRefresher.kt` |
 | 四页装配 | `ui/AirShiftApp.kt` |
+| 任务卡与航段模型 | `ui/components/AssignmentDetailCard.kt`、`ui/components/AssignmentLegs.kt`、`ui/components/FlightRow.kt` |
 | 前台刷新 effect | `app/src/main/java/com/bradj/airshift/ForegroundFlightRefreshEffect.kt` |
 | WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
 | 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
@@ -801,6 +803,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.1 任务卡去重：全部执勤页与当前执勤页共用 `AssignmentDetailCard`，详略由 `DetailLevel` 决定；航段显示内容由纯 Kotlin 的 `legUiModels` 算出（`FlightLegUiModel`），`FlightRow` 由 16 个参数收成一个模型；新增 6 项 JVM 用例锁定两种详略的差异。
 - 0.10.0 代码审查后的第三阶段（结构）：新增 `duty/DutyViewModel` 承载导入、实时刷新、人工完成、设置与权限跟进，所有外部依赖收敛为 `DutyPorts` 端口接口；`RosterStore` 实现 `RosterRepository`；两个 Reader 与实时刷新改为挂起函数（`LiveFlightRefresher`）；`MainActivity` 降到 92 行，`ui/AirShiftApp` 只渲染状态；真机 duty-window / owner 场景移植为 JVM 的 `DutyViewModelTest`，真机测试改用 `ViewModelStore.clear()` 模拟进程重建。
 - 0.9.2 代码审查后的第二阶段：飞常准响应缓存改为 `CompletableFuture` 合并，网络请求移出 `ConcurrentHashMap` 桶锁；Excel/OCR/飞常准载荷/MUC 解析中逐单元格、逐字段重新编译的 Regex 全部提升为常量或按字段名缓存；小组件“完成”广播用 `goAsync()` 等待 WorkManager 配置完成；进出港方向与详情条目改为 `LegDirection` / `DetailKind` 枚举，不再按中文文案分派；MUC 可见列表按状态与分钟 tick 记忆，避免每次重组都让全部任务卡重组；删除无调用的 `fetchFlight`、`resetDutyProgress`、`advanceDutyIndex`、`ReviewStatus.IGNORED` 与 7 个未使用的主题 token。
 - 0.9.1 代码审查后的第一阶段修复：人工进度改按 06:00 切换的执勤日保存（修复夜班跨零点后已完成任务重新出现）；内置班组表移除全部成员姓名，测试改用合成姓名；遗留键清理改为 `LegacyMigrations` 一次性迁移，`RosterStore` 构造不再访问 Keystore；API Key 解密区分永久/瞬时失败，`hasVariFlightApiKey` 不再解密；设置页只在进入时解密一次。

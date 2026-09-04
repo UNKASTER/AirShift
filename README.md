@@ -2,7 +2,7 @@
 
 AirShift 是面向航司地面服务保障人员的单用户 Android 排班助手。它在手机本机识别排班图片或 Excel，只留下当前用户的保障任务；在用户自行配置 API Key 后，手机会直接查询飞常准 Aviation MCP，并把实时航班、提醒、MUC 特服信息和当前执勤集中到一个界面中。它还按上三休三周期推算未来的上班日、班次和应乘班车。
 
-- 当前版本：`0.10.0`（version code `41`）
+- 当前版本：`0.10.1`（version code `42`）
 - 最低系统：Android 13（API 33）
 - 项目形态：单模块、端侧优先、无自建后端
 
@@ -246,7 +246,7 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 
 仪器测试中的 OCR 端到端用例使用仓库内无真实个人信息的 `testdata/synthetic_roster.png`。可选真实 `.xls` fixture 需配置 `AIRSHIFT_XLS_FIXTURES_DIR` 与 `AIRSHIFT_XLS_TEST_NAME`，默认跳过。
 
-当前源码包含 237 个 JVM `@Test` 和 57 个 Android `@Test`。覆盖排班解析、完成与窗口规则、排班周期与班组轮转、班车规则、飞常准载荷/缓存/限流、多经停映射、MUC 状态机、导航/前台刷新、generation 竞态、WPS 分享、小组件和合成 OCR；这两个数字是测试方法规模，不等同于某次运行结果。本轮验证快照见 [spec.md](spec.md#122-本轮验证)。
+当前源码包含 243 个 JVM `@Test` 和 57 个 Android `@Test`。覆盖排班解析、完成与窗口规则、排班周期与班组轮转、班车规则、飞常准载荷/缓存/限流、多经停映射、MUC 状态机、导航/前台刷新、generation 竞态、WPS 分享、小组件和合成 OCR；这两个数字是测试方法规模，不等同于某次运行结果。本轮验证快照见 [spec.md](spec.md#122-本轮验证)。
 
 ## 已知限制
 

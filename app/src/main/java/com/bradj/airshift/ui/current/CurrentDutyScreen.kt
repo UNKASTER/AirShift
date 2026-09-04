@@ -9,11 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,14 +19,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,41 +38,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.bradj.airshift.model.AssignmentKind
+import androidx.compose.runtime.remember
 import com.bradj.airshift.model.DutyTimeline
-import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.StandChangeRecord
-import com.bradj.airshift.ui.components.AccentBar
+import com.bradj.airshift.ui.components.AssignmentDetailCard
 import com.bradj.airshift.ui.components.BoardingPassDivider
-import com.bradj.airshift.ui.components.DetailEntry
-import com.bradj.airshift.ui.components.DetailKind
-import com.bradj.airshift.ui.components.FlightRow
+import com.bradj.airshift.ui.components.DetailLevel
 import com.bradj.airshift.ui.components.LinearIcons
-import com.bradj.airshift.ui.components.QuietCard
+import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.RouteArcsDecoration
-import com.bradj.airshift.ui.components.cancellationForFlight
-import com.bradj.airshift.ui.components.forFlight
 import com.bradj.airshift.ui.components.formatClock
-import com.bradj.airshift.ui.components.formatEpoch
-import com.bradj.airshift.ui.components.gateChangeDisplayValue
-import com.bradj.airshift.ui.components.gateForFlight
-import com.bradj.airshift.ui.components.standForFlight
 import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.CeaNavyGradient
 import com.bradj.airshift.ui.theme.CeaRed
-import com.bradj.airshift.ui.theme.InboundBlue
 import com.bradj.airshift.ui.theme.NumericHero
 import com.bradj.airshift.ui.theme.NumericUnit
-import com.bradj.airshift.ui.theme.OnVipAmberContainer
 import com.bradj.airshift.ui.theme.TextHint
-import com.bradj.airshift.ui.theme.VipAmberContainer
 import com.bradj.airshift.ui.theme.heroShadow
 import java.time.Duration
 import java.time.LocalDateTime
@@ -202,13 +186,10 @@ private fun CurrentDutyContent(
             )
         }
         item {
-            CurrentAssignmentCard(
-                assignment = assignment,
-                specialServiceRecords = specialServiceRecords,
-                gateChanges = gateChanges,
-                standChanges = standChanges,
-                flightCancellations = flightCancellations,
-            )
+            val muc = remember(specialServiceRecords, gateChanges, standChanges, flightCancellations) {
+                MucContext(specialServiceRecords, gateChanges, standChanges, flightCancellations)
+            }
+            AssignmentDetailCard(assignment = assignment, muc = muc, level = DetailLevel.FULL)
         }
         item {
             Button(
@@ -394,199 +375,5 @@ private fun formatRemaining(duration: Duration): String {
         hours > 0 && minutes > 0 -> "${hours} 小时 ${minutes} 分钟"
         hours > 0 -> "${hours} 小时"
         else -> "${minutes} 分钟"
-    }
-}
-
-/**
- * 当前任务详情卡：与列表页同一套卡片语言 ——
- * 左侧 4px 类型色条（出港红 / 进港蓝 / 接续上蓝下红）、接续段撕线虚线分隔、
- * 末段撕线 + meta 区（登机口关闭 / 实际离位 / 机号 / 机型）。
- */
-@Composable
-private fun CurrentAssignmentCard(
-    assignment: RosterAssignment,
-    specialServiceRecords: List<FlightServiceRecord>,
-    gateChanges: List<GateChangeRecord>,
-    standChanges: List<StandChangeRecord>,
-    flightCancellations: List<FlightCancellationRecord>,
-) {
-    val vipBadgeText = when {
-        assignment.inboundHasVip && assignment.outboundHasVip -> "VIP"
-        assignment.inboundHasVip -> "进港 VIP"
-        assignment.outboundHasVip -> "出港 VIP"
-        else -> null
-    }
-    QuietCard(modifier = Modifier.fillMaxWidth(), vip = assignment.hasVip) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            when (assignment.kind) {
-                AssignmentKind.ARRIVAL_ONLY -> AccentBar(color = InboundBlue)
-                AssignmentKind.DEPARTURE_ONLY -> AccentBar(color = CeaRed)
-                AssignmentKind.TURNAROUND -> Column(modifier = Modifier.fillMaxHeight()) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .weight(1f)
-                            .background(InboundBlue),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .weight(1f)
-                            .background(CeaRed),
-                    )
-                }
-            }
-            // 卡片内边距：左右 16dp，上下 20dp（给时间块底边对齐留出空间）
-            Column(modifier = Modifier.padding(horizontal = AirShiftSpacing.M, vertical = 20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        when (assignment.kind) {
-                            AssignmentKind.ARRIVAL_ONLY -> "进港保障"
-                            AssignmentKind.DEPARTURE_ONLY -> "出港保障"
-                            AssignmentKind.TURNAROUND -> "进港后接续出港"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    vipBadgeText?.let { label ->
-                        Surface(
-                            color = VipAmberContainer,
-                            shape = CircleShape,
-                        ) {
-                            Text(
-                                label,
-                                modifier = Modifier.padding(horizontal = AirShiftSpacing.S, vertical = 4.dp),
-                                color = OnVipAmberContainer,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                assignment.inboundFlight?.let { flight ->
-                    val operationDate = assignment.scheduledArrival?.toLocalDate()
-                    val gateChange = gateChanges.gateForFlight(flight, operationDate)
-                    val standChange = standChanges.standForFlight(flight, operationDate)
-                    FlightRow(
-                        direction = LegDirection.INBOUND,
-                        flight = flight,
-                        fromCode = assignment.originCode,
-                        fromName = assignment.origin,
-                        toCode = assignment.localAirportCode,
-                        toName = assignment.localAirportName,
-                        planned = assignment.scheduledArrival,
-                        estimated = assignment.estimatedArrival,
-                        actual = assignment.actualArrival,
-                        specialServices = specialServiceRecords.forFlight(flight, operationDate),
-                        flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                        originDetails = buildList {
-                            add(
-                                DetailEntry(
-                                    kind = DetailKind.GATE,
-                                    value = gateChange?.let {
-                                        gateChangeDisplayValue(assignment.inboundBoardingGate, it)
-                                    } ?: (assignment.inboundBoardingGate ?: "--"),
-                                    hasChange = gateChange != null,
-                                ),
-                            )
-                            add(DetailEntry(kind = DetailKind.STAND, value = assignment.inboundDepartureStand ?: "--"))
-                        },
-                        destinationDetails = buildList {
-                            add(DetailEntry(kind = DetailKind.GATE, value = "--"))
-                            add(
-                                DetailEntry(
-                                    kind = DetailKind.STAND,
-                                    value = standChange?.let {
-                                        "${assignment.arrivalStand ?: "--"} → ${it.stand}"
-                                    } ?: (assignment.arrivalStand ?: "--"),
-                                    hasChange = standChange != null,
-                                ),
-                            )
-                        },
-                        details = buildList {
-                            gateChange?.let {
-                                add(DetailEntry(kind = DetailKind.GATE_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
-                            }
-                            standChange?.let {
-                                add(DetailEntry(kind = DetailKind.STAND_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
-                            }
-                            add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.inboundGateClosedObservedAt.formatClock()))
-                            add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.inboundActualOffBlock.formatClock()))
-                        },
-                        aircraftRegistration = if (assignment.outboundFlight == null) assignment.aircraftRegistration else null,
-                        aircraftType = if (assignment.outboundFlight == null) assignment.aircraftType ?: "--" else null,
-                        offBlock = assignment.inboundActualOffBlock,
-                    )
-                }
-                if (assignment.inboundFlight != null && assignment.outboundFlight != null) {
-                    Spacer(Modifier.height(AirShiftSpacing.M))
-                    BoardingPassDivider()
-                    Spacer(Modifier.height(AirShiftSpacing.M))
-                }
-                assignment.outboundFlight?.let { flight ->
-                    val operationDate = assignment.scheduledDeparture?.toLocalDate()
-                    val gateChange = gateChanges.gateForFlight(flight, operationDate)
-                    val standChange = standChanges.standForFlight(flight, operationDate)
-                    FlightRow(
-                        direction = LegDirection.OUTBOUND,
-                        flight = flight,
-                        fromCode = assignment.localAirportCode,
-                        fromName = assignment.localAirportName,
-                        toCode = assignment.destinationCode,
-                        toName = assignment.destination,
-                        planned = assignment.scheduledDeparture,
-                        estimated = assignment.estimatedDeparture,
-                        actual = assignment.actualDeparture,
-                        specialServices = specialServiceRecords.forFlight(flight, operationDate),
-                        flightCancellation = flightCancellations.cancellationForFlight(flight, operationDate),
-                        originDetails = buildList {
-                            add(
-                                DetailEntry(
-                                    kind = DetailKind.GATE,
-                                    value = gateChange?.let {
-                                        gateChangeDisplayValue(assignment.boardingGate, it)
-                                    } ?: (assignment.boardingGate ?: "--"),
-                                    hasChange = gateChange != null,
-                                ),
-                            )
-                            add(
-                                DetailEntry(
-                                    kind = DetailKind.STAND,
-                                    value = standChange?.let {
-                                        "${assignment.departureStand ?: "--"} → ${it.stand}"
-                                    } ?: (assignment.departureStand ?: "--"),
-                                    hasChange = standChange != null,
-                                ),
-                            )
-                        },
-                        destinationDetails = buildList {
-                            add(DetailEntry(kind = DetailKind.GATE, value = "--"))
-                            add(DetailEntry(kind = DetailKind.STAND, value = assignment.outboundArrivalStand ?: "--"))
-                        },
-                        details = buildList {
-                            add(DetailEntry(kind = DetailKind.BOARDING_START, value = DutyTimeline.boardingStartTime(assignment).formatClock()))
-                            add(DetailEntry(kind = DetailKind.BOARDING_END, value = DutyTimeline.gateCloseTime(assignment).formatClock()))
-                            gateChange?.let {
-                                add(DetailEntry(kind = DetailKind.GATE_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
-                            }
-                            standChange?.let {
-                                add(DetailEntry(kind = DetailKind.STAND_CHANGE_SOURCE, value = "MUC 更新于 ${it.updatedAtEpochMillis.formatEpoch("HH:mm")}"))
-                            }
-                            add(DetailEntry(kind = DetailKind.GATE_CLOSED, value = assignment.outboundGateClosedObservedAt.formatClock()))
-                            add(DetailEntry(kind = DetailKind.OFF_BLOCK, value = assignment.outboundActualOffBlock.formatClock()))
-                        },
-                        aircraftRegistration = assignment.aircraftRegistration,
-                        aircraftType = assignment.aircraftType ?: "--",
-                        offBlock = assignment.outboundActualOffBlock,
-                    )
-                }
-            }
-        }
     }
 }

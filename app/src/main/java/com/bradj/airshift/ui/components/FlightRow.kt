@@ -50,25 +50,7 @@ private val RouteMetaLabelWidth = 38.dp
  * 无数据项渲染浅灰骨架短横线，两侧占位规格统一。
  */
 @Composable
-fun FlightRow(
-    direction: LegDirection,
-    flight: String,
-    fromCode: String?,
-    fromName: String?,
-    toCode: String?,
-    toName: String?,
-    planned: LocalDateTime?,
-    estimated: LocalDateTime?,
-    actual: LocalDateTime?,
-    specialServices: List<FlightServiceRecord>,
-    flightCancellation: FlightCancellationRecord?,
-    details: List<DetailEntry>,
-    originDetails: List<DetailEntry> = emptyList(),
-    destinationDetails: List<DetailEntry> = emptyList(),
-    aircraftRegistration: String? = null,
-    aircraftType: String? = null,
-    offBlock: LocalDateTime? = null,
-) {
+fun FlightRow(model: FlightLegUiModel) = with(model) {
     val liveTime = actual ?: estimated
     Column(modifier = Modifier.fillMaxWidth()) {
         // 行1（chip 行）：方向 chip + 飞行状态 chip，左对齐，间距 8dp；无航班数据时状态 chip 不渲染
@@ -231,6 +213,7 @@ fun FlightRow(
             }
         }
     }
+    Unit
 }
 
 /**

@@ -44,9 +44,12 @@ import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
 import com.bradj.airshift.specialservice.StandChangeRecord
+import androidx.compose.runtime.remember
 import com.bradj.airshift.ui.components.AccentBar
-import com.bradj.airshift.ui.components.AssignmentCard
+import com.bradj.airshift.ui.components.AssignmentDetailCard
+import com.bradj.airshift.ui.components.DetailLevel
 import com.bradj.airshift.ui.components.LinearIcons
+import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.QuietCard
 import com.bradj.airshift.ui.components.RouteArcsDecoration
 import com.bradj.airshift.ui.theme.AirShiftRadius
@@ -83,6 +86,9 @@ fun AllDutyScreen(
     onOpenExactAlarmSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val muc = remember(specialServiceRecords, gateChanges, standChanges, flightCancellations) {
+        MucContext(specialServiceRecords, gateChanges, standChanges, flightCancellations)
+    }
     PullToRefreshBox(
         isRefreshing = isLiveRefreshing,
         onRefresh = onRefresh,
@@ -149,13 +155,7 @@ fun AllDutyScreen(
                 item { EmptyRoster() }
             } else {
                 items(assignments, key = { it.stableId }) { assignment ->
-                    AssignmentCard(
-                        assignment = assignment,
-                        specialServiceRecords = specialServiceRecords,
-                        gateChanges = gateChanges,
-                        standChanges = standChanges,
-                        flightCancellations = flightCancellations,
-                    )
+                    AssignmentDetailCard(assignment = assignment, muc = muc, level = DetailLevel.SUMMARY)
                 }
             }
             item { Spacer(Modifier.height(AirShiftSpacing.L)) }
