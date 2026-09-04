@@ -71,11 +71,19 @@ fun CurrentDutyScreen(
     onGoToAllDuty: () -> Unit,
     modifier: Modifier = Modifier,
     now: LocalDateTime = LocalDateTime.now(),
+    nextShiftText: String? = null,
 ) {
     val window = assignments.dutyWindowIndices(dutyIndex, now)
+    val nextShiftBlock: (@Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit)? =
+        nextShiftText?.let { text -> { NextShiftBlock(text) } }
     when {
         assignments.isEmpty() -> Column(modifier.fillMaxSize()) {
-            BoardHeader(title = "当前执勤", now = now, dateText = now.toLocalDate().boardDateText())
+            BoardHeader(
+                title = "当前执勤",
+                now = now,
+                dateText = now.toLocalDate().boardDateText(),
+                content = nextShiftBlock,
+            )
             EmptyBay(
                 icon = LinearIcons.Plane,
                 title = "还没有排班",
@@ -90,6 +98,7 @@ fun CurrentDutyScreen(
                 subtitle = "${assignments.size} 项已完成",
                 now = now,
                 dateText = now.toLocalDate().boardDateText(),
+                content = nextShiftBlock,
             )
             EmptyBay(
                 icon = LinearIcons.PlaneTakeoff,
@@ -267,6 +276,17 @@ private fun UrgentLamp() {
             maxLines = 1,
             softWrap = false,
         )
+    }
+}
+
+/** 全部完成或没有排班时，板面仍回答"接下来"：下一次到岗的日期、班次与班车。 */
+@Composable
+private fun NextShiftBlock(text: String) {
+    val c = AirShiftTokens.colors
+    Column {
+        Text("下一班", style = MaterialTheme.typography.bodyMedium, color = c.onBoardSecondary)
+        Spacer(Modifier.size(2.dp))
+        Text(text, style = MaterialTheme.typography.titleMedium, color = c.onBoard)
     }
 }
 

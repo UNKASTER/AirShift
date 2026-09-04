@@ -26,6 +26,9 @@
     <string name="duty_widget_preview_flight_out">FM9212</string>
     <string name="duty_widget_preview_place">上海浦东 PVG</string>
     <string name="duty_widget_preview_stand">机位 355</string>
+    <string name="duty_widget_message_hint">打开应用查看排班日历与班车</string>
+    <string name="duty_widget_message_head">%1$s · %2$s</string>
+    <string name="duty_widget_preview_message_head">航勤智排 · 9月5日 周六</string>
     <string name="duty_widget_preview_message_title">今日执勤全部完成</string>
     <string name="duty_widget_preview_message_detail">今天的保障任务已全部执行完毕，辛苦了。</string>
 </resources>

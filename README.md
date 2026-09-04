@@ -271,8 +271,8 @@ Gradle 守护进程固定使用 JDK 21（`gradle/gradle-daemon-jvm.properties`�
 - 任一损坏的排班 JSON 条目可能让整份排班加载为空；MUC JSON 则逐项跳过损坏记录。
 - MUC 数字航班简写没有最大日期距离阈值；跨承运人同数字时会稳定选择一个候选，而不是要求人工确认。
 - MUC 的 24 小时过期先在逻辑查询中隐藏，物理清理要等下一次通知或排班重匹配。
-- 小组件不显示 MUC 变更；跨零点状态、OriginOS 等 launcher 的实际裁剪行为，以及 RemoteViews 对内置 Barlow 字体的解析仍需真机验证（解析失败时回落系统字体）。
-- 0.11.0 的新界面已通过 JVM 测试、Lint、detekt 与 `assembleDebug`，但本轮没有连接设备：Compose 仪器测试、真机浅/深色截图、字体缩放 1.3 复检与小组件裁剪核对尚未执行。
+- 小组件不显示 MUC 变更；跨零点状态与不同 launcher 的裁剪行为仍需持续观察（vivo OriginOS 4×3 已核对，Barlow 字体在桌面进程中解析正常）。
+- Barlow Semi Condensed 的 tabular 数字宽度仍有约 7% 差异，倒计时与时钟因此用固定位宽的翻牌槽位；信息条里的时间列允许这点差异。
 - `arrivalBridge` 已解析并持久化，但当前 UI 未展示；提醒 ID 使用 32 位 `stableId.hashCode()`，理论上可能碰撞。
 - 真实飞常准、真实 WPS/MUC、ContentProvider 授权、定位、闹钟、通知和锁屏流程仍需物理设备端到端验证。
 - 仓库有 GitHub Actions（单元测试 + Android Lint + detekt），但没有发布签名或商店分发配置；release 已开启 R8 压缩，但未签名、未在真机验证，Debug APK 仍是唯一可安装的产物。

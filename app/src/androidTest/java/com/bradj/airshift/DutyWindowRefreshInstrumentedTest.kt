@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -472,9 +473,19 @@ class DutyWindowRefreshInstrumentedTest {
         composeRule.waitForIdle()
     }
 
+    /**
+     * 板头标题与底栏标签同名（如"当前执勤"既是分区名也是板头标题），所以按 testTag 点底栏；
+     * 分区切换是 300 ms 的 fade-through，时钟不自动推进时要先推过它，旧页的列表才会卸载。
+     */
     private fun selectSection(label: String) {
-        composeRule.onNodeWithText(label).performClick()
-        composeRule.mainClock.advanceTimeBy(100L)
+        val tag = when (label) {
+            "全部执勤" -> "nav_all"
+            "排班日历" -> "nav_calendar"
+            "当前执勤" -> "nav_current"
+            else -> "nav_settings"
+        }
+        composeRule.onNodeWithTag(tag).performClick()
+        composeRule.mainClock.advanceTimeBy(600L)
         composeRule.waitForIdle()
     }
 

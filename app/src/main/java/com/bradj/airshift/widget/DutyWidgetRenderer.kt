@@ -17,18 +17,34 @@ internal object DutyWidgetRenderer {
     fun render(context: Context, page: WidgetPage, builtAt: LocalDateTime): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_duty_item)
         when (page) {
-            is WidgetPage.Message -> bindMessage(views, page)
+            is WidgetPage.Message -> bindMessage(context, views, page, builtAt)
             is WidgetPage.Duty -> bindDuty(context, views, page, builtAt)
         }
         return views
     }
 
-    private fun bindMessage(views: RemoteViews, page: WidgetPage.Message) {
+    private fun bindMessage(
+        context: Context,
+        views: RemoteViews,
+        page: WidgetPage.Message,
+        builtAt: LocalDateTime,
+    ) {
         views.setViewVisibility(R.id.widget_duty_content, View.GONE)
         views.setViewVisibility(R.id.widget_message_content, View.VISIBLE)
+        val appName = context.getString(R.string.app_name)
+        views.setTextViewText(
+            R.id.widget_message_head,
+            context.getString(R.string.duty_widget_message_head, appName, boardDate(builtAt)),
+        )
         views.setTextViewText(R.id.widget_message_title, page.title)
         views.setTextViewText(R.id.widget_message_detail, page.detail)
     }
+
+    private val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
+
+    /** "9月5日 周六"，与 App 板头同一种写法。 */
+    private fun boardDate(at: LocalDateTime): String =
+        "${at.monthValue}月${at.dayOfMonth}日 周${WEEKDAYS[at.dayOfWeek.value - 1]}"
 
     private fun bindDuty(
         context: Context,

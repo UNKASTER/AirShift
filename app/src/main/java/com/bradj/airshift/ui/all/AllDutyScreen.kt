@@ -53,6 +53,7 @@ import com.bradj.airshift.ui.components.EmptyBay
 import com.bradj.airshift.ui.components.LinearIcons
 import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.NoticeStrip
+import com.bradj.airshift.ui.components.NoticeTone
 import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.components.splitIntoBays
 import com.bradj.airshift.ui.theme.AirShiftMotion
@@ -62,6 +63,7 @@ import com.bradj.airshift.ui.theme.AirShiftTokens
 import java.time.LocalDateTime
 
 private const val EXPANDED_SEPARATOR = "\n"
+private const val SHORT_STATUS_MAX_CHARS = 20
 
 /** 全部执勤页：板头 + 导入条 + 通知条 + 当前 / 接下来 / 已完成三个栏位。条点击就地展开。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,32 +110,30 @@ fun AllDutyScreen(
             now = now,
             dateText = now.toLocalDate().boardDateText(),
             footer = {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = LinearIcons.Stand,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = c.onBoardSecondary,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (currentAirport != null) "$currentAirport · 本场" else "导入并刷新航班后自动识别机场",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = c.onBoardSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (statusMessage != null) {
-                        Text(
-                            statusMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = c.onBoardSecondary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                Icon(
+                    imageVector = LinearIcons.Stand,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = c.onBoardSecondary,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (currentAirport != null) "$currentAirport · 本场" else "导入并刷新航班后自动识别机场",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onBoardSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // 短状态（"实时信息已更新：16:08"）留在板脚右侧；长说明放到列表里的中性通知条。
+                if (statusMessage != null && statusMessage.length <= SHORT_STATUS_MAX_CHARS) {
+                    Spacer(Modifier.width(AirShiftSpacing.S))
+                    Text(
+                        statusMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.onBoardSecondary,
+                        maxLines = 1,
+                    )
                 }
             },
         )
@@ -165,6 +165,9 @@ fun AllDutyScreen(
             ) {
                 item(key = "import") {
                     ImportStrip(isWorking = isWorking, onImportImage = onImportImage, onImportExcel = onImportExcel)
+                }
+                if (statusMessage != null && statusMessage.length > SHORT_STATUS_MAX_CHARS) {
+                    item(key = "status") { NoticeStrip(lines = listOf(statusMessage), tone = NoticeTone.Neutral) }
                 }
                 if (exactAlarmWarning) {
                     item(key = "exact_alarm") {

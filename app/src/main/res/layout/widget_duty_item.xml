@@ -18,32 +18,63 @@
         android:paddingTop="14dp"
         android:paddingBottom="12dp">
 
-        <!-- 整页提示：无排班 / 今日全部完成 -->
+        <!-- 整页提示：无排班 / 今日全部完成。仍保留板头（应用名 · 日期）与板脚提示，不留一块空板。 -->
         <LinearLayout
             android:id="@+id/widget_message_content"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:gravity="center"
             android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
-                android:id="@+id/widget_message_title"
-                android:layout_width="wrap_content"
+                android:id="@+id/widget_message_head"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/duty_widget_preview_message_title"
-                android:textColor="@color/on_board"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                android:ellipsize="end"
+                android:fontFamily="@font/barlow_medium"
+                android:singleLine="true"
+                android:text="@string/duty_widget_preview_message_head"
+                android:textColor="@color/on_board_secondary"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_message_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/duty_widget_preview_message_title"
+                    android:textColor="@color/on_board"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/widget_message_detail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/duty_widget_preview_message_detail"
+                    android:textColor="@color/on_board_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/board_rule" />
 
             <TextView
-                android:id="@+id/widget_message_detail"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/duty_widget_preview_message_detail"
+                android:layout_marginTop="8dp"
+                android:text="@string/duty_widget_message_hint"
                 android:textColor="@color/on_board_secondary"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- 执勤页 -->

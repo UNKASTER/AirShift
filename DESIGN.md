@@ -53,11 +53,13 @@
 | `BayTitle` | `Bay.kt` | 栏位标签：小字 + 数量 + 向右延伸的线 |
 | `OdometerText` | `OdometerText.kt` | 逐位翻牌，280 ms 减速；非数字字符静止 |
 | `PinnedActionBar` | `PinnedActionBar.kt` | 钉底主操作（执勤完成 / 保存） |
-| `EmptyBay` / `NoticeStrip` | 同名文件 | 空态与琥珀提示条 |
+| `EmptyBay` / `NoticeStrip` | 同名文件 | 空态；提示条分 `NoticeTone.Warning`（琥珀底，警告与权限）与 `Neutral`（条底 + 线，状态说明） |
 | `LinearIcons` | `DesignComponents.kt` | 1.5px 线性图标 |
 | 纯计算 | `LegPresentation.kt`、`DutyBays.kt`、`BoardFormats.kt`、`OdometerSlot.kt` | 状态灯规则、本站/对方机位、分栏、日期与剩余时长文案、翻牌槽位 |
 
 缺失数据：显示"—"或省略该格，不用骨架。登机口不在条上；轮椅只给图标 + 等级字母。
+
+折叠行的固定列按 sp 折算（16 / 46 / 58），随系统字体放大；字体 ≥1.15 倍时航段改为两行（向/时间/航班/灯 + 航线/机位），航线永远不被挤成省略号。板面在"全部完成 / 没有排班"时仍回答"接下来"：下一班的日期、班次、班车与到位时间。
 
 ## 动效（`AirShiftMotion`）
 
@@ -80,7 +82,7 @@
 
 ## 小组件
 
-固定藏青板面（不随系统深色切换，浅深壁纸都可读）：头行 · VIP 灯 / 倒计时 + 到位时间 + 72×40dp 描边"完成" / 板面行线 / 两行航段（3dp 夹条）。颜色在 `res/values/colors.xml` 镜像 palette；文案全部在 `strings.xml`。没有装饰层。
+固定藏青板面（不随系统深色切换，浅深壁纸都可读）：头行 · VIP 灯 / 倒计时 + 到位时间 + 72×40dp 描边"完成" / 板面行线 / 两行航段（3dp 夹条）。空态（无排班 / 全部完成）保留板头"航勤智排 · 日期"与板脚提示，标题居中。颜色在 `res/values/colors.xml` 镜像 palette；文案全部在 `strings.xml`；`@font/barlow_*` 由 launcher 进程解析（真机 OriginOS 已验证）。没有装饰层。
 
 ## 不做的事
 

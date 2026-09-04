@@ -163,42 +163,67 @@ private fun CollapsedHead(assignment: RosterAssignment, hasServices: Boolean) {
 @Composable
 private fun Int.scaledDp(): androidx.compose.ui.unit.Dp = with(LocalDensity.current) { this@scaledDp.sp.toDp() }
 
+/** 系统字体放大到 1.15 倍以上时，一行放不下六列，折叠行改为两行。 */
+private const val COMPACT_FONT_SCALE = 1.15f
+
 /**
  * 一航段一行：向 16 · 时间 46 · 航班 58 · 航线（弹性）· 机位 · 状态灯。
- * 固定列按 360dp 屏预算，航线列至少留得下"PVG →"。
+ * 固定列按 360dp 屏预算，航线列至少留得下"PVG →"；大字体时航线与机位换到第二行。
  */
 @Composable
 private fun LegLine(leg: FlightLegUiModel, baseDate: LocalDate?, completed: Boolean) {
     val c = AirShiftTokens.colors
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = 10.dp, end = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val twoLines = LocalDensity.current.fontScale >= COMPACT_FONT_SCALE
+    val status = legStatus(leg, completed)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = if (twoLines) 8.dp else 0.dp),
     ) {
-        Text(
-            leg.direction.shortLabel,
-            modifier = Modifier.width(16.scaledDp()),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (leg.direction == LegDirection.INBOUND) c.arrival else c.departureText,
-        )
-        Spacer(Modifier.width(6.dp))
-        TimeText(leg = leg, baseDate = baseDate, style = StripTime, modifier = Modifier.width(46.scaledDp()))
-        Spacer(Modifier.width(6.dp))
-        Text(
-            leg.flight,
-            modifier = Modifier.width(58.scaledDp()),
-            style = FlightNumber,
-            color = c.ink,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Visible,
-        )
-        Spacer(Modifier.width(6.dp))
-        RouteCodes(leg = leg, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(6.dp))
-        InlineStand(leg)
-        legStatus(leg, completed)?.let { status ->
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = if (twoLines) 28.dp else 44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                leg.direction.shortLabel,
+                modifier = Modifier.width(16.scaledDp()),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (leg.direction == LegDirection.INBOUND) c.arrival else c.departureText,
+            )
             Spacer(Modifier.width(6.dp))
-            StatusLamp(text = status.text, kind = status.kind, dot = status.dot)
+            TimeText(leg = leg, baseDate = baseDate, style = StripTime, modifier = Modifier.width(46.scaledDp()))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                leg.flight,
+                modifier = Modifier.width(58.scaledDp()),
+                style = FlightNumber,
+                color = c.ink,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+            )
+            Spacer(Modifier.width(6.dp))
+            if (twoLines) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                RouteCodes(leg = leg, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(6.dp))
+                InlineStand(leg)
+            }
+            if (status != null) {
+                Spacer(Modifier.width(6.dp))
+                StatusLamp(text = status.text, kind = status.kind, dot = status.dot)
+            }
+        }
+        if (twoLines) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = (16 + 6 + 46 + 6).scaledDp(), bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RouteCodes(leg = leg, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(6.dp))
+                InlineStand(leg)
+            }
         }
     }
 }

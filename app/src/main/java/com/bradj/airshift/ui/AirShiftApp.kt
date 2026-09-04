@@ -40,6 +40,7 @@ import com.bradj.airshift.specialservice.SpecialServiceState
 import com.bradj.airshift.specialservice.StandChangeRecord
 import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.all.AllDutyScreen
+import com.bradj.airshift.ui.calendar.NextShift
 import com.bradj.airshift.ui.calendar.ShiftCalendarScreen
 import com.bradj.airshift.ui.current.CurrentDutyScreen
 import com.bradj.airshift.ui.onboarding.OnboardingScreen
@@ -150,6 +151,12 @@ internal fun AirShiftApp(
     val shiftSchedule = remember(state.shiftCalibration) { ShiftSchedule(state.shiftCalibration) }
     val autoShiftGroupId = remember(shiftSchedule, userName) { shiftSchedule.findGroupIdForName(userName) }
     val shiftGroupId = autoShiftGroupId ?: state.manualShiftGroupId
+    // 当前执勤全部完成后，板面显示下一次到岗；只在日历相关状态变化时重算。
+    val today = state.now.toLocalDate()
+    val margin = state.shiftReportMarginMinutes
+    val nextShiftText = remember(shiftSchedule, shiftGroupId, state.assignments, margin, today) {
+        NextShift.text(shiftSchedule, shiftGroupId, state.assignments, margin, today)
+    }
 
     // 只在 MUC 状态或分钟 tick 变化时重新过滤：每次重组都产生新 List 会让全部任务卡跟着重组。
     val visibleSpecialServiceRecords = remember(specialServiceState, state.now) { specialServiceState.activeRecords() }
@@ -183,6 +190,7 @@ internal fun AirShiftApp(
                 shiftSchedule = shiftSchedule,
                 shiftGroupId = shiftGroupId,
                 autoShiftGroupId = autoShiftGroupId,
+                nextShiftText = nextShiftText,
                 visibleSpecialServiceRecords = visibleSpecialServiceRecords,
                 visibleGateChanges = visibleGateChanges,
                 visibleStandChanges = visibleStandChanges,
@@ -212,6 +220,7 @@ private fun SectionContent(
     shiftSchedule: ShiftSchedule,
     shiftGroupId: Int?,
     autoShiftGroupId: Int?,
+    nextShiftText: String?,
     visibleSpecialServiceRecords: List<FlightServiceRecord>,
     visibleGateChanges: List<GateChangeRecord>,
     visibleStandChanges: List<StandChangeRecord>,
@@ -255,6 +264,7 @@ private fun SectionContent(
                 onDutyComplete = viewModel::completeCurrentDuty,
                 onGoToAllDuty = { dutyNavigation.selectSection(DutySection.ALL) },
                 modifier = Modifier.padding(padding),
+                nextShiftText = nextShiftText,
             )
             DutySection.CALENDAR -> ShiftCalendarScreen(
                 userName = userName,

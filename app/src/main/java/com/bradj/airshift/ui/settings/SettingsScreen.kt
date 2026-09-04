@@ -204,7 +204,7 @@ private fun HintLine(text: String) {
 }
 
 @Composable
-private fun SettingRow(label: String, value: String) {
+private fun SettingRow(label: String, value: String? = null) {
     val c = AirShiftTokens.colors
     Row(
         modifier = Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 14.dp),
@@ -212,7 +212,9 @@ private fun SettingRow(label: String, value: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = c.inkSecondary)
-        Text(value, style = MaterialTheme.typography.titleSmall, color = c.ink)
+        if (value != null) {
+            Text(value, style = MaterialTheme.typography.titleSmall, color = c.ink)
+        }
     }
 }
 
@@ -298,10 +300,7 @@ private fun ShiftCalendarSection(
             }
             HintLine("导入一份带“候机早班/中班/夜班”的 Excel 后，应用会自动校正班组表。")
         }
-        SettingRow(
-            label = "到位余量",
-            value = if (reportMarginMinutes == 0) "不留余量" else "$reportMarginMinutes 分钟",
-        )
+        SettingRow(label = "到位余量")
         SegmentedLamps(
             options = ShiftBusPlan.REPORT_MARGIN_OPTIONS,
             selected = reportMarginMinutes,
