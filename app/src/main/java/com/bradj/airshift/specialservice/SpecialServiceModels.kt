@@ -45,34 +45,54 @@ data class FlightReference(
         get() = "$flightNumber|$operationDate"
 }
 
+/** 所有 MUC 派生对象共有的消息指纹与过期时间；过期清理与指纹保鲜只依赖这两项。 */
+interface Fingerprinted {
+    val fingerprint: String
+    val expiresAtEpochMillis: Long
+}
+
+/** 从一条通知解析出、尚未落到具体航班上的候选（含等待排班的待匹配项）。 */
+interface MucCandidate : Fingerprinted {
+    val id: String
+    val flightToken: String
+    val explicitDate: LocalDate?
+    val notificationDate: LocalDate
+    val sourceEpochMillis: Long
+}
+
+/** 已落到具体航班上的记录；同 key 的记录按 [updatedAtEpochMillis] 归并（见 `applyLatest`）。 */
+interface TimestampedRecord : Fingerprinted {
+    val updatedAtEpochMillis: Long
+}
+
 data class ParsedServiceCandidate(
-    val fingerprint: String,
-    val flightToken: String,
-    val explicitDate: LocalDate?,
-    val notificationDate: LocalDate,
+    override val fingerprint: String,
+    override val flightToken: String,
+    override val explicitDate: LocalDate?,
+    override val notificationDate: LocalDate,
     val serviceType: ServiceType,
     val wheelchairLevel: WheelchairLevel?,
     val count: Int?,
     val confidence: Confidence,
     val action: CandidateAction,
-    val sourceEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-) {
-    val id: String
+    override val sourceEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+) : MucCandidate {
+    override val id: String
         get() = listOf(fingerprint, flightToken, serviceType.name, wheelchairLevel?.name.orEmpty()).joinToString("|")
 }
 
 data class ParsedGateChangeCandidate(
-    val fingerprint: String,
-    val flightToken: String,
-    val explicitDate: LocalDate?,
-    val notificationDate: LocalDate,
+    override val fingerprint: String,
+    override val flightToken: String,
+    override val explicitDate: LocalDate?,
+    override val notificationDate: LocalDate,
     val boardingGate: String,
-    val sourceEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
+    override val sourceEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
     val previousGate: String? = null,
-) {
-    val id: String
+) : MucCandidate {
+    override val id: String
         get() = listOf(fingerprint, flightToken, boardingGate).joinToString("|")
 }
 
@@ -80,11 +100,11 @@ data class GateChangeRecord(
     val flightNumber: String,
     val operationDate: LocalDate,
     val boardingGate: String,
-    val updatedAtEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-    val fingerprint: String,
+    override val updatedAtEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+    override val fingerprint: String,
     val previousGate: String? = null,
-) {
+) : TimestampedRecord {
     val flightKey: String
         get() = "$flightNumber|$operationDate"
 }
@@ -100,15 +120,15 @@ fun normalizeGateCode(value: String): String {
 }
 
 data class ParsedStandChangeCandidate(
-    val fingerprint: String,
-    val flightToken: String,
-    val explicitDate: LocalDate?,
-    val notificationDate: LocalDate,
+    override val fingerprint: String,
+    override val flightToken: String,
+    override val explicitDate: LocalDate?,
+    override val notificationDate: LocalDate,
     val stand: String,
-    val sourceEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-) {
-    val id: String
+    override val sourceEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+) : MucCandidate {
+    override val id: String
         get() = listOf(fingerprint, flightToken, stand).joinToString("|")
 }
 
@@ -116,24 +136,24 @@ data class StandChangeRecord(
     val flightNumber: String,
     val operationDate: LocalDate,
     val stand: String,
-    val updatedAtEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-    val fingerprint: String,
-) {
+    override val updatedAtEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+    override val fingerprint: String,
+) : TimestampedRecord {
     val flightKey: String
         get() = "$flightNumber|$operationDate"
 }
 
 data class ParsedFlightCancellationCandidate(
-    val fingerprint: String,
-    val flightToken: String,
-    val explicitDate: LocalDate?,
-    val notificationDate: LocalDate,
+    override val fingerprint: String,
+    override val flightToken: String,
+    override val explicitDate: LocalDate?,
+    override val notificationDate: LocalDate,
     val scope: FlightCancellationScope,
-    val sourceEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-) {
-    val id: String
+    override val sourceEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+) : MucCandidate {
+    override val id: String
         get() = listOf(fingerprint, flightToken, scope.name).joinToString("|")
 }
 
@@ -141,10 +161,10 @@ data class FlightCancellationRecord(
     val flightNumber: String,
     val operationDate: LocalDate,
     val scope: FlightCancellationScope,
-    val updatedAtEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-    val fingerprint: String,
-) {
+    override val updatedAtEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
+    override val fingerprint: String,
+) : TimestampedRecord {
     val flightKey: String
         get() = "$flightNumber|$operationDate"
 }
@@ -155,39 +175,38 @@ data class FlightServiceRecord(
     val serviceType: ServiceType,
     val wheelchairLevel: WheelchairLevel?,
     val count: Int?,
-    val updatedAtEpochMillis: Long,
+    override val updatedAtEpochMillis: Long,
     val confidence: Confidence,
     val reviewStatus: ReviewStatus,
-    val expiresAtEpochMillis: Long,
-    val fingerprint: String,
+    override val expiresAtEpochMillis: Long,
+    override val fingerprint: String,
     val active: Boolean = true,
-) {
+) : TimestampedRecord {
     val businessKey: String
         get() = listOf(flightNumber, operationDate, serviceType, wheelchairLevel.orEmptyKey()).joinToString("|")
 }
 
+/** 尚未匹配到排班航班的特服候选；排班变化时重新匹配。 */
 data class PendingServiceReview(
-    val id: String,
-    val fingerprint: String,
-    val flightToken: String,
-    val explicitDate: LocalDate?,
-    val notificationDate: LocalDate,
+    override val id: String,
+    override val fingerprint: String,
+    override val flightToken: String,
+    override val explicitDate: LocalDate?,
+    override val notificationDate: LocalDate,
     val serviceType: ServiceType,
     val wheelchairLevel: WheelchairLevel?,
     val count: Int?,
     val confidence: Confidence,
     val action: CandidateAction,
-    val sourceEpochMillis: Long,
-    val expiresAtEpochMillis: Long,
-    val suggestedFlights: List<FlightReference>,
+    override val sourceEpochMillis: Long,
+    override val expiresAtEpochMillis: Long,
     val reviewStatus: ReviewStatus = ReviewStatus.NEEDS_REVIEW,
-)
+) : MucCandidate
 
 data class ProcessedFingerprint(
     val value: String,
     val sourceEpochMillis: Long,
     val expiresAtEpochMillis: Long,
-    val ignored: Boolean = false,
 )
 
 data class SpecialServiceState(

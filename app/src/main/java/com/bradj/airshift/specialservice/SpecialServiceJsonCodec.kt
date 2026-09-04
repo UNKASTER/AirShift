@@ -1,5 +1,10 @@
 package com.bradj.airshift.specialservice
 
+import com.bradj.airshift.data.mapObjects
+import com.bradj.airshift.data.nullableInt
+import com.bradj.airshift.data.nullableLong
+import com.bradj.airshift.data.nullableString
+import com.bradj.airshift.data.putNullable
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -67,7 +72,6 @@ object SpecialServiceJsonCodec {
         put("action", action.name)
         put("sourceEpochMillis", sourceEpochMillis)
         put("expiresAtEpochMillis", expiresAtEpochMillis)
-        put("suggestedFlights", JSONArray().apply { suggestedFlights.forEach { put(it.toJson()) } })
         put("reviewStatus", reviewStatus.name)
     }
 
@@ -130,17 +134,10 @@ object SpecialServiceJsonCodec {
         put("expiresAtEpochMillis", expiresAtEpochMillis)
     }
 
-    private fun FlightReference.toJson() = JSONObject().apply {
-        put("flightNumber", flightNumber)
-        put("operationDate", operationDate.toString())
-        put("expiresAtEpochMillis", expiresAtEpochMillis)
-    }
-
     private fun ProcessedFingerprint.toJson() = JSONObject().apply {
         put("value", value)
         put("sourceEpochMillis", sourceEpochMillis)
         put("expiresAtEpochMillis", expiresAtEpochMillis)
-        put("ignored", ignored)
     }
 
     private fun JSONObject.toRecord() = FlightServiceRecord(
@@ -170,7 +167,7 @@ object SpecialServiceJsonCodec {
         action = enumValueOf(getString("action")),
         sourceEpochMillis = getLong("sourceEpochMillis"),
         expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
-        suggestedFlights = optJSONArray("suggestedFlights").mapObjects { it.toFlightReference() },
+        // 旧版本写入的 suggestedFlights 一律忽略：人工确认流程已移除，该字段从未被读取。
         reviewStatus = enumValueOf(optString("reviewStatus", ReviewStatus.NEEDS_REVIEW.name)),
     )
 
@@ -233,38 +230,9 @@ object SpecialServiceJsonCodec {
         expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
     )
 
-    private fun JSONObject.toFlightReference() = FlightReference(
-        flightNumber = getString("flightNumber"),
-        operationDate = LocalDate.parse(getString("operationDate")),
-        expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
-    )
-
     private fun JSONObject.toProcessedFingerprint() = ProcessedFingerprint(
         value = getString("value"),
         sourceEpochMillis = getLong("sourceEpochMillis"),
         expiresAtEpochMillis = getLong("expiresAtEpochMillis"),
-        ignored = optBoolean("ignored", false),
     )
-
-    private fun JSONObject.putNullable(key: String, value: Any?) {
-        put(key, value ?: JSONObject.NULL)
-    }
-
-    private fun JSONObject.nullableString(key: String): String? =
-        if (!has(key) || isNull(key)) null else optString(key).takeIf(String::isNotBlank)
-
-    private fun JSONObject.nullableInt(key: String): Int? =
-        if (!has(key) || isNull(key)) null else getInt(key)
-
-    private fun JSONObject.nullableLong(key: String): Long? =
-        if (!has(key) || isNull(key)) null else getLong(key)
-
-    private fun <T> JSONArray?.mapObjects(transform: (JSONObject) -> T): List<T> {
-        if (this == null) return emptyList()
-        return buildList {
-            for (index in 0 until length()) {
-                runCatching { transform(getJSONObject(index)) }.getOrNull()?.let(::add)
-            }
-        }
-    }
 }

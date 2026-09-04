@@ -59,15 +59,6 @@ class SpecialServiceStateTest {
         assertFalse(SpecialServiceDedupe.isDuplicate(processed, "body", 200L, true, 500L))
         assertTrue(SpecialServiceDedupe.isDuplicate(processed, "body", 200L, false, 500L))
         assertFalse(SpecialServiceDedupe.isDuplicate(processed, "body", 100L, true, 1_000L))
-        assertTrue(
-            SpecialServiceDedupe.isDuplicate(
-                processed.map { it.copy(ignored = true) },
-                "body",
-                200L,
-                true,
-                500L,
-            ),
-        )
     }
 
     @Test
@@ -101,7 +92,7 @@ class SpecialServiceStateTest {
         ).records.single()
         val pending = candidate(source = 100L, fingerprint = "pending")
             .copy(expiresAtEpochMillis = 500L)
-            .toPending(listOf(flight))
+            .toPending()
         val state = SpecialServiceState(
             records = listOf(record),
             pendingReviews = listOf(pending),
@@ -129,7 +120,7 @@ class SpecialServiceStateTest {
         ).records.single()
         val state = SpecialServiceState(
             records = listOf(record),
-            pendingReviews = listOf(candidate(200L, "pending-hmac").toPending(listOf(flight))),
+            pendingReviews = listOf(candidate(200L, "pending-hmac").toPending()),
             gateChanges = listOf(
                 GateChangeRecord("MU2473", date, "A5", 210L, 10_000L, "gate-hmac", previousGate = "A2"),
             ),
@@ -452,7 +443,7 @@ class SpecialServiceStateTest {
         expiresAtEpochMillis = 1_000L,
     )
 
-    private fun ParsedServiceCandidate.toPending(suggestions: List<FlightReference>) = PendingServiceReview(
+    private fun ParsedServiceCandidate.toPending() = PendingServiceReview(
         id = id,
         fingerprint = fingerprint,
         flightToken = flightToken,
@@ -465,6 +456,5 @@ class SpecialServiceStateTest {
         action = action,
         sourceEpochMillis = sourceEpochMillis,
         expiresAtEpochMillis = expiresAtEpochMillis,
-        suggestedFlights = suggestions,
     )
 }

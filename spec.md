@@ -522,7 +522,8 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 9.4 时序、取消、去重和过期
 
-- 更晚 source timestamp 覆盖更早状态；相同时间且不同指纹的冲突保留已有值。
+- 更晚 source timestamp 覆盖更早状态；相同时间且不同指纹的冲突保留已有值。特服、登机口、机位、取消四类记录都实现 `TimestampedRecord`，共用同一个 `applyLatest` 归并；登机口与机位的候选循环共用 `reduceFacilityChanges`，取消与特服因有级联规则各自保留。
+- 所有候选与记录都实现 `Fingerprinted`（指纹 + 过期时间），过期清理与指纹保鲜只依赖这两项。已移除的旧人工确认字段（`suggestedFlights`、`ignored`）不再写入，读取时忽略。
 - 行程取消会停用已有特服，并移除不晚于取消事件的登机口/机位状态；更晚的有效更新可重新激活。
 - 指纹使用本机随机 32 字节密钥的 HMAC-SHA256。
 - 可靠消息时间按“同指纹 + 同 source time”去重；不可靠 fallback 摘要在未过期期间对同指纹保守去重。
@@ -627,7 +628,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.10.2）是代码审查后的第四阶段（工程化）。守护进程首次自动下载 JDK 21 后执行 `:app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease`：detekt 对既有代码记录 466 条基线（MagicNumber 190、MaxLineLength 72、FunctionNaming 50、ReturnCount 47、LongMethod 26、LongParameterList 22、CyclomaticComplexMethod 14 等），基线之外零新增；Lint 基线 30 条，零新增；JVM 243 项通过、2 项条件跳过；`minifyReleaseWithR8` 在 `proguard-rules.pro` 的 keep 规则下一次通过，未产生 missing rules。Debug APK 251.9 MB，R8 后的未签名 release APK 216.9 MB：体积主要来自 OpenCV/ONNX Runtime 的多 ABI 原生库与 6 MB 模型，R8 只能压缩 Java/Kotlin 代码。真机（vivo V2505A，打开“后台弹出界面”权限后）：17 项 Compose 用例经标准 `connectedDebugAndroidTest` 全部通过，加上此前 44 项非 Compose 用例，本轮 Android 用例 57 项执行、0 失败、4 项按 `assumeFalse` 跳过。git 历史已用 `git filter-repo --replace-text` 改写，30 个真实姓名在全部历史中残留为 0，当前树哈希不变。
+本轮（0.10.3）是审查计划的收尾：MUC 归并层去重与 JSON 辅助函数收敛，属纯重构，现有 JVM 用例即回归锁。执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin`：JVM 243 项通过、2 项条件跳过；detekt 首次运行在新代码上报出 3 条基线外发现（LongParameterList、NestedBlockDepth、ReturnCount），按规则改写为 `FacilityReducer` + `fold` 与单一 `when` 表达式后归零，说明门禁对新代码有效；Lint 基线外零新增；Android 测试源码编译通过，未在设备上重跑。
+
+上一轮（0.10.2）是代码审查后的第四阶段（工程化）。守护进程首次自动下载 JDK 21 后执行 `:app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleRelease`：detekt 对既有代码记录 466 条基线（MagicNumber 190、MaxLineLength 72、FunctionNaming 50、ReturnCount 47、LongMethod 26、LongParameterList 22、CyclomaticComplexMethod 14 等），基线之外零新增；Lint 基线 30 条，零新增；JVM 243 项通过、2 项条件跳过；`minifyReleaseWithR8` 在 `proguard-rules.pro` 的 keep 规则下一次通过，未产生 missing rules。Debug APK 251.9 MB，R8 后的未签名 release APK 216.9 MB：体积主要来自 OpenCV/ONNX Runtime 的多 ABI 原生库与 6 MB 模型，R8 只能压缩 Java/Kotlin 代码。真机（vivo V2505A，打开“后台弹出界面”权限后）：17 项 Compose 用例经标准 `connectedDebugAndroidTest` 全部通过，加上此前 44 项非 Compose 用例，本轮 Android 用例 57 项执行、0 失败、4 项按 `assumeFalse` 跳过。git 历史已用 `git filter-repo --replace-text` 改写，30 个真实姓名在全部历史中残留为 0，当前树哈希不变。
 
 上一轮（0.10.0–0.10.1）是代码审查后的第三阶段（结构），连接 vivo `V2505A`（Android 16 / API 36）。在 JDK 17 下执行 `:app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug`：JVM 报告共 243 项，241 项通过、0 项失败、2 项条件跳过；新增 `DutyViewModelTest` 12 项与 `AssignmentLegsTest` 6 项（从真机 duty-window / owner 场景移植，含"清理后的 ViewModel 不落库"）。真机：非 Compose 的 44 项（数据层、迁移、调度、小组件、分享 Intent、OCR）通过，其中 `FlightRefreshSchedulerInstrumentedTest` 4 项因手机上的正式应用已配置真实 API Key 而按 `assumeFalse` 主动跳过；17 项 Compose 用例在该机仍被阻止从后台拉起宿主，改用"预启动宿主 + `--no-restart`"后又因预启动进程已初始化 kotlinx-coroutines、测试 APK 的 `ExceptionCollector` 无法经 ServiceLoader 注册而全部报错，因此本轮 Compose 用例没有得到结果，需在放开"后台弹出界面"权限后重跑。Lint 0 error、29 warning（新增 1 条为 `kotlinx-coroutines-test` 依赖的版本提示）。
 
@@ -810,6 +813,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.6.7–0.8.0 将小组件从可翻页集合收敛为固定当前任务单卡，加入原子完成，并统一进出港行显示本站机位。
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
+- 0.10.3 收尾：MUC 四类记录实现 `TimestampedRecord` 并共用 `applyLatest`，登机口/机位候选循环合并为 `reduceFacilityChanges`，过期清理基于 `Fingerprinted` 统一保鲜指纹；排班 JSON 与 MUC JSON 共用 `data/JsonSupport.kt`；移除旧人工确认流程残留的 `suggestedFlights` 与 `ProcessedFingerprint.ignored`（写入停止，读取忽略）。行为不变，现有 JVM 用例即回归锁。
 - 0.10.2 代码审查后的第四阶段（工程化）：Android Lint 基线 + `warningsAsErrors`、detekt 1.23.8 默认规则集 + 基线、GitHub Actions（单元测试 / Lint / detekt）、release 开启 R8 与资源裁剪并补 POI/ONNX/OpenCV keep 规则；git 历史用 `git filter-repo --replace-text` 把真实姓名改写为合成名。
 - 0.10.1 任务卡去重：全部执勤页与当前执勤页共用 `AssignmentDetailCard`，详略由 `DetailLevel` 决定；航段显示内容由纯 Kotlin 的 `legUiModels` 算出（`FlightLegUiModel`），`FlightRow` 由 16 个参数收成一个模型；新增 6 项 JVM 用例锁定两种详略的差异。
 - 0.10.0 代码审查后的第三阶段（结构）：新增 `duty/DutyViewModel` 承载导入、实时刷新、人工完成、设置与权限跟进，所有外部依赖收敛为 `DutyPorts` 端口接口；`RosterStore` 实现 `RosterRepository`；两个 Reader 与实时刷新改为挂起函数（`LiveFlightRefresher`）；`MainActivity` 降到 92 行，`ui/AirShiftApp` 只渲染状态；真机 duty-window / owner 场景移植为 JVM 的 `DutyViewModelTest`，真机测试改用 `ViewModelStore.clear()` 模拟进程重建。

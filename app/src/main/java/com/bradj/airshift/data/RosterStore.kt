@@ -362,16 +362,6 @@ internal class RosterStore(
         outboundHasVip = optBoolean("outboundHasVip", false),
     )
 
-    private fun JSONObject.putNullable(key: String, value: String?) {
-        if (value == null) put(key, JSONObject.NULL) else put(key, value)
-    }
-
-    private fun JSONObject.nullableString(key: String): String? =
-        if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
-
-    private fun JSONObject.nullableDateTime(key: String): LocalDateTime? =
-        nullableString(key)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
-
     companion object {
         private val rosterLock = Any()
         internal const val PREFERENCES_NAME = "air_shift"

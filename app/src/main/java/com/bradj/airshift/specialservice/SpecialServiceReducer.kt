@@ -1,28 +1,45 @@
 package com.bradj.airshift.specialservice
 
-data class SpecialServiceReduction(
-    val records: List<FlightServiceRecord>,
+import java.time.LocalDate
+
+/** 一次归并的结果：新的记录列表、是否写入、是否与同一时刻的另一条消息冲突。 */
+data class Reduction<T>(
+    val records: List<T>,
     val applied: Boolean,
     val conflict: Boolean,
 )
 
-data class GateChangeReduction(
-    val records: List<GateChangeRecord>,
-    val applied: Boolean,
-    val conflict: Boolean,
-)
+typealias SpecialServiceReduction = Reduction<FlightServiceRecord>
+typealias GateChangeReduction = Reduction<GateChangeRecord>
+typealias StandChangeReduction = Reduction<StandChangeRecord>
+typealias FlightCancellationReduction = Reduction<FlightCancellationRecord>
 
-data class StandChangeReduction(
-    val records: List<StandChangeRecord>,
-    val applied: Boolean,
-    val conflict: Boolean,
-)
-
-data class FlightCancellationReduction(
-    val records: List<FlightCancellationRecord>,
-    val applied: Boolean,
-    val conflict: Boolean,
-)
+/**
+ * 四类记录（特服、登机口、机位、取消）共用的按 key 归并规则：
+ * 比既有记录更早的候选被忽略；同一时刻但指纹不同视为冲突、不写入；否则替换同 key 的旧记录。
+ */
+internal fun <T : TimestampedRecord> List<T>.applyLatest(
+    key: (T) -> String,
+    candidateKey: String,
+    candidateUpdatedAtEpochMillis: Long,
+    candidateFingerprint: String,
+    build: (existing: T?) -> T,
+): Reduction<T> {
+    val existing = firstOrNull { key(it) == candidateKey }
+    fun replaced() = Reduction(
+        records = filterNot { key(it) == candidateKey } + build(existing),
+        applied = true,
+        conflict = false,
+    )
+    return when {
+        existing == null -> replaced()
+        existing.updatedAtEpochMillis > candidateUpdatedAtEpochMillis ->
+            Reduction(this, applied = false, conflict = false)
+        existing.updatedAtEpochMillis == candidateUpdatedAtEpochMillis ->
+            Reduction(this, applied = false, conflict = existing.fingerprint != candidateFingerprint)
+        else -> replaced()
+    }
+}
 
 object SpecialServiceReducer {
     fun apply(
@@ -30,22 +47,13 @@ object SpecialServiceReducer {
         candidate: ParsedServiceCandidate,
         flight: FlightReference,
         reviewStatus: ReviewStatus,
-    ): SpecialServiceReduction {
-        val key = recordKey(flight, candidate.serviceType, candidate.wheelchairLevel)
-        val existing = records.firstOrNull { it.businessKey == key }
-        if (existing != null) {
-            if (existing.updatedAtEpochMillis > candidate.sourceEpochMillis) {
-                return SpecialServiceReduction(records, applied = false, conflict = false)
-            }
-            if (existing.updatedAtEpochMillis == candidate.sourceEpochMillis) {
-                return if (existing.fingerprint == candidate.fingerprint) {
-                    SpecialServiceReduction(records, applied = false, conflict = false)
-                } else {
-                    SpecialServiceReduction(records, applied = false, conflict = true)
-                }
-            }
-        }
-        val updated = FlightServiceRecord(
+    ): SpecialServiceReduction = records.applyLatest(
+        key = FlightServiceRecord::businessKey,
+        candidateKey = recordKey(flight, candidate.serviceType, candidate.wheelchairLevel),
+        candidateUpdatedAtEpochMillis = candidate.sourceEpochMillis,
+        candidateFingerprint = candidate.fingerprint,
+    ) {
+        FlightServiceRecord(
             flightNumber = flight.flightNumber,
             operationDate = flight.operationDate,
             serviceType = candidate.serviceType,
@@ -58,32 +66,19 @@ object SpecialServiceReducer {
             fingerprint = candidate.fingerprint,
             active = candidate.action == CandidateAction.UPSERT,
         )
-        return SpecialServiceReduction(
-            records = records.filterNot { it.businessKey == key } + updated,
-            applied = true,
-            conflict = false,
-        )
     }
 
     fun applyGateChange(
         records: List<GateChangeRecord>,
         candidate: ParsedGateChangeCandidate,
         flight: FlightReference,
-    ): GateChangeReduction {
-        val existing = records.firstOrNull { it.flightKey == flight.key }
-        if (existing != null) {
-            if (existing.updatedAtEpochMillis > candidate.sourceEpochMillis) {
-                return GateChangeReduction(records, applied = false, conflict = false)
-            }
-            if (existing.updatedAtEpochMillis == candidate.sourceEpochMillis) {
-                return GateChangeReduction(
-                    records,
-                    applied = false,
-                    conflict = existing.fingerprint != candidate.fingerprint,
-                )
-            }
-        }
-        val updated = GateChangeRecord(
+    ): GateChangeReduction = records.applyLatest(
+        key = GateChangeRecord::flightKey,
+        candidateKey = flight.key,
+        candidateUpdatedAtEpochMillis = candidate.sourceEpochMillis,
+        candidateFingerprint = candidate.fingerprint,
+    ) { existing ->
+        GateChangeRecord(
             flightNumber = flight.flightNumber,
             operationDate = flight.operationDate,
             boardingGate = candidate.boardingGate,
@@ -93,32 +88,19 @@ object SpecialServiceReducer {
             // 候选未携带原登机口时（如「现为D66」），沿用既有记录的当前值，保持变更链完整。
             previousGate = candidate.previousGate ?: existing?.boardingGate,
         )
-        return GateChangeReduction(
-            records = records.filterNot { it.flightKey == flight.key } + updated,
-            applied = true,
-            conflict = false,
-        )
     }
 
     fun applyStandChange(
         records: List<StandChangeRecord>,
         candidate: ParsedStandChangeCandidate,
         flight: FlightReference,
-    ): StandChangeReduction {
-        val existing = records.firstOrNull { it.flightKey == flight.key }
-        if (existing != null) {
-            if (existing.updatedAtEpochMillis > candidate.sourceEpochMillis) {
-                return StandChangeReduction(records, applied = false, conflict = false)
-            }
-            if (existing.updatedAtEpochMillis == candidate.sourceEpochMillis) {
-                return StandChangeReduction(
-                    records,
-                    applied = false,
-                    conflict = existing.fingerprint != candidate.fingerprint,
-                )
-            }
-        }
-        val updated = StandChangeRecord(
+    ): StandChangeReduction = records.applyLatest(
+        key = StandChangeRecord::flightKey,
+        candidateKey = flight.key,
+        candidateUpdatedAtEpochMillis = candidate.sourceEpochMillis,
+        candidateFingerprint = candidate.fingerprint,
+    ) {
+        StandChangeRecord(
             flightNumber = flight.flightNumber,
             operationDate = flight.operationDate,
             stand = candidate.stand,
@@ -126,43 +108,25 @@ object SpecialServiceReducer {
             expiresAtEpochMillis = flight.expiresAtEpochMillis,
             fingerprint = candidate.fingerprint,
         )
-        return StandChangeReduction(
-            records = records.filterNot { it.flightKey == flight.key } + updated,
-            applied = true,
-            conflict = false,
-        )
     }
 
     fun applyFlightCancellation(
         records: List<FlightCancellationRecord>,
         candidate: ParsedFlightCancellationCandidate,
         flight: FlightReference,
-    ): FlightCancellationReduction {
-        val existing = records.firstOrNull { it.flightKey == flight.key }
-        if (existing != null) {
-            if (existing.updatedAtEpochMillis > candidate.sourceEpochMillis) {
-                return FlightCancellationReduction(records, applied = false, conflict = false)
-            }
-            if (existing.updatedAtEpochMillis == candidate.sourceEpochMillis) {
-                return FlightCancellationReduction(
-                    records,
-                    applied = false,
-                    conflict = existing.fingerprint != candidate.fingerprint,
-                )
-            }
-        }
-        val updated = FlightCancellationRecord(
+    ): FlightCancellationReduction = records.applyLatest(
+        key = FlightCancellationRecord::flightKey,
+        candidateKey = flight.key,
+        candidateUpdatedAtEpochMillis = candidate.sourceEpochMillis,
+        candidateFingerprint = candidate.fingerprint,
+    ) {
+        FlightCancellationRecord(
             flightNumber = flight.flightNumber,
             operationDate = flight.operationDate,
             scope = candidate.scope,
             updatedAtEpochMillis = candidate.sourceEpochMillis,
             expiresAtEpochMillis = flight.expiresAtEpochMillis,
             fingerprint = candidate.fingerprint,
-        )
-        return FlightCancellationReduction(
-            records = records.filterNot { it.flightKey == flight.key } + updated,
-            applied = true,
-            conflict = false,
         )
     }
 }
@@ -177,6 +141,57 @@ data class MucMessageReduction(
     val cancellationsApplied: Int,
     val resolvedExpiryEpochMillis: Long,
 )
+
+/** 登机口 / 机位这类“一航班一记录”的候选归并状态。 */
+private data class FacilityLane<C : MucCandidate, R>(
+    val pending: List<C>,
+    val records: List<R>,
+    val applied: Int = 0,
+    val awaitingRoster: Int = 0,
+    val resolvedExpiryEpochMillis: Long = 0L,
+)
+
+/** 登机口与机位共用的候选归并：匹配不到排班进入等待列表；行程已取消且取消消息更新时不再更新。 */
+private class FacilityReducer(
+    private val flights: List<FlightReference>,
+    private val cancellations: List<FlightCancellationRecord>,
+) {
+    fun <C : MucCandidate, R> reduce(
+        candidates: List<C>,
+        lane: FacilityLane<C, R>,
+        apply: (List<R>, C, FlightReference) -> Reduction<R>,
+    ): FacilityLane<C, R> = candidates.fold(lane) { current, candidate -> step(current, candidate, apply) }
+
+    private fun <C : MucCandidate, R> step(
+        lane: FacilityLane<C, R>,
+        candidate: C,
+        apply: (List<R>, C, FlightReference) -> Reduction<R>,
+    ): FacilityLane<C, R> {
+        val flight = candidate.matchAgainst(flights)
+            ?: return lane.copy(
+                pending = lane.pending.filterNot { it.id == candidate.id } + candidate,
+                awaitingRoster = lane.awaitingRoster + 1,
+            )
+        val pending = lane.pending.filterNot { it.id == candidate.id }
+        val expiry = maxOf(lane.resolvedExpiryEpochMillis, flight.expiresAtEpochMillis)
+        val reduction = if (tripCancelledAfter(flight, candidate)) null else apply(lane.records, candidate, flight)
+        return when {
+            reduction == null || reduction.conflict -> lane.copy(pending = pending, resolvedExpiryEpochMillis = expiry)
+            else -> lane.copy(
+                pending = pending,
+                records = reduction.records,
+                applied = lane.applied + if (reduction.applied) 1 else 0,
+                resolvedExpiryEpochMillis = expiry,
+            )
+        }
+    }
+
+    private fun tripCancelledAfter(flight: FlightReference, candidate: MucCandidate): Boolean {
+        val cancellation = cancellations.firstOrNull { it.flightKey == flight.key } ?: return false
+        return cancellation.scope == FlightCancellationScope.TRIP &&
+            cancellation.updatedAtEpochMillis >= candidate.sourceEpochMillis
+    }
+}
 
 object MucMessageReducer {
     fun apply(
@@ -195,8 +210,6 @@ object MucMessageReducer {
         var specialServicesAutoMatched = 0
         var awaitingRoster = 0
         var manualReviews = 0
-        var gateChangesApplied = 0
-        var standChangesApplied = 0
         var cancellationsApplied = 0
         var resolvedExpiry = sequenceOf(
             message.serviceCandidates.maxOfOrNull(ParsedServiceCandidate::expiresAtEpochMillis),
@@ -205,133 +218,89 @@ object MucMessageReducer {
             message.flightCancellations.maxOfOrNull(ParsedFlightCancellationCandidate::expiresAtEpochMillis),
         ).filterNotNull().maxOrNull() ?: 0L
 
+        // 1. 取消：先处理，因为它会级联作废同航班的特服、登机口与机位记录。
         message.flightCancellations.forEach { candidate ->
-            val match = RosterFlightMatcher.matchFlightToken(
-                candidate.flightToken,
-                candidate.explicitDate,
-                candidate.notificationDate,
-                flights,
-            )
-            val flight = match.matched
+            val flight = candidate.matchAgainst(flights)
             if (flight == null) {
                 pendingFlightCancellations = pendingFlightCancellations.filterNot { it.id == candidate.id } + candidate
                 awaitingRoster++
-            } else {
-                val reduction = SpecialServiceReducer.applyFlightCancellation(flightCancellations, candidate, flight)
-                pendingFlightCancellations = pendingFlightCancellations.filterNot { it.id == candidate.id }
-                if (!reduction.conflict) {
-                    flightCancellations = reduction.records
-                    if (reduction.applied) {
-                        records = records.map { record ->
-                            if (
-                                record.flightNumber == flight.flightNumber &&
-                                record.operationDate == flight.operationDate &&
-                                record.updatedAtEpochMillis <= candidate.sourceEpochMillis
-                            ) {
-                                record.copy(
-                                    count = null,
-                                    updatedAtEpochMillis = candidate.sourceEpochMillis,
-                                    fingerprint = candidate.fingerprint,
-                                    active = false,
-                                )
-                            } else {
-                                record
-                            }
-                        }
-                        pendingReviews = pendingReviews.filterNot { review ->
-                            review.sourceEpochMillis <= candidate.sourceEpochMillis && review.matches(flight)
-                        }
-                        if (candidate.scope == FlightCancellationScope.TRIP) {
-                            gateChanges = gateChanges.filterNot { record ->
-                                record.flightKey == flight.key && record.updatedAtEpochMillis <= candidate.sourceEpochMillis
-                            }
-                            pendingGateChanges = pendingGateChanges.filterNot { pending ->
-                                pending.sourceEpochMillis <= candidate.sourceEpochMillis && pending.matches(flight)
-                            }
-                            standChanges = standChanges.filterNot { record ->
-                                record.flightKey == flight.key && record.updatedAtEpochMillis <= candidate.sourceEpochMillis
-                            }
-                            pendingStandChanges = pendingStandChanges.filterNot { pending ->
-                                pending.sourceEpochMillis <= candidate.sourceEpochMillis && pending.matches(flight)
-                            }
-                        }
-                        cancellationsApplied++
-                    }
-                }
-                resolvedExpiry = maxOf(resolvedExpiry, flight.expiresAtEpochMillis)
+                return@forEach
             }
+            pendingFlightCancellations = pendingFlightCancellations.filterNot { it.id == candidate.id }
+            val reduction = SpecialServiceReducer.applyFlightCancellation(flightCancellations, candidate, flight)
+            if (!reduction.conflict) {
+                flightCancellations = reduction.records
+                if (reduction.applied) {
+                    records = records.map { record ->
+                        if (
+                            record.flightNumber == flight.flightNumber &&
+                            record.operationDate == flight.operationDate &&
+                            record.updatedAtEpochMillis <= candidate.sourceEpochMillis
+                        ) {
+                            record.copy(
+                                count = null,
+                                updatedAtEpochMillis = candidate.sourceEpochMillis,
+                                fingerprint = candidate.fingerprint,
+                                active = false,
+                            )
+                        } else {
+                            record
+                        }
+                    }
+                    pendingReviews = pendingReviews.filterNot { review ->
+                        review.sourceEpochMillis <= candidate.sourceEpochMillis && review.matches(flight)
+                    }
+                    if (candidate.scope == FlightCancellationScope.TRIP) {
+                        gateChanges = gateChanges.filterNot { record ->
+                            record.flightKey == flight.key && record.updatedAtEpochMillis <= candidate.sourceEpochMillis
+                        }
+                        pendingGateChanges = pendingGateChanges.filterNot { pending ->
+                            pending.sourceEpochMillis <= candidate.sourceEpochMillis && pending.matches(flight)
+                        }
+                        standChanges = standChanges.filterNot { record ->
+                            record.flightKey == flight.key && record.updatedAtEpochMillis <= candidate.sourceEpochMillis
+                        }
+                        pendingStandChanges = pendingStandChanges.filterNot { pending ->
+                            pending.sourceEpochMillis <= candidate.sourceEpochMillis && pending.matches(flight)
+                        }
+                    }
+                    cancellationsApplied++
+                }
+            }
+            resolvedExpiry = maxOf(resolvedExpiry, flight.expiresAtEpochMillis)
         }
 
-        message.gateChanges.forEach { candidate ->
-            val match = RosterFlightMatcher.matchFlightToken(
-                candidate.flightToken,
-                candidate.explicitDate,
-                candidate.notificationDate,
-                flights,
-            )
-            val flight = match.matched
-            if (flight == null) {
-                pendingGateChanges = pendingGateChanges.filterNot { it.id == candidate.id } + candidate
-                awaitingRoster++
-            } else {
-                pendingGateChanges = pendingGateChanges.filterNot { it.id == candidate.id }
-                val cancellation = flightCancellations.firstOrNull { it.flightKey == flight.key }
-                if (
-                    cancellation?.scope != FlightCancellationScope.TRIP ||
-                    cancellation.updatedAtEpochMillis < candidate.sourceEpochMillis
-                ) {
-                    val reduction = SpecialServiceReducer.applyGateChange(gateChanges, candidate, flight)
-                    if (!reduction.conflict) {
-                        gateChanges = reduction.records
-                        if (reduction.applied) gateChangesApplied++
-                    }
-                }
-                resolvedExpiry = maxOf(resolvedExpiry, flight.expiresAtEpochMillis)
-            }
-        }
+        // 2. 登机口与机位：同一套“行程已取消则不再更新”的规则。
+        val facilities = FacilityReducer(flights, flightCancellations)
+        val gateLane = facilities.reduce(
+            message.gateChanges,
+            FacilityLane(pendingGateChanges, gateChanges),
+            SpecialServiceReducer::applyGateChange,
+        )
+        pendingGateChanges = gateLane.pending
+        gateChanges = gateLane.records
+        val standLane = facilities.reduce(
+            message.standChanges,
+            FacilityLane(pendingStandChanges, standChanges),
+            SpecialServiceReducer::applyStandChange,
+        )
+        pendingStandChanges = standLane.pending
+        standChanges = standLane.records
+        awaitingRoster += gateLane.awaitingRoster + standLane.awaitingRoster
+        resolvedExpiry = maxOf(resolvedExpiry, gateLane.resolvedExpiryEpochMillis, standLane.resolvedExpiryEpochMillis)
 
-        message.standChanges.forEach { candidate ->
-            val match = RosterFlightMatcher.matchFlightToken(
-                candidate.flightToken,
-                candidate.explicitDate,
-                candidate.notificationDate,
-                flights,
-            )
-            val flight = match.matched
-            if (flight == null) {
-                pendingStandChanges = pendingStandChanges.filterNot { it.id == candidate.id } + candidate
-                awaitingRoster++
-            } else {
-                pendingStandChanges = pendingStandChanges.filterNot { it.id == candidate.id }
-                val cancellation = flightCancellations.firstOrNull { it.flightKey == flight.key }
-                if (
-                    cancellation?.scope != FlightCancellationScope.TRIP ||
-                    cancellation.updatedAtEpochMillis < candidate.sourceEpochMillis
-                ) {
-                    val reduction = SpecialServiceReducer.applyStandChange(standChanges, candidate, flight)
-                    if (!reduction.conflict) {
-                        standChanges = reduction.records
-                        if (reduction.applied) standChangesApplied++
-                    }
-                }
-                resolvedExpiry = maxOf(resolvedExpiry, flight.expiresAtEpochMillis)
-            }
-        }
-
+        // 3. 特服：低置信直接忽略；新于取消消息的 UPSERT 会撤销取消。
         message.serviceCandidates.forEach { candidate ->
-            val match = RosterFlightMatcher.match(candidate, flights)
-            val flight = match.matched
             if (candidate.confidence == Confidence.LOW) {
-                // 低置信结果直接忽视，不再进入人工确认流程。
                 manualReviews++
                 return@forEach
             }
+            val flight = candidate.matchAgainst(flights)
             if (flight == null) {
-                pendingReviews = pendingReviews.filterNot { it.id == candidate.id } + candidate.toPendingReview(emptyList())
+                pendingReviews = pendingReviews.filterNot { it.id == candidate.id } + candidate.toPendingReview()
                 awaitingRoster++
                 return@forEach
             }
-
             pendingReviews = pendingReviews.filterNot { it.id == candidate.id }
             val cancellation = flightCancellations.firstOrNull { it.flightKey == flight.key }
             val cancelledByNewerMessage = candidate.action == CandidateAction.UPSERT &&
@@ -366,8 +335,8 @@ object MucMessageReducer {
             specialServicesAutoMatched = specialServicesAutoMatched,
             awaitingRoster = awaitingRoster,
             manualReviews = manualReviews,
-            gateChangesApplied = gateChangesApplied,
-            standChangesApplied = standChangesApplied,
+            gateChangesApplied = gateLane.applied,
+            standChangesApplied = standLane.applied,
             cancellationsApplied = cancellationsApplied,
             resolvedExpiryEpochMillis = resolvedExpiry,
         )
@@ -377,7 +346,7 @@ object MucMessageReducer {
         initial: SpecialServiceState,
         flights: List<FlightReference>,
     ): SpecialServiceState {
-        fun refreshedExpiry(flightNumber: String, operationDate: java.time.LocalDate, fallback: Long): Long =
+        fun refreshedExpiry(flightNumber: String, operationDate: LocalDate, fallback: Long): Long =
             flights.firstOrNull { it.flightNumber == flightNumber && it.operationDate == operationDate }
                 ?.expiresAtEpochMillis ?: fallback
 
@@ -411,24 +380,23 @@ object MucMessageReducer {
 
 object SpecialServiceExpiry {
     fun prune(state: SpecialServiceState, nowEpochMillis: Long): SpecialServiceState {
-        val records = state.records.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val pending = state.pendingReviews.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val gateChanges = state.gateChanges.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val pendingGateChanges = state.pendingGateChanges.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val standChanges = state.standChanges.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val pendingStandChanges = state.pendingStandChanges.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val flightCancellations = state.flightCancellations.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val pendingFlightCancellations = state.pendingFlightCancellations.filter { it.expiresAtEpochMillis > nowEpochMillis }
-        val referencedExpiry = buildMap<String, Long> {
-            records.forEach { record -> put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }
-            pending.forEach { review -> put(review.fingerprint, maxOf(get(review.fingerprint) ?: 0L, review.expiresAtEpochMillis)) }
-            gateChanges.forEach { record -> put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }
-            pendingGateChanges.forEach { candidate -> put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }
-            standChanges.forEach { record -> put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }
-            pendingStandChanges.forEach { candidate -> put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }
-            flightCancellations.forEach { record -> put(record.fingerprint, maxOf(get(record.fingerprint) ?: 0L, record.expiresAtEpochMillis)) }
-            pendingFlightCancellations.forEach { candidate -> put(candidate.fingerprint, maxOf(get(candidate.fingerprint) ?: 0L, candidate.expiresAtEpochMillis)) }
-        }
+        fun <T : Fingerprinted> List<T>.alive(): List<T> = filter { it.expiresAtEpochMillis > nowEpochMillis }
+
+        val records = state.records.alive()
+        val pending = state.pendingReviews.alive()
+        val gateChanges = state.gateChanges.alive()
+        val pendingGateChanges = state.pendingGateChanges.alive()
+        val standChanges = state.standChanges.alive()
+        val pendingStandChanges = state.pendingStandChanges.alive()
+        val flightCancellations = state.flightCancellations.alive()
+        val pendingFlightCancellations = state.pendingFlightCancellations.alive()
+        // 只要某条消息还有任何派生对象存活，它的指纹就要跟着保鲜，否则重复通知会被当成新消息。
+        val referencedExpiry = (
+            records + pending + gateChanges + pendingGateChanges +
+                standChanges + pendingStandChanges + flightCancellations + pendingFlightCancellations
+            )
+            .groupBy(Fingerprinted::fingerprint)
+            .mapValues { (_, items) -> items.maxOf(Fingerprinted::expiresAtEpochMillis) }
         val processed = state.processedFingerprints.map { fingerprint ->
             referencedExpiry[fingerprint.value]?.let { expiry ->
                 fingerprint.copy(expiresAtEpochMillis = maxOf(fingerprint.expiresAtEpochMillis, expiry))
@@ -458,7 +426,7 @@ object SpecialServiceDedupe {
     ): Boolean = processedFingerprints.any { processed ->
         processed.value == fingerprint &&
             processed.expiresAtEpochMillis > nowEpochMillis &&
-            (processed.ignored || !sourceTimeReliable || processed.sourceEpochMillis == sourceEpochMillis)
+            (!sourceTimeReliable || processed.sourceEpochMillis == sourceEpochMillis)
     }
 }
 
@@ -468,7 +436,7 @@ private fun recordKey(
     wheelchairLevel: WheelchairLevel?,
 ): String = listOf(flight.flightNumber, flight.operationDate, serviceType, wheelchairLevel?.name.orEmpty()).joinToString("|")
 
-internal fun ParsedServiceCandidate.toPendingReview(suggestions: List<FlightReference>) = PendingServiceReview(
+internal fun ParsedServiceCandidate.toPendingReview() = PendingServiceReview(
     id = id,
     fingerprint = fingerprint,
     flightToken = flightToken,
@@ -481,7 +449,6 @@ internal fun ParsedServiceCandidate.toPendingReview(suggestions: List<FlightRefe
     action = action,
     sourceEpochMillis = sourceEpochMillis,
     expiresAtEpochMillis = expiresAtEpochMillis,
-    suggestedFlights = suggestions,
 )
 
 internal fun PendingServiceReview.toParsedCandidate() = ParsedServiceCandidate(
@@ -498,11 +465,7 @@ internal fun PendingServiceReview.toParsedCandidate() = ParsedServiceCandidate(
     expiresAtEpochMillis = expiresAtEpochMillis,
 )
 
-private fun PendingServiceReview.matches(flight: FlightReference): Boolean =
-    RosterFlightMatcher.matchFlightToken(flightToken, explicitDate, notificationDate, listOf(flight)).matched != null
+private fun MucCandidate.matchAgainst(flights: List<FlightReference>): FlightReference? =
+    RosterFlightMatcher.matchFlightToken(flightToken, explicitDate, notificationDate, flights).matched
 
-private fun ParsedGateChangeCandidate.matches(flight: FlightReference): Boolean =
-    RosterFlightMatcher.matchFlightToken(flightToken, explicitDate, notificationDate, listOf(flight)).matched != null
-
-private fun ParsedStandChangeCandidate.matches(flight: FlightReference): Boolean =
-    RosterFlightMatcher.matchFlightToken(flightToken, explicitDate, notificationDate, listOf(flight)).matched != null
+private fun MucCandidate.matches(flight: FlightReference): Boolean = matchAgainst(listOf(flight)) != null
