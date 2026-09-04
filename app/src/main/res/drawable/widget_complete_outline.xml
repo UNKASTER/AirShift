@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "完成"：描边按钮，不再是整块红色，降低误触的视觉权重。 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/widget_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/widget_outline" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</ripple>

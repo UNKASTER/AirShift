@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 出港方向 chip：浅红底（CeaRedSoft）+ 深红字，999dp 全圆角，与 App 内卡片语言一致。 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="999dp" />
-    <solid android:color="@color/cea_red_soft" />
-</shape>
+<!-- 出港夹条：航段行左侧 3dp 红色竖条。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="3dp"
+        android:gravity="start|fill_vertical">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_departure" />
+            <corners android:radius="1.5dp" />
+        </shape>
+    </item>
+</layer-list>

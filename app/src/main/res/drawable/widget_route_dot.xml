@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 航线左端点：实心藏青圆点（起笔锚点）。 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#7314284B" />
-</shape>

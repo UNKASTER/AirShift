@@ -9,4 +9,23 @@
     <string name="duty_widget_complete">完成</string>
     <string name="duty_widget_complete_content_description">完成当前执勤</string>
     <string name="duty_widget_stand_content_description">机位</string>
+    <string name="duty_widget_status_countdown">距到位</string>
+    <string name="duty_widget_status_label">保障状态</string>
+    <string name="duty_widget_due_label">到位时间</string>
+    <string name="duty_widget_status_completed">已完成</string>
+    <string name="duty_widget_status_overdue">应立即到位</string>
+    <string name="duty_widget_status_no_time">暂无到位时间信息</string>
+    <string name="duty_widget_vip">VIP</string>
+    <string name="duty_widget_stand_missing">机位 —</string>
+    <string name="duty_widget_tag_in">进</string>
+    <string name="duty_widget_tag_out">出</string>
+    <!-- 小组件预览（launcher 用布局本身作 previewLayout）的示意文案 -->
+    <string name="duty_widget_preview_header">执勤 2/8 · 进港后接续出港 · B5261 · 73A</string>
+    <string name="duty_widget_preview_time">17:05</string>
+    <string name="duty_widget_preview_flight_in">FM9211</string>
+    <string name="duty_widget_preview_flight_out">FM9212</string>
+    <string name="duty_widget_preview_place">上海浦东 PVG</string>
+    <string name="duty_widget_preview_stand">机位 355</string>
+    <string name="duty_widget_preview_message_title">今日执勤全部完成</string>
+    <string name="duty_widget_preview_message_detail">今天的保障任务已全部执行完毕，辛苦了。</string>
 </resources>

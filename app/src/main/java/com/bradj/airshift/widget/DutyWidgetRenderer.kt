@@ -10,7 +10,10 @@ import com.bradj.airshift.model.LegDirection
 import java.time.Duration
 import java.time.LocalDateTime
 
+/** 把 [WidgetPage] 绑到藏青板面布局上；文案全部取字符串资源。 */
 internal object DutyWidgetRenderer {
+    private const val MISSING_STAND = "--"
+
     fun render(context: Context, page: WidgetPage, builtAt: LocalDateTime): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_duty_item)
         when (page) {
@@ -40,7 +43,7 @@ internal object DutyWidgetRenderer {
         bindStatus(context, views, page, builtAt)
         bindLeg(context, views, page.legs.getOrNull(0), PRIMARY_LEG)
         bindLeg(context, views, page.legs.getOrNull(1), SECONDARY_LEG)
-        // 无任何航段（如仅有机号/时刻的备份执勤）时隐藏悬空虚线。
+        // 无任何航段（如仅有机号/时刻的备份执勤）时隐藏悬空行线。
         views.setViewVisibility(R.id.widget_divider, if (page.legs.isEmpty()) View.GONE else View.VISIBLE)
     }
 
@@ -52,13 +55,16 @@ internal object DutyWidgetRenderer {
     ) {
         when (page.status) {
             WidgetDutyStatus.COMPLETED -> {
-                views.setTextViewText(R.id.widget_status_label, "保障状态")
+                views.setTextViewText(R.id.widget_status_label, statusLabel(context))
                 views.setViewVisibility(R.id.widget_countdown, View.GONE)
                 views.setViewVisibility(R.id.widget_due_column, View.GONE)
-                showStatusText(context, views, "已完成", R.color.success_green)
+                showStatusText(context, views, R.string.duty_widget_status_completed, R.color.widget_ok)
             }
             WidgetDutyStatus.COUNTDOWN -> {
-                views.setTextViewText(R.id.widget_status_label, "距离到位")
+                views.setTextViewText(
+                    R.id.widget_status_label,
+                    context.getString(R.string.duty_widget_status_countdown),
+                )
                 views.setViewVisibility(R.id.widget_status_text, View.GONE)
                 views.setViewVisibility(R.id.widget_countdown, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_due_column, View.VISIBLE)
@@ -69,24 +75,27 @@ internal object DutyWidgetRenderer {
                 views.setChronometer(R.id.widget_countdown, SystemClock.elapsedRealtime() + remainingMillis, null, true)
             }
             WidgetDutyStatus.OVERDUE -> {
-                views.setTextViewText(R.id.widget_status_label, "保障状态")
+                views.setTextViewText(R.id.widget_status_label, statusLabel(context))
                 views.setViewVisibility(R.id.widget_countdown, View.GONE)
                 views.setViewVisibility(R.id.widget_due_column, View.VISIBLE)
                 views.setTextViewText(R.id.widget_gate_arrival, page.gateArrivalClock)
-                showStatusText(context, views, "应立即到位", R.color.cea_red)
+                views.setTextColor(R.id.widget_gate_arrival, ContextCompat.getColor(context, R.color.on_board_alert))
+                showStatusText(context, views, R.string.duty_widget_status_overdue, R.color.on_board_alert)
             }
             WidgetDutyStatus.NO_TIME -> {
-                views.setTextViewText(R.id.widget_status_label, "保障状态")
+                views.setTextViewText(R.id.widget_status_label, statusLabel(context))
                 views.setViewVisibility(R.id.widget_countdown, View.GONE)
                 views.setViewVisibility(R.id.widget_due_column, View.GONE)
-                showStatusText(context, views, "暂无到位时间信息", R.color.text_hint)
+                showStatusText(context, views, R.string.duty_widget_status_no_time, R.color.on_board_secondary)
             }
         }
     }
 
-    private fun showStatusText(context: Context, views: RemoteViews, text: String, colorRes: Int) {
+    private fun statusLabel(context: Context): String = context.getString(R.string.duty_widget_status_label)
+
+    private fun showStatusText(context: Context, views: RemoteViews, textRes: Int, colorRes: Int) {
         views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
-        views.setTextViewText(R.id.widget_status_text, text)
+        views.setTextViewText(R.id.widget_status_text, context.getString(textRes))
         views.setTextColor(R.id.widget_status_text, ContextCompat.getColor(context, colorRes))
     }
 
@@ -117,22 +126,26 @@ internal object DutyWidgetRenderer {
         val inbound = leg.direction == LegDirection.INBOUND
         views.setViewVisibility(ids.block, View.VISIBLE)
         views.setTextViewText(ids.tag, leg.direction.shortLabel)
+        // 夹条颜色随方向：背景是 3dp 竖条，文字色与之配套。
         views.setInt(
             ids.tag,
             "setBackgroundResource",
             if (inbound) R.drawable.widget_tag_inbound else R.drawable.widget_tag_outbound,
         )
-        // tonal chip：浅底深字，文字色随方向与底色配套。
         views.setTextColor(
             ids.tag,
-            ContextCompat.getColor(context, if (inbound) R.color.inbound_blue else R.color.on_cea_red_soft),
+            ContextCompat.getColor(context, if (inbound) R.color.widget_arrival else R.color.widget_departure),
         )
         views.setTextViewText(ids.flight, leg.flight)
         views.setTextViewText(ids.place, leg.place)
-        views.setTextViewText(ids.stand, leg.stand)
+        val standMissing = leg.stand == MISSING_STAND
+        views.setTextViewText(
+            ids.stand,
+            if (standMissing) context.getString(R.string.duty_widget_stand_missing) else leg.stand,
+        )
         views.setTextColor(
             ids.stand,
-            ContextCompat.getColor(context, if (leg.stand == "--") R.color.text_hint else R.color.text_body),
+            ContextCompat.getColor(context, if (standMissing) R.color.on_board_secondary else R.color.on_board),
         )
     }
 }

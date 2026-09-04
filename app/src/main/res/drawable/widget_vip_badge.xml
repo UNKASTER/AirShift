@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- VIP 灯：4dp 圆角小矩形，板面上的琥珀。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="9dp" />
-    <solid android:color="@color/vip_container" />
+    <solid android:color="@color/widget_vip_bg" />
+    <corners android:radius="4dp" />
 </shape>
