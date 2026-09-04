@@ -13,10 +13,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
@@ -98,8 +99,11 @@ fun DutyStrip(
     ) {
         DirectionHolder(assignment.kind)
         Column(modifier = Modifier.weight(1f)) {
+            val hasServices = legs.any { it.hasSpecialServices }
             if (expanded) {
                 StripHead(assignment, legs)
+            } else if (assignment.hasVip || hasServices) {
+                CollapsedHead(assignment, hasServices)
             }
             legs.forEachIndexed { index, leg ->
                 if (index > 0) {
@@ -110,15 +114,9 @@ fun DutyStrip(
                     )
                 }
                 if (expanded) {
-                    ExpandedLeg(leg, baseDate)
+                    ExpandedLeg(leg, baseDate, completed)
                 } else {
-                    LegLine(
-                        leg = leg,
-                        baseDate = baseDate,
-                        completed = completed,
-                        vipText = if (index == 0) assignment.vipBadgeText() else null,
-                        hasSpecialServices = index == 0 && legs.any { it.hasSpecialServices },
-                    )
+                    LegLine(leg = leg, baseDate = baseDate, completed = completed)
                 }
             }
             if (expanded) {
@@ -137,56 +135,69 @@ private fun RosterAssignment.vipBadgeText(): String? = when {
 
 // ---------- 折叠：一航段一行，44dp ----------
 
+/** 折叠条只在有 VIP 或特服时多一行 24dp 的头：类型小字 + 灯，不挤占航段行的列宽。 */
 @Composable
-private fun LegLine(
-    leg: FlightLegUiModel,
-    baseDate: LocalDate?,
-    completed: Boolean,
-    vipText: String?,
-    hasSpecialServices: Boolean,
-) {
+private fun CollapsedHead(assignment: RosterAssignment, hasServices: Boolean) {
     val c = AirShiftTokens.colors
     Row(
-        modifier = Modifier.fillMaxWidth().height(44.dp).padding(start = 10.dp, end = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(assignment.kind.title(), style = MaterialTheme.typography.labelSmall, color = c.hint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (hasServices) {
+                StatusLamp(
+                    text = "特服",
+                    kind = LampKind.Neutral,
+                    icon = LinearIcons.Wheelchair,
+                    iconContentDescription = null,
+                )
+            }
+            assignment.vipBadgeText()?.let { StatusLamp(text = it, kind = LampKind.Vip) }
+        }
+    }
+}
+
+/** 固定列宽随系统字体缩放：按 sp 折算成 dp，放大字体时列也跟着变宽，航线列用弹性吸收。 */
+@Composable
+private fun Int.scaledDp(): androidx.compose.ui.unit.Dp = with(LocalDensity.current) { this@scaledDp.sp.toDp() }
+
+/**
+ * 一航段一行：向 16 · 时间 46 · 航班 58 · 航线（弹性）· 机位 · 状态灯。
+ * 固定列按 360dp 屏预算，航线列至少留得下"PVG →"。
+ */
+@Composable
+private fun LegLine(leg: FlightLegUiModel, baseDate: LocalDate?, completed: Boolean) {
+    val c = AirShiftTokens.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = 10.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             leg.direction.shortLabel,
-            modifier = Modifier.width(18.dp),
+            modifier = Modifier.width(16.scaledDp()),
             style = MaterialTheme.typography.labelMedium,
             color = if (leg.direction == LegDirection.INBOUND) c.arrival else c.departureText,
         )
-        Spacer(Modifier.width(8.dp))
-        TimeText(leg = leg, baseDate = baseDate, style = StripTime, modifier = Modifier.width(52.dp))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
+        TimeText(leg = leg, baseDate = baseDate, style = StripTime, modifier = Modifier.width(46.scaledDp()))
+        Spacer(Modifier.width(6.dp))
         Text(
             leg.flight,
-            modifier = Modifier.width(66.dp),
+            modifier = Modifier.width(58.scaledDp()),
             style = FlightNumber,
             color = c.ink,
             maxLines = 1,
             softWrap = false,
+            overflow = TextOverflow.Visible,
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         RouteCodes(leg = leg, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         InlineStand(leg)
-        val status = legStatus(leg, completed)
-        if (vipText != null) {
+        legStatus(leg, completed)?.let { status ->
             Spacer(Modifier.width(6.dp))
-            StatusLamp(text = vipText, kind = LampKind.Vip)
-        }
-        if (hasSpecialServices) {
-            Spacer(Modifier.width(6.dp))
-            StatusLamp(
-                text = "",
-                kind = LampKind.Neutral,
-                icon = LinearIcons.Wheelchair,
-                iconContentDescription = "特服",
-            )
-        }
-        if (status != null) {
-            Spacer(Modifier.width(8.dp))
             StatusLamp(text = status.text, kind = status.kind, dot = status.dot)
         }
     }
@@ -222,14 +233,19 @@ private fun codeSpan(color: Color) = SpanStyle(
     fontSize = 14.sp,
 )
 
-/** 折叠行里的本站机位："机位 355"，缺失为 —。 */
+/** 折叠行里的本站机位：定位钉 + 数字，缺失为 —。 */
 @Composable
 private fun InlineStand(leg: FlightLegUiModel) {
     val c = AirShiftTokens.colors
     val stand = leg.localStand()
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text("机位", style = MaterialTheme.typography.labelSmall, color = c.hint)
-        Spacer(Modifier.width(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = LinearIcons.Stand,
+            contentDescription = "机位",
+            modifier = Modifier.size(12.dp),
+            tint = c.hint,
+        )
+        Spacer(Modifier.width(3.dp))
         Text(
             stand?.value ?: MISSING,
             style = NumericSmall,
@@ -267,7 +283,7 @@ private fun StripHead(assignment: RosterAssignment, legs: List<FlightLegUiModel>
 }
 
 @Composable
-private fun ExpandedLeg(leg: FlightLegUiModel, baseDate: LocalDate?) {
+private fun ExpandedLeg(leg: FlightLegUiModel, baseDate: LocalDate?, completed: Boolean) {
     val c = AirShiftTokens.colors
     val stand = leg.localStand()
     Column(
@@ -305,7 +321,7 @@ private fun ExpandedLeg(leg: FlightLegUiModel, baseDate: LocalDate?) {
             }
         }
         RouteLine(leg)
-        TimesRow(leg, baseDate)
+        TimesRow(leg, baseDate, completed)
         MetaRow(leg)
         leg.details.firstOrNull { it.kind == DetailKind.GATE_CHANGE }?.let { MucLine("登机口变更", it.value) }
         leg.details.firstOrNull { it.kind == DetailKind.STAND_CHANGE_SOURCE }?.let { MucLine("机位变更", it.value) }
@@ -334,22 +350,27 @@ private fun RouteLine(leg: FlightLegUiModel) {
     Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
+/** 有代码给"PVG 上海浦东"；只有名称给名称；都没有给 —。 */
 private fun AnnotatedString.Builder.appendAirport(
     code: String?,
     name: String?,
     c: com.bradj.airshift.ui.theme.AirShiftPalette,
 ) {
-    withStyle(codeSpan(if (code == null) c.hint else c.ink)) { append(code ?: MISSING) }
-    if (name != null) {
-        withStyle(SpanStyle(color = c.inkSecondary)) { append(" $name") }
+    when {
+        code != null -> {
+            withStyle(codeSpan(c.ink)) { append(code) }
+            if (name != null) withStyle(SpanStyle(color = c.inkSecondary)) { append(" $name") }
+        }
+        name != null -> withStyle(SpanStyle(color = c.ink)) { append(name) }
+        else -> withStyle(codeSpan(c.hint)) { append(MISSING) }
     }
 }
 
 /** 计划 / 预计（或实际）时间 + 状态灯。 */
 @Composable
-private fun TimesRow(leg: FlightLegUiModel, baseDate: LocalDate?) {
+private fun TimesRow(leg: FlightLegUiModel, baseDate: LocalDate?, completed: Boolean) {
     val c = AirShiftTokens.colors
-    val status = legStatus(leg, completed = false)
+    val status = legStatus(leg, completed)
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -535,7 +556,7 @@ private fun TimeText(
     } else {
         Text(
             clockWithDayMarker(time, baseDate, c.estimate),
-            modifier = modifier.widthIn(min = 44.dp),
+            modifier = modifier,
             style = style,
             color = if (leg.live != null) liveColor(leg) else c.ink,
             maxLines = 1,

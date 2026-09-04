@@ -281,6 +281,7 @@ private fun ImportStrip(isWorking: Boolean, onImportImage: () -> Unit, onImportE
                 style = MaterialTheme.typography.bodyMedium,
                 color = c.inkSecondary,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.width(8.dp))
             MiniButton(text = "图片", icon = LinearIcons.Image, onClick = onImportImage)

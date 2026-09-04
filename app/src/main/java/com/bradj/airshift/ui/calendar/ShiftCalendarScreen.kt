@@ -278,7 +278,7 @@ private fun holderColor(row: ShiftCalendarRow): androidx.compose.ui.graphics.Col
 @Composable
 private fun DateColumn(row: ShiftCalendarRow, dimmed: Boolean) {
     val c = AirShiftTokens.colors
-    Column(modifier = Modifier.width(54.dp)) {
+    Column(modifier = Modifier.width(48.dp)) {
         Text(
             "${row.day.date.monthValue}/${row.day.date.dayOfMonth}",
             style = StripTime.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
@@ -303,7 +303,7 @@ private fun ShiftLine(row: ShiftCalendarRow, dimmed: Boolean) {
             Spacer(Modifier.width(8.dp))
         }
         Text(
-            if (row.day.attends && row.day.slot != null && handover) "只上上午" else dayKindText(row),
+            dayKindLine(row),
             modifier = Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.bodyMedium,
             color = if (dimmed) c.hint else c.ink,
@@ -345,7 +345,10 @@ private fun BusColumn(row: ShiftCalendarRow) {
     }
 }
 
-/** 到位 / 到场 / 富余；到场晚于到位时用琥珀灯提示提前一班，而不是混在灰字里。 */
+/**
+ * 两行：到位 / 到场；富余与来源。到场晚于到位时第二行换成琥珀灯"建议提前一班"，而不是混在灰字里。
+ * 360dp 屏上中间列只有约 150dp，拼成一行必然被省略。
+ */
 @Composable
 private fun BusDetail(bus: BusRecommendation?) {
     val c = AirShiftTokens.colors
@@ -353,28 +356,31 @@ private fun BusDetail(bus: BusRecommendation?) {
         Text("没有合适班车，需自行安排到场", style = MaterialTheme.typography.bodySmall, color = c.estimate)
         return
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val numeric = MaterialTheme.typography.bodySmall.copy(
+        fontFamily = NumericSmall.fontFamily,
+        fontFeatureSettings = "tnum",
+    )
+    Text(
+        "到位 ${ShiftClock.format(bus.reportByMinutes)} · 到场 ${ShiftClock.format(bus.arriveAtMinutes)}",
+        style = numeric,
+        color = c.inkSecondary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    if (bus.spareMinutes < 0) {
+        StatusLamp(text = "晚 ${-bus.spareMinutes} 分 · 建议提前一班", kind = LampKind.Estimate)
+    } else {
         Text(
             buildString {
-                append("到位 ${ShiftClock.format(bus.reportByMinutes)}")
-                append(" · 到场 ${ShiftClock.format(bus.arriveAtMinutes)}")
-                if (bus.spareMinutes >= 0) append(" · 富余 ${bus.spareMinutes} 分")
+                append("富余 ${bus.spareMinutes} 分")
                 if (bus.isExtraHandoverBus) append(" · 加班车")
                 append(if (bus.source == ShiftEstimateSource.ROSTER) " · 按当日排班" else " · 预估")
             },
-            modifier = Modifier.weight(1f, fill = false),
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = NumericSmall.fontFamily,
-                fontFeatureSettings = "tnum",
-            ),
-            color = c.inkSecondary,
+            style = numeric,
+            color = c.hint,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (bus.spareMinutes < 0) {
-            Spacer(Modifier.width(6.dp))
-            StatusLamp(text = "晚 ${-bus.spareMinutes} 分 · 建议提前一班", kind = LampKind.Estimate)
-        }
     }
 }
 
@@ -383,10 +389,19 @@ private fun BusRecommendation.departureText(): String = "%02d:%02d".format(depar
 private fun dayKindText(row: ShiftCalendarRow): String = when {
     row.day.kind.isRest -> "休息"
     row.day.isHandoverExempt ->
-        "交接班日不到岗（${row.day.slotInheritedFrom?.let { "${it.monthValue}月${it.dayOfMonth}日" }.orEmpty()}" +
-            "排${row.day.slot?.label.orEmpty()}，干到次日凌晨）"
-    row.day.kind == ShiftDayKind.HANDOVER -> "交接班 · 只上上午"
+        "不到岗 · ${row.day.slotInheritedFrom?.let { "${it.monthValue}/${it.dayOfMonth}" }.orEmpty()}" +
+            " 排${row.day.slot?.label.orEmpty()}干到次日凌晨"
+    row.day.kind == ShiftDayKind.HANDOVER -> "只上上午"
     row.day.kind == ShiftDayKind.WORK_FIRST -> "接班日 · 上午由上一班交出"
+    else -> "整班"
+}
+
+/** 列表行里的短说明；板面主体仍用 [dayKindText] 的完整说法。 */
+private fun dayKindLine(row: ShiftCalendarRow): String = when {
+    row.day.kind.isRest -> "休息"
+    row.day.isHandoverExempt -> dayKindText(row)
+    row.day.kind == ShiftDayKind.HANDOVER -> "只上上午"
+    row.day.kind == ShiftDayKind.WORK_FIRST -> "接班日"
     else -> "整班"
 }
 

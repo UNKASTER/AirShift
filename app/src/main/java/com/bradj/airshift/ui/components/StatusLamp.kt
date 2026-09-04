@@ -72,7 +72,7 @@ fun StatusLamp(
             .height(22.dp)
             .clip(RoundedCornerShape(AirShiftRadius.Lamp))
             .background(container)
-            .padding(horizontal = 7.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (dot) {

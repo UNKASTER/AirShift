@@ -298,14 +298,17 @@ private fun ShiftCalendarSection(
             }
             HintLine("导入一份带“候机早班/中班/夜班”的 Excel 后，应用会自动校正班组表。")
         }
-        SettingRow(label = "到位余量", value = "越大则推荐更早一班班车")
+        SettingRow(
+            label = "到位余量",
+            value = if (reportMarginMinutes == 0) "不留余量" else "$reportMarginMinutes 分钟",
+        )
         SegmentedLamps(
             options = ShiftBusPlan.REPORT_MARGIN_OPTIONS,
             selected = reportMarginMinutes,
             label = { minutes -> if (minutes == 0) "不留余量" else "$minutes 分钟" },
             onSelect = onMarginSelected,
         )
-        HintLine("在“最晚到位时间”之前再留出的富余。")
+        HintLine("在“最晚到位时间”之前再留出的富余，越大则推荐更早一班班车。")
     }
 }
 
