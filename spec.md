@@ -628,7 +628,7 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败�
 - Android Lint：`app/lint-baseline.xml` 记录既有 warning，`warningsAsErrors=true`，新增 warning 让 `lintDebug` 失败。
 - detekt 1.23.8：默认规则集之上叠加 `app/detekt.yml`（对 `@Composable` 放开 FunctionNaming / LongMethod / LongParameterList / CyclomaticComplexMethod / NestedBlockDepth / MagicNumber / TooManyFunctions，`ui/theme` 排除出 MagicNumber），`app/detekt-baseline.xml` 记录既有发现，新增发现让 `detekt` 失败。
 - 内置字体 `app/src/main/res/font/`：Barlow 与 Barlow Semi Condensed 六个静态 TTF（OFL 1.1，见 THIRD_PARTY_NOTICES.md）。
-- GitHub Actions（`.github/workflows/ci.yml`）：push 到 `main` 与 PR 时在 ubuntu 上执行 `testDebugUnitTest lintDebug detekt`；真机测试仍手动。
+- GitHub Actions（`.github/workflows/ci.yml`）：push 到 `main` 与 PR 时在 ubuntu 上执行 `testDebugUnitTest lintDebug detekt`；真机测试仍手动。`gradlew` 在 git 里必须是 `100755`（Windows 提交默认丢失可执行位，0.10.x 的两次 CI 因 `Permission denied` 退出码 126 失败，已用 `git update-index --chmod=+x gradlew` 修正）。
 
 主要命令：
 
