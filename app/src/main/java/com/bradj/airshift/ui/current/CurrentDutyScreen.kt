@@ -50,11 +50,12 @@ import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.components.formatClock
 import com.bradj.airshift.ui.components.remainingText
 import com.bradj.airshift.ui.theme.AirShiftFonts
+import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.AirShiftTokens
 import com.bradj.airshift.ui.theme.BoardNumeric
 import com.bradj.airshift.ui.theme.BoardValue
-import com.bradj.airshift.ui.theme.rememberAnimatorScaleEnabled
+import com.bradj.airshift.ui.theme.LocalReduceMotion
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -253,12 +254,13 @@ private fun CountdownUnit(text: String) {
 @Composable
 private fun UrgentLamp() {
     val c = AirShiftTokens.colors
-    val animate = rememberAnimatorScaleEnabled()
+    // Compose 在系统比例为 0 时会把无限动画直接停在终值（0.45）；这里显式停在中间亮度，静止时不刺眼。
+    val reduceMotion = LocalReduceMotion.current
     val halo by rememberInfiniteTransition(label = "urgentHalo").animateFloat(
-        initialValue = if (animate) 0.15f else 0.25f,
-        targetValue = if (animate) 0.45f else 0.25f,
+        initialValue = if (reduceMotion) 0.25f else 0.15f,
+        targetValue = if (reduceMotion) 0.25f else 0.45f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            animation = tween(durationMillis = AirShiftMotion.BreathMs, easing = AirShiftMotion.Standard),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "urgentHaloAlpha",

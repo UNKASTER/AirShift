@@ -3,7 +3,6 @@ package com.bradj.airshift.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -128,7 +127,7 @@ private val LampHeight = 3.dp
 
 /**
  * 底栏：四个等宽目的地，顶部 1dp 线；一枚 20×3dp 东航红"灯"在四个标签间横移到选中项上方，
- * 图标与文字 120 ms 变藏青。灯的位移与页面的横向滑入用同一支弹簧，读成一个动作。
+ * 图标与文字用 effects 弹簧变藏青。灯的位移与页面的横向滑入用同一支弹簧，读成一个动作。
  */
 @Composable
 private fun DutyNavigationBar(
@@ -143,7 +142,7 @@ private fun DutyNavigationBar(
             val index = Destinations.indexOfFirst { it.section == section }.coerceAtLeast(0)
             val lampX by animateDpAsState(
                 targetValue = itemWidth * index + (itemWidth - LampWidth) / 2,
-                animationSpec = AirShiftMotion.snap(Dp.VisibilityThreshold),
+                animationSpec = AirShiftMotion.fastSpatial(Dp.VisibilityThreshold),
                 label = "navLamp",
             )
             Row(modifier = Modifier.fillMaxSize()) {
@@ -177,7 +176,7 @@ private fun NavigationItem(
     val c = AirShiftTokens.colors
     val tint by animateColorAsState(
         targetValue = if (selected) c.ink else c.hint,
-        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
+        animationSpec = AirShiftMotion.defaultEffects(),
         label = "navTint",
     )
     Box(

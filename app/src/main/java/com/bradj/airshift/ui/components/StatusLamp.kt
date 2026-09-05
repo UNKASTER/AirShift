@@ -1,7 +1,6 @@
 package com.bradj.airshift.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
@@ -45,7 +44,7 @@ private fun LampKind.colors(): LampColors {
  * 状态灯：22dp 高的小矩形（4dp 圆角），12sp SemiBold；不是胶囊。
  * [dot] 在文字前加一个 6dp 圆点，用于飞行状态（已起飞 / 晚 15 分 / 已取消）；
  * [icon] 在文字前加一个 14dp 线性图标，用于特服轮椅。
- * 颜色变化 150 ms。
+ * 颜色用 effects 弹簧过渡（约 115 ms）。
  */
 @Composable
 fun StatusLamp(
@@ -59,12 +58,12 @@ fun StatusLamp(
     val target = kind.colors()
     val container by animateColorAsState(
         target.container,
-        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
+        AirShiftMotion.defaultEffects(),
         label = "lampContainer",
     )
     val content by animateColorAsState(
         target.content,
-        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
+        AirShiftMotion.defaultEffects(),
         label = "lampContent",
     )
     Row(

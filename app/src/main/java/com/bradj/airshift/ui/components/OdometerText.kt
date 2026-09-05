@@ -2,7 +2,6 @@ package com.bradj.airshift.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -23,11 +22,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.IntOffset
 import com.bradj.airshift.ui.theme.AirShiftMotion
 
 /**
- * 翻牌数字：每一位数字变化时上下翻（增大向上、减小向下），280 ms 减速曲线；
+ * 翻牌数字：每一位数字变化时上下翻（增大向上、减小向下），220 ms（`AirShiftMotion.FlipMs`）减速曲线；
  * 非数字字符不动。每个数字槽位固定为 0–9 中最宽一位的宽度，位置不随数字变化。
  * 无障碍上整体读作一段文字。
  */
@@ -56,14 +54,10 @@ fun OdometerText(
                         targetState = slot.char,
                         transitionSpec = {
                             val up = targetState > initialState
-                            val spec = tween<IntOffset>(
-                                AirShiftMotion.FlipMs,
-                                easing = AirShiftMotion.EmphasizedDecelerate,
-                            )
-                            val enter = slideInVertically(spec) { if (up) it else -it } +
-                                fadeIn(tween(AirShiftMotion.FlipMs))
-                            val exit = slideOutVertically(spec) { if (up) -it else it } +
-                                fadeOut(tween(AirShiftMotion.FlipMs))
+                            val enter = slideInVertically(AirShiftMotion.flip()) { if (up) it else -it } +
+                                fadeIn(AirShiftMotion.flip())
+                            val exit = slideOutVertically(AirShiftMotion.flip()) { if (up) -it else it } +
+                                fadeOut(AirShiftMotion.flip())
                             (enter togetherWith exit).using(SizeTransform(clip = true))
                         },
                         label = "odometer$index",

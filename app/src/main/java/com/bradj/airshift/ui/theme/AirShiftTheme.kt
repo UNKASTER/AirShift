@@ -403,7 +403,13 @@ fun AirShiftTheme(
     content: @Composable () -> Unit,
 ) {
     val palette = if (darkTheme) DarkPalette else LightPalette
-    CompositionLocalProvider(LocalAirShiftPalette provides palette) {
+    val reduceMotion = rememberReduceMotion()
+    CompositionLocalProvider(
+        LocalAirShiftPalette provides palette,
+        LocalReduceMotion provides reduceMotion,
+    ) {
+        // material3 1.4.0 的 MotionScheme / MaterialTheme.motionScheme 是 internal：应用自己的弹簧值在
+        // AirShiftMotion 里镜像 M3 standard，这里不传 motionScheme（M3 组件用它内部的同一组值）。
         MaterialTheme(
             colorScheme = palette.toColorScheme(),
             typography = AirShiftTypography,

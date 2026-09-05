@@ -61,25 +61,24 @@
 
 折叠行的固定列按 sp 折算（16 / 46 / 58），随系统字体放大；字体 ≥1.15 倍时航段改为两行（向/时间/航班/灯 + 航线/机位），航线永远不被挤成省略号。板面在"全部完成 / 没有排班"时仍回答"接下来"：下一班的日期、班次、班车与到位时间。
 
-## 动效（`AirShiftMotion`）
+## 动效（`AirShiftMotion` · Material 3 MotionScheme）
 
-原则：第一帧就动、退场比入场快、尺寸与位移用无回弹弹簧（可中断、不慢起步）。不用 Material *standard* 曲线——它起步慢，点了像没反应。
+原则：第一帧就动、退场比入场快、可中断。两类驱动：一次性入退场与翻牌用显式曲线的 tween（`EmphasizedDecelerate` 第一帧就走约 30%）；会反复重触发的尺寸 / 位移 / 颜色用弹簧，弹簧刚度 / 阻尼镜像 M3 standard MotionScheme（spatial 阻尼 0.9 · 刚度 700 / 1400 / 300，effects 阻尼 1.0 · 刚度 1600 / 3800 / 800），只在 `AirShiftMotion` 一处定义（material3 1.4.0 未公开 `MotionScheme`），业务代码里没有散落的弹簧常量。
 
 | Token | 值 | 用途 |
 |---|---|---|
-| Quick | 120 ms | 灯色、底栏着色、按下缩放 |
-| Exit | 70 ms | 旧页、折叠前内容的淡出 |
-| Enter | 180 ms，`EmphasizedDecelerate` | 新页滑入 + 淡入 |
-| RevealDelay | 35 ms | 展开内容淡入相对容器起步的延迟 |
-| Flip | 220 ms，`EmphasizedDecelerate` | 时钟与倒计时逐位翻牌 |
-| SectionOffset | 16dp | 分区切换的横向位移，方向按底栏标签左右 |
-| `snap()` | 弹簧，刚度 1100、临界阻尼（约 150 ms 视觉到位、200 ms 内静止） | 条的展开 / 折叠高度、条在栏位间移动、底栏红灯横移 |
-| 呼吸 | 600 ms 往返 | 只用于"应立即到位"红灯光晕，`rememberAnimatorScaleEnabled()` 为 false 时静止 |
+| Exit | 70 ms · Linear | 旧页、折叠前内容、移除的条淡出 |
+| Content | 120 ms · Linear（可带 35 ms RevealDelay） | 展开内容、新增的条淡入 |
+| Enter | 180 ms · EmphasizedDecelerate | 新页滑入 **与** 淡入（同曲线） |
+| Flip / FlipExit | 220 / 130 ms | 翻牌位移与新数字淡入 / 旧数字淡出 |
+| Breath | 600 ms 往返 · Standard | "应立即到位"红灯光晕；`LocalReduceMotion` 为 true 时静止在 0.25 |
+| fastSpatial | M3 0.9 / 1400（约 140 ms 静止） | 条的展开 / 折叠高度、底栏红灯横移 |
+| defaultSpatial | M3 0.9 / 700（约 190 ms 静止） | 条在栏位间移动、被挤开 |
+| defaultEffects | M3 1.0 / 1600（约 115 ms 静止） | 灯色、底栏着色 |
+| SectionOffset / PressedScale / StaggerStep | 16dp / 0.97 / 40 ms | 切页位移 / 按下缩放 / 稀有时刻逐行延迟 |
 
-- 分区切换 shared-axis：新页从 ±16dp 滑入并淡入，旧页 70 ms 淡出，两者同时起步没有空档；底栏红灯用同一支弹簧滑到目标标签，页面位移与灯位移读成一个动作。
-- 抽单：点条 → 容器高度以弹簧从第一帧起步，新内容 35 ms 后 120 ms 淡入、旧内容 70 ms 淡出；被挤开的条与完成后移栏的条用同一支弹簧跟随（`animateItem`），新增 / 移除的条 120 / 70 ms 淡入淡出。
-- "执勤完成"按下 120 ms 缩到 98%，抬手回弹，点击给一次 `HapticFeedbackType.Confirm`。
-- 弹簧与有限时长动画都跟随系统动画时长比例。
+- `LocalReduceMotion` 由 `AirShiftTheme` 提供，实时跟随系统 `ANIMATOR_DURATION_SCALE`（与 Compose 自身同源）；有限时长动画与弹簧由 Compose 自动缩放，token 只对无限循环、延迟与位移型转场做降级。
+- 时长是 0.11.1 真机手调值（在 emil / ui-animation 区间内），不吸附 M3 时长网格；空间弹簧接口带 `visibilityThreshold`，弹簧在肉眼看不见时就停。
 
 ## 系统栏与主题
 

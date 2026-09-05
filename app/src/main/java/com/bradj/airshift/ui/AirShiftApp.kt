@@ -5,9 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -22,7 +19,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -173,19 +169,15 @@ internal fun AirShiftApp(
         section = section,
         onSectionSelected = dutyNavigation::selectSection,
     ) { padding ->
-        // 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（180 ms 减速），
-        // 旧页 70 ms 淡出。两者同时起步，没有"空档"。
+        // 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（Enter 档，同曲线），旧页 Exit 档淡出。
         val sectionOffsetPx = with(LocalDensity.current) { AirShiftMotion.SectionOffset.roundToPx() }
         AnimatedContent(
             targetState = section,
             transitionSpec = {
                 val forward = targetState.ordinal >= initialState.ordinal
                 val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
-                val slide = tween<IntOffset>(AirShiftMotion.EnterMs, easing = AirShiftMotion.EmphasizedDecelerate)
-                val enter = fadeIn(tween(AirShiftMotion.EnterMs, easing = LinearOutSlowInEasing)) +
-                    slideInHorizontally(slide) { offset }
-                val exit = fadeOut(tween(AirShiftMotion.ExitMs, easing = LinearEasing)) +
-                    slideOutHorizontally(slide) { -offset }
+                val enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset }
+                val exit = fadeOut(AirShiftMotion.exit()) + slideOutHorizontally(AirShiftMotion.enter()) { -offset }
                 enter togetherWith exit
             },
             label = "section",

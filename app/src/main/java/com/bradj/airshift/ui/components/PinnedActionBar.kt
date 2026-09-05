@@ -1,7 +1,6 @@
 package com.bradj.airshift.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -48,7 +47,7 @@ fun PinnedActionBar(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) PRESSED_SCALE else 1f,
-        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
+        animationSpec = AirShiftMotion.defaultEffects(),
         label = "pressScale",
     )
     Column(modifier = modifier.fillMaxWidth().background(c.ground)) {

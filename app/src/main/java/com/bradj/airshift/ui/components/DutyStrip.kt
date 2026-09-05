@@ -3,7 +3,6 @@ package com.bradj.airshift.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.VisibilityThreshold
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -73,7 +72,7 @@ private val MetaValueStyle = NumericSmall.copy(fontSize = 13.sp)
  * - [completed]：已完成，整条变暗，状态灯改为"已完成"；
  * - [onClick]：点击切换展开。
  *
- * 展开 / 折叠：容器高度用无回弹弹簧从第一帧起步，新内容稍后淡入、旧内容更快淡出；
+ * 展开 / 折叠：容器高度用 M3 fast spatial 弹簧（可中断），新内容稍后淡入、旧内容更快淡出；
  * 夹条用绘制铺满整条高度，不需要 `IntrinsicSize` 的逐帧二次测量。
  */
 @Composable
@@ -90,6 +89,8 @@ fun DutyStrip(
     val shape = RoundedCornerShape(AirShiftRadius.Strip)
     val (holderTop, holderBottom) = holderColors(assignment.kind)
     val baseDate = (assignment.scheduledArrival ?: assignment.scheduledDeparture)?.toLocalDate()
+    // SizeTransform 的 lambda 不是组合上下文，弹簧规格要在这里先取好。
+    val sizeSpec = AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)
     AnimatedContent(
         targetState = expanded,
         modifier = modifier
@@ -104,11 +105,9 @@ fun DutyStrip(
             .directionHolder(holderTop, holderBottom)
             .padding(start = HolderWidth),
         transitionSpec = {
-            val enter = fadeIn(tween(AirShiftMotion.QuickMs, delayMillis = AirShiftMotion.RevealDelayMs))
-            val exit = fadeOut(tween(AirShiftMotion.ExitMs))
-            (enter togetherWith exit).using(
-                SizeTransform(clip = true) { _, _ -> AirShiftMotion.snap(IntSize.VisibilityThreshold) },
-            )
+            val enter = fadeIn(AirShiftMotion.content(delayMillis = AirShiftMotion.RevealDelayMs))
+            val exit = fadeOut(AirShiftMotion.exit())
+            (enter togetherWith exit).using(SizeTransform(clip = true) { _, _ -> sizeSpec })
         },
         contentAlignment = Alignment.TopStart,
         label = "strip",

@@ -386,12 +386,12 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 6.8 视觉系统
 
-- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Quick 120 / Exit 70 / Enter 180 / RevealDelay 35 / Flip 220 ms、SectionOffset 16dp、`EmphasizedDecelerate` 曲线、`snap()` 无回弹弹簧；`rememberAnimatorScaleEnabled()` 读系统动画开关）。原则：第一帧就动、退场比入场快、尺寸与位移用弹簧；不用起步慢的 Material standard 曲线。
+- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Exit 70 / Content 120 / Enter 180 / Flip 220 / FlipExit 130 / Breath 600 ms、RevealDelay 35 ms、StaggerStep 40 ms、SectionOffset 16dp、PressedScale 0.97、`EmphasizedDecelerate` 曲线；弹簧 `fastSpatial / defaultSpatial / slowSpatial / defaultEffects / fastEffects / slowEffects` 镜像 M3 standard MotionScheme 的刚度 / 阻尼（material3 1.4.0 的 `MotionScheme` 是 internal，应用读不到）；`LocalReduceMotion` 实时读系统动画比例是否为 0）。原则：第一帧就动、退场比入场快、尺寸与位移用弹簧；tween 一律显式曲线，不用起步慢的 Material standard 曲线做入退场。
 - 色彩：板面藏青 `#14284B`、条架 `#F1F3F7`、信息条白；东航红 `#C8102E` 只给出港夹条与主操作，进港 `#2B5EA7`；墨绿 `#0F7B5F` 正常 / 已起飞，琥珀 `#B45309` 预计 / 变更 / 交接班，VIP 琥珀金。深色是夜间航显：板面与底 `#0B1526`、条 `#122036`、主文字 `#EDF1F7`、琥珀 `#F5B233`、进港 `#7FA6E6`、红字 `#FF8A98`。没有渐变。
 - 字体：`res/font/` 内置 Barlow（OFL 1.1，Regular/Medium/SemiBold/Bold）与 Barlow Semi Condensed（SemiBold/Bold）。所有 Latin 与数字用 Barlow，汉字由系统字体逐字回落；板面大数字、时钟、航班号、机位号用 Semi Condensed；全部数字样式启用 `tnum`，倒计时不跳动（`FontFeaturesInstrumentedTest` 断言等宽）。字阶 11 / 12 / 13 / 15 / 17 / 20 / 26 / 34 / 44 / 68 sp。
 - 图标：`ui/components/DesignComponents.kt` 的 `linearIcon()` 1.5px 线性图标集（`LinearIcons`）。
 - 组件（`ui/components/`）：`BoardHeader` / `BoardClock`、`DutyStrip`、`StatusLamp`（`LampKind`）、`holderColors` / `Modifier.directionHolder` / `HolderBar`、`BayTitle`、`OdometerText`、`PinnedActionBar`、`EmptyBay`、`NoticeStrip`、`StatusDot`；纯计算在 `LegPresentation.kt`（状态灯规则、本站/对方机位、缺失判定）、`DutyBays.kt`（分栏）、`BoardFormats.kt`（日期与剩余时长文案）、`OdometerSlot.kt`（翻牌槽位）。
-- 弹簧与有限时长动画都跟随系统"动画时长比例"；无限循环的呼吸灯用 `rememberAnimatorScaleEnabled()` 门控。
+- 弹簧与有限时长动画由 Compose 跟随系统"动画时长比例"；无限循环的呼吸灯读 `LocalReduceMotion`（实时）。
 - `PinnedActionBar`（执勤完成 / 保存）按下 120 ms 缩到 98%，抬手回弹（`collectIsPressedAsState` + `graphicsLayer`）；点击语义与 testTag 不变。
 - detekt 通过 `app/detekt.yml` 对 `@Composable` 放开命名 / 长度 / 复杂度 / 魔法数字规则，并把 `ui/theme` 排除出 MagicNumber；业务代码不受影响。
 

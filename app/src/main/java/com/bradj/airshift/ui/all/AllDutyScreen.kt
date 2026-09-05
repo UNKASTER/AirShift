@@ -1,7 +1,6 @@
 package com.bradj.airshift.ui.all
 
 import androidx.compose.animation.core.VisibilityThreshold
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -248,11 +247,11 @@ private fun LazyItemScope.AnimatedStrip(
         emphasized = emphasized,
         completed = completed,
         onClick = { toggle(assignment.stableId) },
-        // 新增 / 移除的条淡入淡出；位置变化（被展开的条挤开、完成后移栏）与展开用同一支弹簧，步调一致。
+        // 新增 / 移除的条淡入淡出；位置变化（被展开的条挤开、完成后移栏）用 default spatial 弹簧，与展开的 fast spatial 同一家族。
         modifier = Modifier.animateItem(
-            fadeInSpec = tween(AirShiftMotion.QuickMs),
-            fadeOutSpec = tween(AirShiftMotion.ExitMs),
-            placementSpec = AirShiftMotion.snap(IntOffset.VisibilityThreshold),
+            fadeInSpec = AirShiftMotion.content(),
+            placementSpec = AirShiftMotion.defaultSpatial(IntOffset.VisibilityThreshold),
+            fadeOutSpec = AirShiftMotion.exit(),
         ),
     )
 }
