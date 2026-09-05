@@ -59,12 +59,12 @@ fun StatusLamp(
     val target = kind.colors()
     val container by animateColorAsState(
         target.container,
-        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
+        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
         label = "lampContainer",
     )
     val content by animateColorAsState(
         target.content,
-        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
+        tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
         label = "lampContent",
     )
     Row(

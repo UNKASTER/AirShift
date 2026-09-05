@@ -1,13 +1,15 @@
 package com.bradj.airshift.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,13 +35,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.ui.components.linearIcon
 import com.bradj.airshift.ui.theme.AirShiftMotion
@@ -118,9 +122,13 @@ fun AirShiftRoot(
     }
 }
 
+/** 底栏红灯：20×3dp。 */
+private val LampWidth = 20.dp
+private val LampHeight = 3.dp
+
 /**
- * 底栏：四个等宽目的地，顶部 1dp 线；激活项上方一枚 20×3dp 红灯，图标与文字变藏青。
- * 灯与颜色的变化 150 ms。
+ * 底栏：四个等宽目的地，顶部 1dp 线；一枚 20×3dp 东航红"灯"在四个标签间横移到选中项上方，
+ * 图标与文字 120 ms 变藏青。灯的位移与页面的横向滑入用同一支弹簧，读成一个动作。
  */
 @Composable
 private fun DutyNavigationBar(
@@ -130,15 +138,31 @@ private fun DutyNavigationBar(
     val c = AirShiftTokens.colors
     Column(modifier = Modifier.fillMaxWidth().background(c.nav).navigationBarsPadding()) {
         HorizontalDivider(thickness = 1.dp, color = c.rule)
-        Row(modifier = Modifier.fillMaxWidth().height(64.dp)) {
-            Destinations.forEach { destination ->
-                NavigationItem(
-                    destination = destination,
-                    selected = section == destination.section,
-                    onClick = { onSectionSelected(destination.section) },
-                    modifier = Modifier.weight(1f),
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(64.dp)) {
+            val itemWidth = maxWidth / Destinations.size
+            val index = Destinations.indexOfFirst { it.section == section }.coerceAtLeast(0)
+            val lampX by animateDpAsState(
+                targetValue = itemWidth * index + (itemWidth - LampWidth) / 2,
+                animationSpec = AirShiftMotion.snap(Dp.VisibilityThreshold),
+                label = "navLamp",
+            )
+            Row(modifier = Modifier.fillMaxSize()) {
+                Destinations.forEach { destination ->
+                    NavigationItem(
+                        destination = destination,
+                        selected = section == destination.section,
+                        onClick = { onSectionSelected(destination.section) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(lampX.roundToPx(), 0) }
+                    .width(LampWidth)
+                    .height(LampHeight)
+                    .background(c.departure, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)),
+            )
         }
     }
 }
@@ -153,13 +177,8 @@ private fun NavigationItem(
     val c = AirShiftTokens.colors
     val tint by animateColorAsState(
         targetValue = if (selected) c.ink else c.hint,
-        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
+        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.EmphasizedDecelerate),
         label = "navTint",
-    )
-    val lampAlpha by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = tween(AirShiftMotion.QuickMs, easing = AirShiftMotion.Standard),
-        label = "navLamp",
     )
     Box(
         modifier = modifier
@@ -173,14 +192,6 @@ private fun NavigationItem(
                 onClick = onClick,
             ),
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .width(20.dp)
-                .height(3.dp)
-                .graphicsLayer { alpha = lampAlpha }
-                .background(c.departure, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)),
-        )
         Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -1,18 +1,21 @@
 package com.bradj.airshift.ui.components
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bradj.airshift.model.LegDirection
@@ -68,6 +72,9 @@ private val MetaValueStyle = NumericSmall.copy(fontSize = 13.sp)
  * - [emphasized]：当前任务，抬起（阴影、无边线）；
  * - [completed]：已完成，整条变暗，状态灯改为"已完成"；
  * - [onClick]：点击切换展开。
+ *
+ * 展开 / 折叠：容器高度用无回弹弹簧从第一帧起步，新内容稍后淡入、旧内容更快淡出；
+ * 夹条用绘制铺满整条高度，不需要 `IntrinsicSize` 的逐帧二次测量。
  */
 @Composable
 fun DutyStrip(
@@ -79,12 +86,12 @@ fun DutyStrip(
     completed: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    val level = if (expanded) DetailLevel.FULL else DetailLevel.SUMMARY
-    val legs = remember(assignment, muc, level) { assignment.legUiModels(muc, level) }
     val c = AirShiftTokens.colors
     val shape = RoundedCornerShape(AirShiftRadius.Strip)
+    val (holderTop, holderBottom) = holderColors(assignment.kind)
     val baseDate = (assignment.scheduledArrival ?: assignment.scheduledDeparture)?.toLocalDate()
-    Row(
+    AnimatedContent(
+        targetState = expanded,
         modifier = modifier
             .fillMaxWidth()
             .testTag("strip_${assignment.stableId}")
@@ -94,34 +101,56 @@ fun DutyStrip(
             .background(c.strip)
             .then(if (emphasized) Modifier else Modifier.border(1.dp, c.rule, shape))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .animateContentSize(tween(AirShiftMotion.StandardMs, easing = AirShiftMotion.Standard))
-            .height(IntrinsicSize.Min),
-    ) {
-        DirectionHolder(assignment.kind)
-        Column(modifier = Modifier.weight(1f)) {
-            val hasServices = legs.any { it.hasSpecialServices }
+            .directionHolder(holderTop, holderBottom)
+            .padding(start = HolderWidth),
+        transitionSpec = {
+            val enter = fadeIn(tween(AirShiftMotion.QuickMs, delayMillis = AirShiftMotion.RevealDelayMs))
+            val exit = fadeOut(tween(AirShiftMotion.ExitMs))
+            (enter togetherWith exit).using(
+                SizeTransform(clip = true) { _, _ -> AirShiftMotion.snap(IntSize.VisibilityThreshold) },
+            )
+        },
+        contentAlignment = Alignment.TopStart,
+        label = "strip",
+    ) { isExpanded ->
+        val level = if (isExpanded) DetailLevel.FULL else DetailLevel.SUMMARY
+        val legs = remember(assignment, muc, level) { assignment.legUiModels(muc, level) }
+        StripBody(assignment, legs, isExpanded, completed, baseDate)
+    }
+}
+
+@Composable
+private fun StripBody(
+    assignment: RosterAssignment,
+    legs: List<FlightLegUiModel>,
+    expanded: Boolean,
+    completed: Boolean,
+    baseDate: LocalDate?,
+) {
+    val c = AirShiftTokens.colors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        val hasServices = legs.any { it.hasSpecialServices }
+        if (expanded) {
+            StripHead(assignment, legs)
+        } else if (assignment.hasVip || hasServices) {
+            CollapsedHead(assignment, hasServices)
+        }
+        legs.forEachIndexed { index, leg ->
+            if (index > 0) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = if (expanded) 14.dp else 0.dp),
+                    thickness = 1.dp,
+                    color = c.rule,
+                )
+            }
             if (expanded) {
-                StripHead(assignment, legs)
-            } else if (assignment.hasVip || hasServices) {
-                CollapsedHead(assignment, hasServices)
+                ExpandedLeg(leg, baseDate, completed)
+            } else {
+                LegLine(leg = leg, baseDate = baseDate, completed = completed)
             }
-            legs.forEachIndexed { index, leg ->
-                if (index > 0) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = if (expanded) 14.dp else 0.dp),
-                        thickness = 1.dp,
-                        color = c.rule,
-                    )
-                }
-                if (expanded) {
-                    ExpandedLeg(leg, baseDate, completed)
-                } else {
-                    LegLine(leg = leg, baseDate = baseDate, completed = completed)
-                }
-            }
-            if (expanded) {
-                StripFoot(legs.last())
-            }
+        }
+        if (expanded) {
+            StripFoot(legs.last())
         }
     }
 }

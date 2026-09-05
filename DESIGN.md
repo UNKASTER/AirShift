@@ -1,4 +1,4 @@
-# 航勤智排 · 设计系统（0.11.0）
+# 航勤智排 · 设计系统（0.11.1）
 
 > 从已构建的界面记录，不是意图稿。源码真相在 `ui/theme/AirShiftTheme.kt`、`ui/theme/AirShiftMotion.kt`、`ui/components/`；本文与代码冲突时以代码为准并同轮修正。
 
@@ -47,11 +47,11 @@
 | 组件 | 文件 | 说明 |
 |---|---|---|
 | `BoardHeader` / `BoardClock` | `BoardHeader.kt` | 板面：`statusBarsPadding` 在板内；顶行分区名 + 副标题 + 翻牌时钟与日期；`content` 放板面主体，`footer` 上方一条 `boardRule` |
-| `DutyStrip` | `DutyStrip.kt` | 一项任务：夹条 + 每航段一行（折叠）或一块（展开）；`emphasized` 抬起、`completed` 60% 透明、`onClick` 切换展开；`animateContentSize` |
+| `DutyStrip` | `DutyStrip.kt` | 一项任务：夹条 + 每航段一行（折叠）或一块（展开）；`emphasized` 抬起、`completed` 60% 透明、`onClick` 切换展开；`AnimatedContent` + `SizeTransform`（弹簧） |
 | `StatusLamp` / `LampKind` | `StatusLamp.kt` | 22dp 小矩形灯（不是胶囊）；`dot` 给飞行状态，`icon` 给轮椅 |
-| `DirectionHolder` / `HolderBar` | `DirectionHolder.kt` | 6dp 夹条：进港蓝、出港红、过站上蓝下红；日历按日型着色 |
+| `Modifier.directionHolder` / `holderColors` / `HolderBar` | `DirectionHolder.kt` | 6dp 夹条：沿信息条左边缘绘制，进港蓝、出港红、过站上蓝下红；`HolderBar` 给日历按日型着色 |
 | `BayTitle` | `Bay.kt` | 栏位标签：小字 + 数量 + 向右延伸的线 |
-| `OdometerText` | `OdometerText.kt` | 逐位翻牌，280 ms 减速；非数字字符静止 |
+| `OdometerText` | `OdometerText.kt` | 逐位翻牌，220 ms 减速；非数字字符静止 |
 | `PinnedActionBar` | `PinnedActionBar.kt` | 钉底主操作（执勤完成 / 保存） |
 | `EmptyBay` / `NoticeStrip` | 同名文件 | 空态；提示条分 `NoticeTone.Warning`（琥珀底，警告与权限）与 `Neutral`（条底 + 线，状态说明） |
 | `LinearIcons` | `DesignComponents.kt` | 1.5px 线性图标 |
@@ -63,16 +63,23 @@
 
 ## 动效（`AirShiftMotion`）
 
-| Token | 时长 | 用途 |
+原则：第一帧就动、退场比入场快、尺寸与位移用无回弹弹簧（可中断、不慢起步）。不用 Material *standard* 曲线——它起步慢，点了像没反应。
+
+| Token | 值 | 用途 |
 |---|---|---|
-| Quick | 150 ms | 灯色、底栏选中、按下 |
-| Standard | 250 ms | 条的展开 / 折叠 |
-| Emphasized | 400 ms | 条在栏位间移动（`animateItem`） |
-| Flip | 280 ms，`EmphasizedDecelerate` | 时钟与倒计时逐位翻牌 |
-| fade-through | 出 90 / 入 210 ms，96% 放大 | 分区切换 |
+| Quick | 120 ms | 灯色、底栏着色、按下缩放 |
+| Exit | 70 ms | 旧页、折叠前内容的淡出 |
+| Enter | 180 ms，`EmphasizedDecelerate` | 新页滑入 + 淡入 |
+| RevealDelay | 35 ms | 展开内容淡入相对容器起步的延迟 |
+| Flip | 220 ms，`EmphasizedDecelerate` | 时钟与倒计时逐位翻牌 |
+| SectionOffset | 16dp | 分区切换的横向位移，方向按底栏标签左右 |
+| `snap()` | 弹簧，刚度 1100、临界阻尼（约 150 ms 视觉到位、200 ms 内静止） | 条的展开 / 折叠高度、条在栏位间移动、底栏红灯横移 |
 | 呼吸 | 600 ms 往返 | 只用于"应立即到位"红灯光晕，`rememberAnimatorScaleEnabled()` 为 false 时静止 |
 
-"执勤完成"点击给一次 `HapticFeedbackType.Confirm`。有限时长动画自动跟随系统动画时长比例。
+- 分区切换 shared-axis：新页从 ±16dp 滑入并淡入，旧页 70 ms 淡出，两者同时起步没有空档；底栏红灯用同一支弹簧滑到目标标签，页面位移与灯位移读成一个动作。
+- 抽单：点条 → 容器高度以弹簧从第一帧起步，新内容 35 ms 后 120 ms 淡入、旧内容 70 ms 淡出；被挤开的条与完成后移栏的条用同一支弹簧跟随（`animateItem`），新增 / 移除的条 120 / 70 ms 淡入淡出。
+- "执勤完成"按下 120 ms 缩到 98%，抬手回弹，点击给一次 `HapticFeedbackType.Confirm`。
+- 弹簧与有限时长动画都跟随系统动画时长比例。
 
 ## 系统栏与主题
 

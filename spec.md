@@ -2,8 +2,8 @@
 
 > - 文档类型：当前 `main` 的 as-built specification
 > - 审查日期：2026-09-05（Asia/Shanghai）
-> - 源码基线：`c5e02cd` 之后的 0.11.0 界面重设计
-> - 应用版本：`0.11.0` / version code `48`
+> - 源码基线：`c5e02cd` 之后的 0.11.0 界面重设计与 0.11.1 动效调整
+> - 应用版本：`0.11.1` / version code `49`
 > - 支持平台：Android 13（API 33）及以上
 
 ## 1. 文档定位
@@ -327,8 +327,8 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 ### 6.1 根导航与页面骨架
 
 - `AirShiftRoot` 使用 Material 3 `Scaffold`（`contentWindowInsets = 0`）加四等分自定义底栏，不使用 Navigation Component 或 Material `NavigationBar`；固定四页：全部执勤、排班日历、当前执勤、设置，底栏文字标签就是这四个词（testTag `nav_all / nav_calendar / nav_current / nav_settings`；因板头标题与标签同名，仪器测试按 testTag 点底栏）。
-- 底栏 64dp + 导航栏 inset，顶部 1dp 线；激活项图标与文字变主文字色，上方一枚 20×3dp 东航红"灯"随选中横移，150 ms。不再有浮动圆形按钮。
-- 分区切换用 fade-through（旧页 90 ms 淡出，新页 210 ms 淡入并从 96% 放大）。
+- 底栏 64dp + 导航栏 inset，顶部 1dp 线；激活项图标与文字变主文字色，上方一枚 20×3dp 东航红"灯"在四个标签间横移到选中项（`animateDpAsState` + 无回弹弹簧 `AirShiftMotion.snap`，约 200 ms 内静止），图标与文字 120 ms 变色。不再有浮动圆形按钮。
+- 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（180 ms，emphasized decelerate），旧页 70 ms 淡出；两者同时起步，没有空档。（0.11.0 的 fade-through 有 90 ms 空档并叠 96% 缩放，真机上显得迟钝，0.11.1 改掉。）
 - 每页顶部是 `BoardHeader`：藏青"板面"贯通到状态栏之下（板内 `statusBarsPadding`），左侧分区名 + 副标题，右侧实时钟（逐位翻牌）与日期；板面主体与板脚由各页给出。因此状态栏图标恒为浅色（`MainActivity.enableEdgeToEdge(statusBarStyle = dark(TRANSPARENT))`），导航栏透明跟随底栏。
 - 新 ViewModel 默认当前执勤；冷启动、进程重建和真正从后台恢复都会回到当前执勤。旋转等 `isChangingConfigurations=true` 的停止不算离开应用，保持当前页。
 
@@ -336,13 +336,13 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 四页共用一种任务表示：`ui/components/DutyStrip.kt`。
 
-- 左侧 6dp 方向夹条（`DirectionHolder`）：进港藏青蓝、出港东航红、过站上蓝下红。
+- 左侧 6dp 方向夹条（`Modifier.directionHolder` 沿条左边缘绘制，颜色由 `holderColors(kind)` 给出）：进港藏青蓝、出港东航红、过站上蓝下红。
 - **折叠态**：每个航段一行 44dp，固定列 —— 进/出字 16、时间 46、航班号 58（宽度按 sp 折算，随系统字体缩放）、航线（弹性；进港"前站 →"、出港"→ 后站"，只给三字码）、本站机位（定位钉 + 数字）、状态灯。有 VIP 或特服时条顶多一行 24dp 的头（类型小字 + 灯），不挤占航段行。系统字体 ≥1.15 倍时每航段改为两行：第一行向/时间/航班/状态灯，第二行航线/机位。
 - **展开态**（`DetailLevel.FULL`）：条头为任务类型 + 特服灯 + VIP 灯；每个航段一块：方向灯 + 26sp 航班号，右侧 26sp 本站机位；航线全名"PVG 上海浦东 → LHW 兰州中川"；"计划 / 预计（或实际）"两个时间 + 状态灯；meta 行只列有值的项（对方机位、预计登机、预计登机口关闭、登机口关闭、实际离位）；MUC 登机口/机位变更各一行琥珀值；取消为红灯；特服明细逐行。条脚为机号 · 机型。
 - 状态灯（`StatusLamp`，22dp 高、4dp 圆角小矩形，不是胶囊）：已完成 / 已到达 / 已起飞（墨绿带点）、晚 N 分（琥珀带点，15 分钟以内算正点，≥12 小时视为跨午夜不可比）、已取消（红带点）、未起飞（中性）、VIP（琥珀金）、进港 / 出港方向灯。
 - 缺失数据一律显示"—"或省略该格，不再使用灰色骨架占位。
 - 登机口不在条上显示；飞常准的 `BoardGate` 仍解析并保存，只作 MUC 登机口变更的原值回退。轮椅只显示线性图标 + 等级字母 C/R/S。
-- 折叠 ↔ 展开用 `animateContentSize`（250 ms）；条在栏位间移动用 `LazyColumn` 的 `animateItem`（400 ms）。
+- 折叠 ↔ 展开：`AnimatedContent` + `SizeTransform`，容器高度用无回弹弹簧（`AirShiftMotion.snap`，刚度 1100、临界阻尼，约 150 ms 视觉到位、200 ms 内静止）从第一帧起步，新内容 35 ms 后 120 ms 淡入，旧内容 70 ms 淡出。条在栏位间移动、以及被展开的条挤开时的位移用同一支弹簧（`animateItem` placement），新增 / 移除的条 120 / 70 ms 淡入淡出。夹条改为绘制，条不再用 `IntrinsicSize.Min`，动画中没有逐帧二次测量；`AllDutyScreen` 每条只接收自身的展开布尔值，点开一条不重组其余条。
 
 ### 6.3 全部执勤
 
@@ -381,12 +381,13 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 6.8 视觉系统
 
-- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Quick 150 / Standard 250 / Emphasized 400 / Flip 280 / fade-through 90+210，`EmphasizedDecelerate` 与 `Standard` 曲线，`rememberAnimatorScaleEnabled()` 读系统动画开关）。
+- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Quick 120 / Exit 70 / Enter 180 / RevealDelay 35 / Flip 220 ms、SectionOffset 16dp、`EmphasizedDecelerate` 曲线、`snap()` 无回弹弹簧；`rememberAnimatorScaleEnabled()` 读系统动画开关）。原则：第一帧就动、退场比入场快、尺寸与位移用弹簧；不用起步慢的 Material standard 曲线。
 - 色彩：板面藏青 `#14284B`、条架 `#F1F3F7`、信息条白；东航红 `#C8102E` 只给出港夹条与主操作，进港 `#2B5EA7`；墨绿 `#0F7B5F` 正常 / 已起飞，琥珀 `#B45309` 预计 / 变更 / 交接班，VIP 琥珀金。深色是夜间航显：板面与底 `#0B1526`、条 `#122036`、主文字 `#EDF1F7`、琥珀 `#F5B233`、进港 `#7FA6E6`、红字 `#FF8A98`。没有渐变。
 - 字体：`res/font/` 内置 Barlow（OFL 1.1，Regular/Medium/SemiBold/Bold）与 Barlow Semi Condensed（SemiBold/Bold）。所有 Latin 与数字用 Barlow，汉字由系统字体逐字回落；板面大数字、时钟、航班号、机位号用 Semi Condensed；全部数字样式启用 `tnum`，倒计时不跳动（`FontFeaturesInstrumentedTest` 断言等宽）。字阶 11 / 12 / 13 / 15 / 17 / 20 / 26 / 34 / 44 / 68 sp。
 - 图标：`ui/components/DesignComponents.kt` 的 `linearIcon()` 1.5px 线性图标集（`LinearIcons`）。
-- 组件（`ui/components/`）：`BoardHeader` / `BoardClock`、`DutyStrip`、`StatusLamp`（`LampKind`）、`DirectionHolder` / `HolderBar`、`BayTitle`、`OdometerText`、`PinnedActionBar`、`EmptyBay`、`NoticeStrip`、`StatusDot`；纯计算在 `LegPresentation.kt`（状态灯规则、本站/对方机位、缺失判定）、`DutyBays.kt`（分栏）、`BoardFormats.kt`（日期与剩余时长文案）、`OdometerSlot.kt`（翻牌槽位）。
-- 有限时长动画跟随系统"动画时长比例"；无限循环的呼吸灯用 `rememberAnimatorScaleEnabled()` 门控。
+- 组件（`ui/components/`）：`BoardHeader` / `BoardClock`、`DutyStrip`、`StatusLamp`（`LampKind`）、`holderColors` / `Modifier.directionHolder` / `HolderBar`、`BayTitle`、`OdometerText`、`PinnedActionBar`、`EmptyBay`、`NoticeStrip`、`StatusDot`；纯计算在 `LegPresentation.kt`（状态灯规则、本站/对方机位、缺失判定）、`DutyBays.kt`（分栏）、`BoardFormats.kt`（日期与剩余时长文案）、`OdometerSlot.kt`（翻牌槽位）。
+- 弹簧与有限时长动画都跟随系统"动画时长比例"；无限循环的呼吸灯用 `rememberAnimatorScaleEnabled()` 门控。
+- `PinnedActionBar`（执勤完成 / 保存）按下 120 ms 缩到 98%，抬手回弹（`collectIsPressedAsState` + `graphicsLayer`）；点击语义与 testTag 不变。
 - detekt 通过 `app/detekt.yml` 对 `@Composable` 放开命名 / 长度 / 复杂度 / 魔法数字规则，并把 `ui/theme` 排除出 MagicNumber；业务代码不受影响。
 
 ## 7. 飞常准实时航班
@@ -641,7 +642,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.11.0）是整套界面的重设计（方向"航显板 × 进程单"，见第 6 节）。流程：先用 Claude Design 画布出 10 块高保真画板（当前执勤浅/深/过点、全部执勤、排班日历、设置、首次进入、小组件、完成动效分镜、设计系统一览）经用户确认，再按 B0–B10 分任务实现。新增 Barlow 字体、`AirShiftPalette` 双主题 token、`BoardHeader` / `DutyStrip` / `StatusLamp` / `OdometerText` / `PinnedActionBar` 等组件，四页与 Onboarding 全部重写，底栏改为四等分 + 红灯指示，页面切换 fade-through，`enableEdgeToEdge` 显式指定状态栏图标恒为浅色并修正深色模式下的图标颜色，小组件改为藏青板面并删除全部装饰 drawable。先写纯函数测试再写实现：`DutyBaysTest` 3 项（人工前缀 / 自动完成 / 无时间任务落入已完成栏位、全部完成、空排班）、`OdometerSlotsTest` 2 项、`AssignmentLegsTest` 追加 `liveKind` 1 项；androidTest 新增 `FontFeaturesInstrumentedTest`（tnum 等宽断言）2 项与 `AllDutyScreenBaysInstrumentedTest` 1 项；`CurrentDutyScreenIntegrationInstrumentedTest` 的完成辅助函数改为直接点击钉底按钮（按钮已不在滚动区内）。detekt 首轮拦下主题 token 的 MagicNumber、单文件多声明命名、多 return、超长行与 Composable 复杂度，分别用 `detekt.yml` 排除 `ui/theme`、拆文件（`LampKind.kt`、`OdometerSlot.kt`、`LegPresentation.kt`）、改 `when` 与折行归零；Lint 拦下 RemoteViews 不允许裸 `View`，行线改为空 `FrameLayout`。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、0 项失败、2 项条件跳过；detekt 0 新发现；Lint 基线外零新增（提示基线中 22 条记录已不存在，对应删除的旧小组件装饰与卡片文案）；Debug APK 生成。
+本轮（0.11.1）只改动效，设计、文案与业务不变。起因：真机上切换分区与展开信息条"迟钝、不干脆"。诊断：分区切换 fade-through 有 90 ms 空档并叠 96% 缩放（合计 300 ms）；展开用 Material standard 曲线（起步慢）250 ms；条在栏位间移动 400 ms 同曲线；展开内容瞬间替换、无淡入。改法见 §6.1 / §6.2 / §6.8 与 DESIGN.md 动效节。验证：JDK 21 守护进程下 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、2 项条件跳过；detekt 0 发现；Lint 基线外零新增；APK 生成并 `adb install -r` 到 vivo V2505A（0.11.1 / 49）。四页静止态截图核对：红灯落在选中标签上方、夹条三色正确、信息条外观与 0.11.0 一致。切页帧统计（`dumpsys gfxinfo`，暖机后底栏 8 次点击）：0.11.0 卡顿帧 3.2%、50/90/95/99 分位 8/18/22/57 ms；0.11.1 两轮为 2.3% 与 2.0%，分位 7/9/24/105 与 8/9/19/101 ms。framestats 拆解显示最慢帧（57 ms）是新页第一次组合（重组约 16 ms + 测量布局绘制约 33 ms），与旧版同量级，是 Debug 构建下整页组合的固有成本；99 分位升高来自紧随其后被推迟起步的一帧，不是动画本身变慢。系统动画时长比例为 1.0。未完成：`connectedDebugAndroidTest` 尚未在改动后复跑（采样时手机前台被其他应用占用，仪器测试会接管屏幕，待手机空闲时执行）；动效手感由用户在真机上判断。教训：向手机注入点击前先确认 `topResumedActivity` 是本应用，否则点击会落到用户正在用的其他应用上。
+
+上一轮（0.11.0）是整套界面的重设计（方向"航显板 × 进程单"，见第 6 节）。流程：先用 Claude Design 画布出 10 块高保真画板（当前执勤浅/深/过点、全部执勤、排班日历、设置、首次进入、小组件、完成动效分镜、设计系统一览）经用户确认，再按 B0–B10 分任务实现。新增 Barlow 字体、`AirShiftPalette` 双主题 token、`BoardHeader` / `DutyStrip` / `StatusLamp` / `OdometerText` / `PinnedActionBar` 等组件，四页与 Onboarding 全部重写，底栏改为四等分 + 红灯指示，页面切换 fade-through，`enableEdgeToEdge` 显式指定状态栏图标恒为浅色并修正深色模式下的图标颜色，小组件改为藏青板面并删除全部装饰 drawable。先写纯函数测试再写实现：`DutyBaysTest` 3 项（人工前缀 / 自动完成 / 无时间任务落入已完成栏位、全部完成、空排班）、`OdometerSlotsTest` 2 项、`AssignmentLegsTest` 追加 `liveKind` 1 项；androidTest 新增 `FontFeaturesInstrumentedTest`（tnum 等宽断言）2 项与 `AllDutyScreenBaysInstrumentedTest` 1 项；`CurrentDutyScreenIntegrationInstrumentedTest` 的完成辅助函数改为直接点击钉底按钮（按钮已不在滚动区内）。detekt 首轮拦下主题 token 的 MagicNumber、单文件多声明命名、多 return、超长行与 Composable 复杂度，分别用 `detekt.yml` 排除 `ui/theme`、拆文件（`LampKind.kt`、`OdometerSlot.kt`、`LegPresentation.kt`）、改 `when` 与折行归零；Lint 拦下 RemoteViews 不允许裸 `View`，行线改为空 `FrameLayout`。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、0 项失败、2 项条件跳过；detekt 0 新发现；Lint 基线外零新增（提示基线中 22 条记录已不存在，对应删除的旧小组件装饰与卡片文案）；Debug APK 生成。
 
 随后接入真机（vivo V2505A，Android 16 / API 36，1440×3168 @640dpi = 360×792dp）：`adb install -r` 覆盖安装 0.11.0（version code 48），排班、校准、MUC 记录与 API 密钥保留。四页 + 深色主题 + 字体缩放 1.3 + 桌面小组件逐张截图核对，发现并修正三轮问题：(1) 360dp 屏上折叠条的航线列被挤成省略号、带 VIP 的行状态灯被裁掉 → 列宽压到 16/46/58 并按 sp 折算，机位改为定位钉 + 数字，VIP/特服灯移到单独的条头行；日历行说明缩短、到位/到场与富余分两行；设置"到位余量"改为标签 + 分段选择器 + 说明。(2) 展开态的已完成任务仍显示"未起飞" → 把 completed 传入状态灯；缺三字码的机场只显示名称。(3) 独立 finish review（disposition: fix）的 7 条：字体 ≥1.15 倍时折叠行改两行；全部执勤板脚回到一行、长状态说明改放中性通知条；小组件空态补板头与板脚；当前执勤全部完成时板面显示"下一班"（`NextShift`）；设置余量行去重；补 PRODUCT.md；概念掷骰脚本因计划模式限制未运行、无 `.impeccable` 状态文件，方向由用户在四个候选中经结构化问题选定，如实记录。仪器测试首轮 8 项失败：6 项是 `DutyWindowRefreshInstrumentedTest` 在 fade-through 过渡期内找到两个可滚动节点、且板头标题与底栏标签同名导致 `onNodeWithText` 命中两个节点 → 测试改为按 `nav_*` testTag 点底栏并推进 600 ms 时钟；2 项是 `FontFeaturesInstrumentedTest` 断言过严 → 设备诊断确认 `tnum` 生效（"1"由 22px 变 33px），但 Barlow Semi Condensed 的 tabular 字形仍有约 7% 宽差，断言改为比例 >0.9，翻牌数字改用固定位宽槽位。最终 `connectedDebugAndroidTest` 标准单批次：60 项执行、0 失败、4 项按 `assumeFalse` 跳过（手机上配置了真实 API Key）。RemoteViews 对 `@font/barlow_*` 的解析在 OriginOS 桌面上已确认（小组件板头数字为 Barlow）。测试 APK 按 `leaveApksInstalledAfterRun` 保留，主应用与本地数据未受影响。
 
@@ -727,7 +730,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - OCR 零表头警告、短姓名前缀碰撞、超大图片；
 - Widget 完成 receiver、launcher 跨零点、OriginOS 裁剪和不同桌面实现；
 - 排班日历页与设置页的 Compose 交互与无障碍（当前只有真机人工核对与截图，没有 Compose 测试）；
-- 当前执勤页带倒计时的板面与"执勤完成"动效只在仪器测试中驱动过，本轮真机上排班已全部完成，未截到实时倒计时画面；
+- 当前执勤页带倒计时的板面与"执勤完成"动效只在仪器测试中驱动过，真机上排班已全部完成，未截到实时倒计时画面；
+- 0.11.1 动效改动后的 `connectedDebugAndroidTest` 单批次（60 项）尚未复跑；条展开 / 折叠与移栏的动效只有静止态截图与帧统计，没有逐帧画面；
 - 导入带班次行的 Excel 后自校正的真机端到端（JVM 已用真实文件覆盖解析与相位，真机只验证了存储往返）；
 - 跨越 2026 年末的日期、设备改时区/改时对周期判定的影响；
 - 班组人员真实调整、新增第 7/12 组后 3/4/3 变为 4/4/4 的实际表格。
@@ -842,6 +846,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.8.1 将 README/spec 从历史分支记录整理为当前主线的用户与维护者文档；不改变运行时业务逻辑。
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
 - 0.11.0 界面重设计"航显板 × 进程单"：新增 Barlow 字体与 `AirShiftPalette` 双主题 token；每页顶部改为贯通状态栏的藏青板面（实时钟逐位翻牌），任务统一为带方向夹条的信息条（折叠一航段一行、点开展开），全部执勤按"当前 / 接下来 / 已完成"分栏，当前执勤的"执勤完成"钉在底部并带触感，底栏改四等分红灯指示、分区切换 fade-through，状态改为小矩形灯、缺失值显示"—"；设置与日历改为板头 + 信息条，Onboarding 改整屏板面；小组件改为藏青板面并删除装饰层；`enableEdgeToEdge` 显式指定系统栏样式并新增 `values-night` 主题；`app/detekt.yml` 对 Composable 放开规则。业务、数据与 MUC 逻辑不变，已有测试契约（底栏文字、"执勤完成"、单一滚动节点、小组件 view id）保留。
+- 0.11.1 动效调整：分区切换由 fade-through 改为 shared-axis（新页 16dp 位移滑入 180 ms、旧页 70 ms 淡出、无空档）；信息条展开 / 折叠改为 `AnimatedContent` + `SizeTransform`，容器高度、条的位移与底栏红灯横移共用无回弹弹簧 `AirShiftMotion.snap`（约 200 ms 内静止），内容 120 / 70 ms 淡入淡出；底栏红灯改为在标签间横移；"执勤完成"按下缩放反馈；翻牌 220 ms；夹条改为绘制并去掉 `IntrinsicSize.Min`；`AllDutyScreen` 每条只接收自身展开布尔值。设计、文案、业务与测试契约不变。
 - 0.10.6 MUC 轮椅简称与角标：解析器兼容口语简称 `C轮/R轮/S轮`（与 WCHC/WCHR/WCHS 同为高置信，可与代码在同一句混用，如「WCHR改为S轮」）；`WheelchairLevel` 增加 `shortCode` 单字母；任务卡特服角标与详情行的轮椅记录改为轮椅线性图标 + 等级字母，不再显示 WCHR/WCHS/WCHC 全称。数据层与 JSON 不变。
 - 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
 - 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。

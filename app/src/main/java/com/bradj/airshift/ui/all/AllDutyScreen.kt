@@ -1,5 +1,6 @@
 package com.bradj.airshift.ui.all
 
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.FlightCancellationRecord
@@ -199,7 +201,8 @@ fun AllDutyScreen(
                         BayTitle("接下来", count = bays.upcoming.size, testTag = "bay_upcoming")
                     }
                     items(bays.upcoming, key = { assignments[it].stableId }) { index ->
-                        AnimatedStrip(assignments[index], muc, expanded, toggle)
+                        val assignment = assignments[index]
+                        AnimatedStrip(assignment, muc, assignment.stableId in expanded, toggle)
                     }
                 }
                 if (bays.completed.isNotEmpty()) {
@@ -207,7 +210,8 @@ fun AllDutyScreen(
                         BayTitle("已完成", count = bays.completed.size, testTag = "bay_completed")
                     }
                     items(bays.completed, key = { assignments[it].stableId }) { index ->
-                        AnimatedStrip(assignments[index], muc, expanded, toggle, completed = true)
+                        val assignment = assignments[index]
+                        AnimatedStrip(assignment, muc, assignment.stableId in expanded, toggle, completed = true)
                     }
                 }
             }
@@ -223,15 +227,16 @@ private fun LazyListScope.stripItem(
     emphasized: Boolean,
 ) {
     item(key = assignment.stableId) {
-        AnimatedStrip(assignment, muc, expanded, toggle, emphasized = emphasized)
+        AnimatedStrip(assignment, muc, assignment.stableId in expanded, toggle, emphasized = emphasized)
     }
 }
 
+/** 只接收本条是否展开的布尔值：点开一条时其余条的入参不变，可以跳过重组。 */
 @Composable
 private fun LazyItemScope.AnimatedStrip(
     assignment: RosterAssignment,
     muc: MucContext,
-    expanded: Set<String>,
+    expanded: Boolean,
     toggle: (String) -> Unit,
     emphasized: Boolean = false,
     completed: Boolean = false,
@@ -239,14 +244,15 @@ private fun LazyItemScope.AnimatedStrip(
     DutyStrip(
         assignment = assignment,
         muc = muc,
-        expanded = assignment.stableId in expanded,
+        expanded = expanded,
         emphasized = emphasized,
         completed = completed,
         onClick = { toggle(assignment.stableId) },
+        // 新增 / 移除的条淡入淡出；位置变化（被展开的条挤开、完成后移栏）与展开用同一支弹簧，步调一致。
         modifier = Modifier.animateItem(
-            fadeInSpec = null,
-            fadeOutSpec = null,
-            placementSpec = tween(AirShiftMotion.EmphasizedMs, easing = AirShiftMotion.Standard),
+            fadeInSpec = tween(AirShiftMotion.QuickMs),
+            fadeOutSpec = tween(AirShiftMotion.ExitMs),
+            placementSpec = AirShiftMotion.snap(IntOffset.VisibilityThreshold),
         ),
     )
 }
