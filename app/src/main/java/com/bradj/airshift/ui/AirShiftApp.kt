@@ -177,6 +177,7 @@ internal fun AirShiftApp(
                 val forward = targetState.ordinal >= initialState.ordinal
                 val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
                 val enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset }
+                // 旧页的位移沿用 Enter 档（0.11.1 行为）；切页方案的下一批会把退场改为只淡出。
                 val exit = fadeOut(AirShiftMotion.exit()) + slideOutHorizontally(AirShiftMotion.enter()) { -offset }
                 enter togetherWith exit
             },

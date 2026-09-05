@@ -89,8 +89,6 @@ fun DutyStrip(
     val shape = RoundedCornerShape(AirShiftRadius.Strip)
     val (holderTop, holderBottom) = holderColors(assignment.kind)
     val baseDate = (assignment.scheduledArrival ?: assignment.scheduledDeparture)?.toLocalDate()
-    // SizeTransform 的 lambda 不是组合上下文，弹簧规格要在这里先取好。
-    val sizeSpec = AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)
     AnimatedContent(
         targetState = expanded,
         modifier = modifier
@@ -107,7 +105,9 @@ fun DutyStrip(
         transitionSpec = {
             val enter = fadeIn(AirShiftMotion.content(delayMillis = AirShiftMotion.RevealDelayMs))
             val exit = fadeOut(AirShiftMotion.exit())
-            (enter togetherWith exit).using(SizeTransform(clip = true) { _, _ -> sizeSpec })
+            (enter togetherWith exit).using(
+                SizeTransform(clip = true) { _, _ -> AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold) },
+            )
         },
         contentAlignment = Alignment.TopStart,
         label = "strip",

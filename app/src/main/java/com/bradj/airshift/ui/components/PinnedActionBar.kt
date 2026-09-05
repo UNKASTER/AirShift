@@ -27,12 +27,9 @@ import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.AirShiftTokens
 
-/** 按下时的缩放：可见但不夸张。 */
-private const val PRESSED_SCALE = 0.98f
-
 /**
  * 钉在页面底部（底栏之上）的主操作条：顶部一条线 + 52dp 红色主按钮。
- * 不随内容滚动，始终在拇指区；按下 120 ms 内缩到 98%，抬手回弹。
+ * 不随内容滚动，始终在拇指区；按下缩到 97%（effects 弹簧），抬手回弹。
  */
 @Composable
 fun PinnedActionBar(
@@ -46,7 +43,7 @@ fun PinnedActionBar(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PRESSED_SCALE else 1f,
+        targetValue = if (pressed) AirShiftMotion.PressedScale else 1f,
         animationSpec = AirShiftMotion.defaultEffects(),
         label = "pressScale",
     )

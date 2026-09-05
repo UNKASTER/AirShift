@@ -16,6 +16,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
@@ -26,7 +27,7 @@ import androidx.compose.ui.unit.dp
  *
  * - **tween**（本对象的 `exit / content / enter / flip`）：一次性、方向确定的入退场与"机械"动作。
  *   曲线一律显式；`EmphasizedDecelerate` 第一帧就走约 30%，这是"第一帧就动"的来源。
- * - **弹簧**（`fastSpatial / defaultSpatial / slowSpatial / defaultEffects / fastEffects / slowEffects`）：会被反复、
+ * - **弹簧**（`fastSpatial / defaultSpatial / slowSpatial / defaultEffects / fastEffects`）：会被反复、
  *   快速重触发或需要速度连续的状态动画。刚度 / 阻尼镜像 Material 3 standard MotionScheme 的值——material3 1.4.0 的
  *   `MotionScheme` 与 `MaterialTheme.motionScheme` 是 internal，应用读不到，只能在这里镜像；M3 组件内部用的是同一组值。
  *   这里是项目里弹簧常量的唯一出处。
@@ -34,9 +35,6 @@ import androidx.compose.ui.unit.dp
  * 有限时长动画与弹簧由 Compose 自动跟随系统"动画时长比例"（比例为 0 时直接落终值）；
  * 只有无限循环、装饰性延迟与位移型转场需要看 [LocalReduceMotion]。
  */
-// detekt.yml 的 TooManyFunctions 只豁免 @Composable 函数；弹簧工厂按 Ruling R7 改为纯函数后不再享有该豁免，
-// 但这里仍是同一类 token 工厂（tween ×5 + spring ×6），数量是设计使然，不是该拆分的信号。
-@Suppress("TooManyFunctions")
 object AirShiftMotion {
     /** 旧内容退场：旧页、折叠前的内容、移除的条。 */
     const val ExitMs: Int = 70
@@ -99,7 +97,6 @@ object AirShiftMotion {
     private const val SLOW_SPATIAL_STIFFNESS = 300f
     private const val FAST_EFFECTS_STIFFNESS = 3800f
     private const val DEFAULT_EFFECTS_STIFFNESS = 1600f
-    private const val SLOW_EFFECTS_STIFFNESS = 800f
 
     /**
      * 条展开 / 折叠高度、底栏红灯横移、抬手回弹、分段器填充块：约 140 ms 静止。
@@ -135,9 +132,6 @@ object AirShiftMotion {
 
     /** 按下反馈：约 50 ms 到位，"指按下去就有"。 */
     fun <T> fastEffects(): SpringSpec<T> = spring(dampingRatio = EFFECTS_DAMPING, stiffness = FAST_EFFECTS_STIFFNESS)
-
-    /** 预留：慢速效果（约 160 ms 静止）。 */
-    fun <T> slowEffects(): SpringSpec<T> = spring(dampingRatio = EFFECTS_DAMPING, stiffness = SLOW_EFFECTS_STIFFNESS)
 }
 
 /**
@@ -148,9 +142,9 @@ object AirShiftMotion {
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
 @Composable
-fun rememberReduceMotion(): Boolean {
+internal fun rememberReduceMotion(): Boolean {
     val resolver = LocalContext.current.contentResolver
-    val scale by produceState(initialValue = animatorDurationScale(resolver), resolver) {
+    val scale by produceState(initialValue = remember(resolver) { animatorDurationScale(resolver) }, resolver) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
                 value = animatorDurationScale(resolver)

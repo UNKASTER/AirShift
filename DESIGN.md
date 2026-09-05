@@ -70,7 +70,7 @@
 | Exit | 70 ms · Linear | 旧页、折叠前内容、移除的条淡出 |
 | Content | 120 ms · Linear（可带 35 ms RevealDelay） | 展开内容、新增的条淡入 |
 | Enter | 180 ms · EmphasizedDecelerate | 新页滑入 **与** 淡入（同曲线） |
-| Flip / FlipExit | 220 / 130 ms | 翻牌位移与新数字淡入 / 旧数字淡出 |
+| Flip / FlipExit | 220 / 130 ms | 翻牌位移与新数字淡入 / 旧数字淡出（130 ms 由后续翻牌批次启用，当前仍为 220 ms） |
 | Breath | 600 ms 往返 · Standard | "应立即到位"红灯光晕；`LocalReduceMotion` 为 true 时静止在 0.25 |
 | fastSpatial | M3 0.9 / 1400（约 140 ms 静止） | 条的展开 / 折叠高度、底栏红灯横移 |
 | defaultSpatial | M3 0.9 / 700（约 190 ms 静止） | 条在栏位间移动、被挤开 |
