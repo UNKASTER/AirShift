@@ -43,10 +43,10 @@ import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.DutyStrip
 import com.bradj.airshift.ui.components.EmptyBay
 import com.bradj.airshift.ui.components.LinearIcons
-import com.bradj.airshift.ui.components.animateListItem
 import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.OdometerText
 import com.bradj.airshift.ui.components.PinnedActionBar
+import com.bradj.airshift.ui.components.animateListItem
 import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.components.formatClock
 import com.bradj.airshift.ui.components.remainingText

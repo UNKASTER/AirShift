@@ -145,30 +145,39 @@ fun AllDutyScreen(
                 }
             },
         )
-        // 指示器只在用户自己下拉时出现：自动刷新（DutyViewModel 同样置 isLiveRefreshing）的状态走板脚文字，
-        // 不让指示器"无人下拉自己弹出"。isWorking 时 ViewModel 会拒绝这次下拉，不记为 pulled。
+        // 指示器只在用户自己下拉时出现；自动刷新（DutyViewModel 同样置 isLiveRefreshing）只在板脚给文字。
+        // isRefreshing 仍绑 isLiveRefreshing：刷新期间照旧抑制手势。pulled 由"手指是否在拉"驱动——
+        // 手指拉动（有距离、不是程序动画、没在刷新）置 true；指示器回到顶部且没在刷新时清零，
+        // 被 ViewModel 静默拒绝的下拉（isLiveRefreshing 不会变 true）会随指示器缩回一起清零。
         var pulled by remember { mutableStateOf(false) }
-        LaunchedEffect(isLiveRefreshing) {
-            if (!isLiveRefreshing) pulled = false
-        }
-        val showPullIndicator = isLiveRefreshing && pulled
         val pullState = rememberPullToRefreshState()
+        val pullFraction = pullState.distanceFraction
+        val pullAnimating = pullState.isAnimating
+        LaunchedEffect(pullFraction, pullAnimating, isLiveRefreshing) {
+            when {
+                pullFraction > 0f && !pullAnimating && !isLiveRefreshing -> pulled = true
+                pullFraction == 0f && !isLiveRefreshing -> pulled = false
+            }
+        }
         PullToRefreshBox(
-            isRefreshing = showPullIndicator,
+            isRefreshing = isLiveRefreshing,
             onRefresh = {
-                pulled = !isWorking
+                pulled = true
                 onRefresh()
             },
             state = pullState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             indicator = {
-                PullToRefreshDefaults.Indicator(
-                    state = pullState,
-                    isRefreshing = showPullIndicator,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = c.strip,
-                    color = c.board,
-                )
+                // 自动刷新时不组合指示器：它的程序动画（到阈值、缩回）都不会被看见。
+                if (pulled) {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = isLiveRefreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = c.strip,
+                        color = c.board,
+                    )
+                }
             },
         ) {
             LazyColumn(
