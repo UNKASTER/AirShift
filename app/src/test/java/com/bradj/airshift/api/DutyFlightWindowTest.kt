@@ -100,7 +100,7 @@ class DutyFlightWindowTest {
     }
 
     @Test
-    fun allRosterScopeRetainsOperationDatesAndDeduplicationAfterCompletion() {
+    fun allRosterScopeRetainsOperationDatesAndUnscheduledLegsUseTheRosterDate() {
         val yesterday = now.minusDays(1)
         val duties = listOf(
             assignment(" mu1001 ").copy(scheduledArrival = yesterday),
@@ -109,16 +109,72 @@ class DutyFlightWindowTest {
             assignment("MU1002").copy(scheduledArrival = null),
         )
 
+        // 没有计划时间的 MU1002 按排班日（最早计划时间所在日）查询，而不是按“今天”。
         assertEquals(
             setOf(
                 FlightLookup.of("MU1001", yesterday.toLocalDate()),
                 lookup("MU1001"),
                 FlightLookup.of("MU1001", now.toLocalDate().plusDays(1)),
-                lookup("MU1002"),
+                FlightLookup.of("MU1002", yesterday.toLocalDate()),
             ),
             duties.refreshLookups(duties.size, FlightRefreshScope.ALL_ROSTER, now),
         )
         assertTrue(emptyList<RosterAssignment>().refreshLookups(0, FlightRefreshScope.ALL_ROSTER, now).isEmpty())
+    }
+
+    @Test
+    fun automaticWindowStaysEmptyUntilThreeHoursBeforeTheRosterDayStarts() {
+        // 提前一天导入的排班：首个任务明天 13:00，自动跟踪从明天 10:00 开始。
+        val tomorrow = now.plusDays(1)
+        val duties = listOf(
+            assignment("MU1001").copy(scheduledArrival = tomorrow.plusHours(1)),
+            assignment("MU1002").copy(scheduledArrival = tomorrow.plusHours(3)),
+        )
+
+        val start = tomorrow.minusHours(2)
+        assertTrue(duties.dutyWindowLookups(0, now).isEmpty())
+        assertTrue(duties.refreshIndices(0, FlightRefreshScope.DUTY_WINDOW, start.minusMinutes(1)).isEmpty())
+        assertTrue(duties.dutyWindowLookups(0, start.minusMinutes(1)).isEmpty())
+        assertEquals(listOf(0, 1), duties.refreshIndices(0, FlightRefreshScope.DUTY_WINDOW, start))
+        assertEquals(
+            setOf(FlightLookup.of("MU1001", tomorrow.toLocalDate()), FlightLookup.of("MU1002", tomorrow.toLocalDate())),
+            duties.dutyWindowLookups(0, start),
+        )
+        // 显式手动下拉不受时段限制。
+        assertEquals(listOf(0, 1), duties.refreshIndices(0, FlightRefreshScope.ALL_ROSTER, now))
+        assertEquals(2, duties.refreshLookups(0, FlightRefreshScope.ALL_ROSTER, now).size)
+    }
+
+    @Test
+    fun overnightArrivalsAreLookedUpOnTheirDepartureDay() {
+        // 夜班最后一班次日 01:00 到达：飞常准按出发日查询，lookup 日期取前一天；出港侧仍按计划出发日。
+        val nightShift = listOf(
+            assignment("MU2416").copy(outboundFlight = "MU2416", scheduledDeparture = now.withHour(22).withMinute(20)),
+            assignment("MU2418").copy(scheduledArrival = now.plusDays(1).withHour(1).withMinute(0)),
+            assignment("MU1002").copy(
+                inboundFlight = null,
+                scheduledArrival = null,
+                outboundFlight = "MU1002",
+                scheduledDeparture = now.plusDays(1).withHour(1).withMinute(35),
+            ),
+        )
+
+        assertEquals(
+            setOf(lookup("MU2416"), lookup("MU2418"), FlightLookup.of("MU1002", now.toLocalDate().plusDays(1))),
+            nightShift.refreshLookups(0, FlightRefreshScope.ALL_ROSTER, now),
+        )
+    }
+
+    @Test
+    fun automaticWindowDoesNotReopenForAnOldRosterOnALaterDay() {
+        // 上个班的排班一直留在 App 里：所有任务都已过点完成，休息日不会再有任何自动查询。
+        val duties = listOf(
+            assignment("MU1001").copy(scheduledArrival = now.minusDays(2)),
+            assignment("MU1002").copy(scheduledArrival = now.minusDays(2).plusHours(4)),
+        )
+
+        assertTrue(duties.dutyWindowLookups(0, now).isEmpty())
+        assertTrue(duties.refreshIndices(0, FlightRefreshScope.DUTY_WINDOW, now).isEmpty())
     }
 
     private fun lookup(flight: String) = FlightLookup.of(flight, now.toLocalDate())

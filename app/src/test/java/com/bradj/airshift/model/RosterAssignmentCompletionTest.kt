@@ -142,4 +142,19 @@ class RosterAssignmentCompletionTest {
         assertEquals(0, listOf(delayed).nextIncompleteDutyIndex(0, now))
         assertEquals(1, listOf(delayed).nextIncompleteDutyIndex(1, now))
     }
+
+    @Test
+    fun anEstimateFromAnotherDaysFlightDoesNotKeepTheDutyOpen() {
+        // 同号航班明天照飞：把明天的预计时间写进来也不能让昨天的任务重新变成未完成。
+        val foreign = assignment(
+            inboundFlight = "MU1001",
+            scheduledArrival = now.minusHours(5),
+            estimatedArrival = now.minusHours(5).plusDays(1),
+        )
+        val sameOperation = foreign.copy(estimatedArrival = now.plusHours(1))
+
+        assertTrue(foreign.isDutyComplete(now))
+        assertFalse(sameOperation.isDutyComplete(now))
+        assertTrue(listOf(foreign).allDutiesComplete(now))
+    }
 }

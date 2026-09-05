@@ -9,6 +9,8 @@ import com.bradj.airshift.api.FlightRefreshScope
 import com.bradj.airshift.api.LiveFlightRefresher
 import com.bradj.airshift.api.LiveRefreshResult
 import com.bradj.airshift.api.dutyWindowLookups
+import com.bradj.airshift.api.inboundLookupDate
+import com.bradj.airshift.api.lookupFallbackDate
 import com.bradj.airshift.api.refreshIndices
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.withLiveInfo
@@ -374,6 +376,39 @@ class DutyViewModelTest {
         assertFalse(configurations.last())
     }
 
+    @Test
+    fun importingTomorrowsRosterSavesItWithoutRefreshingAndSaysWhenTrackingStarts() {
+        // 头天晚上导入明天的排班：不上班的时候不联网，明天首个任务（13:00）前 3 小时才开始自动跟踪。
+        val roster = duties(2).map { it.copy(scheduledDeparture = checkNotNull(it.scheduledDeparture).plusDays(1)) }
+        val rosterDate = baseTime.toLocalDate().plusDays(1)
+        viewModel.importExcel(RosterSource { RosterParseResult(roster, rosterDate, emptyList()) })
+        runCurrent()
+
+        assertTrue(refresher.requests.isEmpty())
+        assertFalse(viewModel.uiState.value.isWorking)
+        assertEquals(roster, store.loadSnapshot().assignments)
+        assertEquals("排班已保存，9/5 10:00 起自动跟踪航班动态", viewModel.uiState.value.statusMessage)
+        // 后台周期任务照常登记（首轮延迟到跟踪起点），到点后由 Worker 自己重算窗口。
+        assertTrue(configurations.last())
+    }
+
+    @Test
+    fun automaticRefreshBeforeTheTrackingWindowMakesNoRequestButAManualPullStillCan() {
+        val roster = duties(2).map { it.copy(scheduledDeparture = checkNotNull(it.scheduledDeparture).plusDays(1)) }
+        store.replaceAssignments(roster)
+        viewModel.onForegrounded()
+
+        viewModel.refreshCurrentAssignments(automatic = true)
+        runCurrent()
+        assertTrue(refresher.requests.isEmpty())
+        assertFalse(viewModel.uiState.value.isWorking)
+
+        viewModel.refreshCurrentAssignments(automatic = false)
+        runCurrent()
+        assertEquals(FlightRefreshScope.ALL_ROSTER, refresher.requests.single().scope)
+        assertEquals(lookups(roster), refresher.requests.single().targets)
+    }
+
     private fun runCurrent() = dispatcher.scheduler.runCurrent()
 
     private fun ports() = DutyPorts(
@@ -407,7 +442,7 @@ class DutyViewModelTest {
 
     private fun lookups(roster: List<RosterAssignment>): Set<FlightLookup> = roster.flatMap { duty ->
         listOfNotNull(
-            duty.inboundFlight?.let { FlightLookup.of(it, checkNotNull(duty.scheduledArrival).toLocalDate()) },
+            duty.inboundFlight?.let { FlightLookup.of(it, duty.inboundLookupDate(baseTime.toLocalDate())) },
             duty.outboundFlight?.let { FlightLookup.of(it, checkNotNull(duty.scheduledDeparture).toLocalDate()) },
         )
     }.toSet()
@@ -473,8 +508,9 @@ private class FakeRosterRepository(private val clock: Clock) : RosterRepository 
         val allowed = current.assignments.refreshLookups(current.manuallyCompletedCount, scope, now)
         val relevant = live.filterKeys { it in allowed }
         if (relevant.isEmpty()) return current
+        val liveFallbackDate = current.assignments.lookupFallbackDate(fallbackDate)
         assignments = current.assignments.mapIndexed { index, assignment ->
-            if (index in targetIndices) assignment.withLiveInfo(relevant, fallbackDate) else assignment
+            if (index in targetIndices) assignment.withLiveInfo(relevant, liveFallbackDate) else assignment
         }
         return loadSnapshot()
     }

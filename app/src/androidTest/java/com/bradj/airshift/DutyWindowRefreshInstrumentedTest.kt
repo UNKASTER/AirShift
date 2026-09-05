@@ -30,6 +30,7 @@ import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
 import com.bradj.airshift.api.LiveFlightRefresher
 import com.bradj.airshift.api.LiveRefreshResult
+import com.bradj.airshift.api.inboundLookupDate
 import com.bradj.airshift.data.RosterStore
 import com.bradj.airshift.duty.AirportLocatorPort
 import com.bradj.airshift.duty.ApiKeyTester
@@ -79,7 +80,8 @@ class DutyWindowRefreshInstrumentedTest {
     private val refreshConfigurations = CopyOnWriteArrayList<Boolean>()
     private val excelReadCount = AtomicInteger()
     private val queue = SharedExcelImportQueueViewModel(SavedStateHandle())
-    private val baseTime = LocalDateTime.now().plusHours(8)
+    // 任务落在一小时后起：既不会在测试期间自动完成，又已进入排班日的跟踪时段（首个任务前 3 小时）。
+    private val baseTime = LocalDateTime.now().plusHours(1)
     private lateinit var targetContext: Context
     private lateinit var isolatedContext: Context
     private lateinit var store: RosterStore
@@ -517,7 +519,7 @@ class DutyWindowRefreshInstrumentedTest {
 
     private fun lookups(roster: List<RosterAssignment>): Set<FlightLookup> = roster.flatMap { duty ->
         listOfNotNull(
-            duty.inboundFlight?.let { FlightLookup.of(it, checkNotNull(duty.scheduledArrival).toLocalDate()) },
+            duty.inboundFlight?.let { FlightLookup.of(it, duty.inboundLookupDate(LocalDate.now())) },
             duty.outboundFlight?.let { FlightLookup.of(it, checkNotNull(duty.scheduledDeparture).toLocalDate()) },
         )
     }.toSet()

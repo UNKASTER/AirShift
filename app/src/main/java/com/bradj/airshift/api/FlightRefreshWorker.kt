@@ -11,10 +11,13 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.bradj.airshift.data.RosterStore
+import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.RosterTracking
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.specialservice.SpecialServiceRepository
 import com.bradj.airshift.widget.DutyWidgetUpdater
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -23,6 +26,9 @@ import java.util.concurrent.TimeUnit
 private const val ROSTER_GENERATION_INPUT_KEY = "roster_generation"
 private const val TARGET_FLIGHT_LOOKUPS_INPUT_KEY = "target_flight_lookups"
 private const val FLIGHT_LOOKUP_SEPARATOR = "|"
+
+/** WorkManager 允许的最小周期，也是首轮的最小延迟。 */
+internal const val REFRESH_PERIOD_MINUTES = 15L
 
 class FlightRefreshWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
     override fun doWork(): Result {
@@ -119,10 +125,10 @@ object FlightRefreshScheduler {
                 manager.cancelWorkById(it.id).result.get()
             }
             if (!eligible || store.rosterGeneration != generation) return@submit
-            val request = PeriodicWorkRequestBuilder<FlightRefreshWorker>(15, TimeUnit.MINUTES)
+            val request = PeriodicWorkRequestBuilder<FlightRefreshWorker>(REFRESH_PERIOD_MINUTES, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setInputData(Data.Builder().putLong(ROSTER_GENERATION_INPUT_KEY, generation).build())
-                .setInitialDelay(15, TimeUnit.MINUTES)
+                .setInitialDelay(initialDelayMinutes(current.assignments, LocalDateTime.now()), TimeUnit.MINUTES)
                 .addTag(WORK_TAG)
                 .addTag(workName)
                 .build()
@@ -161,6 +167,18 @@ object FlightRefreshScheduler {
             .build()
         WorkManager.getInstance(context.applicationContext).enqueue(request)
     }
+}
+
+/**
+ * 周期任务的首轮延迟：至少一个周期；排班日的跟踪时段尚未开始（提前一天导入）时直接睡到那一刻，
+ * 上班前不联网。到点后每次执行仍以 [refreshLookups] 重算窗口，系统延后执行也不会查错日子。
+ */
+internal fun initialDelayMinutes(assignments: List<RosterAssignment>, now: LocalDateTime): Long {
+    val untilStart = RosterTracking.startsAt(assignments)
+        ?.let { start -> Duration.between(now, start) }
+        ?.takeUnless { it.isNegative }
+        ?: return REFRESH_PERIOD_MINUTES
+    return maxOf(REFRESH_PERIOD_MINUTES, untilStart.plusMinutes(1).toMinutes())
 }
 
 private fun encodeFlightLookup(lookup: FlightLookup): String =

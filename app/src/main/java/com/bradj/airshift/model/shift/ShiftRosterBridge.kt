@@ -2,6 +2,7 @@ package com.bradj.airshift.model.shift
 
 import com.bradj.airshift.model.DutyTimeline
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.rosterDate
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -15,12 +16,8 @@ import java.time.LocalDateTime
  */
 object ShiftRosterBridge {
 
-    /**
-     * 排班自身的日期：取最早的计划时间所在日。
-     * 排班一天从清晨排到次日凌晨，最早那项必然落在当天。
-     */
-    fun rosterDate(assignments: List<RosterAssignment>): LocalDate? =
-        assignments.mapNotNull(::scheduledStart).minOrNull()?.toLocalDate()
+    /** 排班自身的日期，即 [rosterDate]：取最早的计划时间所在日。 */
+    fun rosterDate(assignments: List<RosterAssignment>): LocalDate? = assignments.rosterDate()
 
     /**
      * 首个任务的到位时间，以排班日 00:00 起的分钟数表示；无可计算任务时返回 null。
@@ -41,9 +38,6 @@ object ShiftRosterBridge {
         val latest = assignments.mapNotNull(::scheduledEnd).maxOrNull() ?: return null
         return minutesFrom(date, latest)
     }
-
-    private fun scheduledStart(assignment: RosterAssignment): LocalDateTime? =
-        listOfNotNull(assignment.scheduledArrival, assignment.scheduledDeparture).minOrNull()
 
     private fun scheduledEnd(assignment: RosterAssignment): LocalDateTime? =
         listOfNotNull(assignment.scheduledArrival, assignment.scheduledDeparture).maxOrNull()

@@ -12,6 +12,7 @@ import com.bradj.airshift.api.LiveRefreshResult
 import com.bradj.airshift.api.dutyWindowLookups
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.RosterTracking
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.parser.RosterParseResult
@@ -182,7 +183,7 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         }
         val lookups = result.assignments.dutyWindowLookups(0, now())
         if (lookups.isEmpty()) {
-            update { copy(isWorking = false, statusMessage = "排班已保存，当前没有需要实时跟踪的航班") }
+            update { copy(isWorking = false, statusMessage = savedWithoutTrackingMessage(result.assignments)) }
             requestPermissionsAndLocate()
             return
         }
@@ -197,6 +198,13 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         update { copy(isWorking = false) }
         if (applied) requestPermissionsAndLocate()
         drainPendingRefresh()
+    }
+
+    /** 提前导入的排班要到排班日首个任务前 3 小时才开始自动跟踪（[RosterTracking]），把起点告诉用户。 */
+    private fun savedWithoutTrackingMessage(assignments: List<RosterAssignment>): String {
+        val start = RosterTracking.startsAt(assignments)?.takeIf { it.isAfter(now()) }
+            ?: return "排班已保存，当前没有需要实时跟踪的航班"
+        return "排班已保存，${start.format(TRACKING_START_FORMAT)} 起自动跟踪航班动态"
     }
 
     // ---------- 实时刷新 ----------
@@ -514,6 +522,8 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
     }
 
     companion object {
+        private val TRACKING_START_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("M/d HH:mm")
+
         fun factory(ports: DutyPorts): ViewModelProvider.Factory = viewModelFactory {
             initializer { DutyViewModel(ports) }
         }

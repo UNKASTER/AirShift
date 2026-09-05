@@ -1,9 +1,9 @@
 # 航勤智排（AirShift）当前实现规格
 
 > - 文档类型：当前 `main` 的 as-built specification
-> - 审查日期：2026-09-05（Asia/Shanghai）
-> - 源码基线：`c5e02cd` 之后的 0.11.0 界面重设计与 0.11.1 动效调整
-> - 应用版本：`0.11.1` / version code `49`
+> - 审查日期：2026-09-06（Asia/Shanghai）
+> - 源码基线：`c5e02cd` 之后的 0.11.0 界面重设计、0.11.1 动效调整与 0.11.2 排班日跟踪
+> - 应用版本：`0.11.2` / version code `50`
 > - 支持平台：Android 13（API 33）及以上
 
 ## 1. 文档定位
@@ -27,6 +27,7 @@ AirShift 是航司地面服务保障人员的单用户日排班助手，核心�
 4. 在设备本机完成 OCR、排班解析、进度保存、提醒和 MUC 通知识别；
 5. 由手机直接调用飞常准 Aviation MCP，不建设自有中转服务；
 6. 按上三休三周期在本机推算上班日、班次槽位和应乘班车，不依赖当天是否已导入排班。
+7. 自动刷新与提醒只在排班日进行：排班日之外（休息、请假、提前导入的当晚）不联网、不提醒；同一航班号别的日子的动态不当成排班里的这一班。
 
 ### 2.2 运行前提与降级能力
 
@@ -58,7 +59,7 @@ AirShift 是航司地面服务保障人员的单用户日排班助手，核心�
 3. 用户在“全部执勤”选择图片/Excel，或从外部应用分享 Excel。
 4. Reader 在后台读取，Parser 返回 `RosterParseResult`。
 5. 解析成功后整体替换排班、generation 加一、人工进度归零，并扇出提醒、MUC 重匹配、WorkManager 配置和小组件重绘。
-6. 如果有 API Key 且当前执勤窗非空，立即刷新当前和下一项未完成执勤。
+6. 如果有 API Key、排班日的跟踪时段已开始（首个任务前 3 小时）且当前执勤窗非空，立即刷新当前和下一项未完成执勤；提前导入时只保存并提示自动跟踪的起点。
 7. 用户在“当前执勤”执行任务；自动完成规则与人工完成前缀共同决定当前/下一项。
 8. 全部完成后自动刷新停止；用户仍可在“全部执勤”显式下拉，查询全排班并修正数据。
 
@@ -158,17 +159,21 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - `CES` 前缀转换为 `MU`。
 - 排班时间接受 3/4 位 `HHmm`；包含 `+` 时落在次日。
 - 无年份的月日从前一年、当年、后一年中选择离设备当天最近的合法日期。
-- 查实时航班时，lookup key 是规范化航班号与运行日期；没有计划日期时回退执行时当天。
+- 查实时航班时，lookup key 是规范化航班号与运行日期。飞常准的 `date` 是**出发日**（真机核对，见 §12.2）：出港航段取计划出发日；进港航段取计划到达时间的运行日（`FlightOperation.operationDateOfArrival`，06:00 前到达的夜班航班算前一天，与 `DutyProgressDay` 共用边界）；航段没有计划日期时先用同一任务另一航段的日期，再回退排班日（最早计划时间所在日，`rosterDate()`），只有整份排班都没有日期时才用执行时当天（`lookupFallbackDate`）。
 
 ### 4.3 自动完成、人工完成与窗口
 
 单航段满足任一条件即自动完成：
 
 1. 已有对应实际到达/起飞时间；
-2. 当前时间不早于“预计时间优先、计划时间回退”加 3 小时；
+2. 当前时间不早于“预计时间优先、计划时间回退”加 3 小时；预计时间只在与计划时间相差不超过 12 小时时采信（`FlightOperation.trusted`），否则按计划时间；
 3. 航段完全没有实际、预计或计划时间，因无法跟踪而视为完成。
 
 不存在的方向天然完成，过站任务必须进、出港都完成。排班列表为空不算“全部执勤完成”。
+
+**同一班归属（`model/FlightOperation.kt`）**：同一航班号每天都执行，排班里的那一班只有一个。与计划时间相差不超过 `MAX_DEVIATION = 12h` 的动态才属于这一班（相邻两天相隔 24 小时，取一半）；相差更多的是别的日子的同号航班。实时合并（§7.4）、自动完成与提醒（§8.1）三处共用这一规则，因此别的日子的动态既不能让任务永远完不成，也不能把提醒挪到休息日。
+
+**排班日跟踪时段（`model/RosterTracking.kt`）**：App 只保存一份排班，它就是用户上班那天的进程单；排班日之外的日子——休息、请假，或提前一天导入——用户都不上班。自动跟踪的起点 `startsAt` = 最早航段时间（计划优先，缺计划时回退预计/实际）− `LEAD = 3h`，与收尾的 3 小时宽限对称；终点仍由逐项自动完成决定。`hasStarted` 为假时，所有 `DUTY_WINDOW` 入口（导入后首刷、前台自动、后台周期、完成补查）的下标与 lookup 集合都为空；`ALL_ROSTER`（显式手动下拉）不受限。跟踪时段不看排班日历的到岗判断，因为请假日日历仍会显示上班。
 
 人工进度是一个按日保存的前缀计数 `duty_index`：
 
@@ -409,13 +414,14 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 | App 完成补查 | `DUTY_WINDOW` 的新 lookup | 忙碌时并入 pending 集合 |
 | Widget 完成补查 | `DUTY_WINDOW` 的新 lookup | 一次性联网约束 Worker |
 
-每项最多有两个航段，两项窗口最多产生 4 个不同 lookup；相同航班号与日期去重。窗口不再按计划时间相对现在的小时范围筛选。
+每项最多有两个航段，两项窗口最多产生 4 个不同 lookup；相同航班号与日期去重。窗口不再按计划时间相对现在的小时范围筛选，但受 §4.3 的排班日跟踪时段限制：跟踪起点之前所有 `DUTY_WINDOW` 入口返回空集，不发起任何查询；`ALL_ROSTER` 不受限。
 
 ### 7.2 调度与停止
 
 - 前台 effect 在 Activity 前台、有排班和 API Key 时启动；可立即查询，之后目标间隔 5 分钟，忙碌时每 15 秒复查。
 - effect key 包含 active、generation 和完成状态；普通实时字段变化不会造成紧密重启。
-- 后台使用联网约束的 `PeriodicWorkRequest`：周期 15 分钟、首轮延迟 15 分钟、generation 专属唯一名称、`KEEP`。
+- 前台循环在跟踪起点之前每 5 分钟触发一次自动刷新，但窗口为空、不联网、不提示；到点后的下一次触发开始查询。
+- 后台使用联网约束的 `PeriodicWorkRequest`：周期 15 分钟、generation 专属唯一名称、`KEEP`；首轮延迟为 15 分钟与“距跟踪起点的分钟数 + 1”中的较大值（`initialDelayMinutes`），提前一天导入时 Worker 直接睡到首个任务前 3 小时。`KEEP` 意味着首轮延迟在同一 generation 首次登记时定下；到点后每次执行仍以最新窗口重算。
 - 15 分钟是 WorkManager 的最小请求周期，不保证墙钟准点执行。
 - Scheduler 使用单线程 executor 串行配置；旧 generation 的工作按捕获 ID 取消，过期 disable 请求不能取消仍符合资格的新任务。
 - Worker 在入口和每个 HTTP 前检查 API Key、generation、停止状态、排班、完成状态和最新窗口。
@@ -450,6 +456,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - `result.content[*].text` 可能各自包含一个或多个航段，客户端会合并全部文本项。
 - 内层是飞常准返回的类 Python 字典文本，支持字符串时间与 `datetime.datetime(...)`。
 - 多经停响应按顶层字典拆为航段；当存在逐段记录时丢弃 `StopFlag='1'` 的全程摘要。
+- 航段先按同一班归属过滤（`ownLegs`）：进港侧看到达时间、出港侧看出发时间（计划优先，回退预计/实际）。任务有计划时间时，航段时间须与之相差 ≤ 12 小时；没有计划时间时只能粗判，须落在查询日期 ±1 天；航段没有任何时间时无从判断，照旧接受（它带不来会漂移的时间）。被过滤的航段不参与后续选择，全部过滤后任务保持原值。
 - 入港/出港映射先选计划时间最接近排班时间的航段，再回退已存本场代码、同航班过站拓扑，最后分别回退末段/首段。
 - 新响应只有非空字段才覆盖旧值；部分数据或失败不会主动清除已保存实时字段。
 
@@ -468,6 +475,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 写回必须 generation 相同，并重新计算写回时的 scope 索引和允许 lookup。
 - `DUTY_WINDOW` 不更新窗口外重复航班；`ALL_ROSTER` 可更新已经完成的任务。
 - merge 在锁内基于最新排班执行，避免旧列表覆盖另一刷新已写入的不同任务或人工进度。
+- 无计划时间的航段按排班日对应 lookup（`lookupFallbackDate`），与请求生成时一致；`fallbackDate` 参数只在整份排班没有日期时生效。
 - 保存成功时更新 `last_live_refresh`，随后重匹配 MUC、重排提醒并重绘小组件。
 
 ## 8. 提醒与定位
@@ -476,9 +484,11 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 每项任务最多安排一条提醒：
 
-- 有进港航段（包括过站）：实际到达存在时不提醒；否则取预计到达优先/计划到达回退，提前 15 分钟；
-- 纯出港：实际出发存在时不提醒；否则取预计出发优先/计划出发回退，提前 1 小时 10 分钟；
+- 有进港航段（包括过站）：实际到达存在时不提醒；否则取同一班的预计到达优先/计划到达回退，提前 15 分钟；
+- 纯出港：实际出发存在时不提醒；否则取同一班的预计出发优先/计划出发回退，提前 1 小时 10 分钟；
 - 没有可用时间或目标时间已过：不安排。
+
+“同一班”按 §4.3 的 `FlightOperation.trusted` 判断：预计时间与计划时间相差超过 12 小时时不采信，退回计划时间。提醒时间只来自任务自身的时间，因此只可能落在排班日；休息日、请假日或提前导入的当晚不会触发同号航班的提醒。
 
 每次重排用 `stableId.hashCode()` 创建 PendingIntent，先取消同 ID 的旧闹钟。获得精确闹钟特殊访问时使用 `setExactAndAllowWhileIdle`，否则使用 `setAndAllowWhileIdle`。通知频道为高重要性，点击通知打开 `MainActivity`。
 
@@ -642,7 +652,11 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.11.1）只改动效，设计、文案与业务不变。起因：真机上切换分区与展开信息条"迟钝、不干脆"。诊断：分区切换 fade-through 有 90 ms 空档并叠 96% 缩放（合计 300 ms）；展开用 Material standard 曲线（起步慢）250 ms；条在栏位间移动 400 ms 同曲线；展开内容瞬间替换、无淡入。改法见 §6.1 / §6.2 / §6.8 与 DESIGN.md 动效节。验证：JDK 21 守护进程下 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、2 项条件跳过；detekt 0 发现；Lint 基线外零新增；APK 生成并 `adb install -r` 到 vivo V2505A（0.11.1 / 49）。四页静止态截图核对：红灯落在选中标签上方、夹条三色正确、信息条外观与 0.11.0 一致。切页帧统计（`dumpsys gfxinfo`，暖机后底栏 8 次点击）：0.11.0 卡顿帧 3.2%、50/90/95/99 分位 8/18/22/57 ms；0.11.1 两轮为 2.3% 与 2.0%，分位 7/9/24/105 与 8/9/19/101 ms。framestats 拆解显示最慢帧（57 ms）是新页第一次组合（重组约 16 ms + 测量布局绘制约 33 ms），与旧版同量级，是 Debug 构建下整页组合的固有成本；99 分位升高来自紧随其后被推迟起步的一帧，不是动画本身变慢。系统动画时长比例为 1.0。随后在手机空闲时执行标准单批次 `connectedDebugAndroidTest`：60 项、0 失败、4 项按 `assumeFalse` 跳过（真实 API Key），含点条展开的 `AllDutyScreenBaysInstrumentedTest`、按 `nav_*` 切页的 `DutyWindowRefreshInstrumentedTest` 9 项与钉底按钮的 `CurrentDutyScreenIntegrationInstrumentedTest`，1 分 25 秒完成，主应用与数据保留。动效手感由用户在真机上判断。教训：向手机注入点击前先确认 `topResumedActivity` 是本应用，否则点击会落到用户正在用的其他应用上。
+本轮（0.11.2）修正“休息时仍弹通知、不上班时仍在后台刷新”。用户报告：休息日收到排班里同号航班的“即将进港”提醒。代码审查得到的路径：`withLiveInfo` 原样接受飞常准返回的任何航段，若接口对过去日期的查询返回了别的日子的同号航班（休息日手动下拉走 `ALL_ROSTER` 时尤其可能），其预计时间会写进任务，`isDutyComplete` 因而重新变为未完成、`ReminderPolicy` 据此排出落在休息日的提醒、Worker 也被重新启用并逐日漂移；此外没有计划时间的航段一直按“今天”查询。修法见 §4.3（`FlightOperation` 12 小时归属、`RosterTracking` 跟踪时段）、§7.1 / §7.2 / §7.4 / §7.6 与 §8.1：合并只收同一班的航段，自动完成与提醒只信同一班的预计时间，所有自动刷新入口在排班日首个任务前 3 小时之前返回空集，Worker 首轮延迟直接睡到跟踪起点，无计划时间的航段按排班日查询。飞常准按日期查询的真实语义仍未离线验证，归属规则是本地兜底。先写纯函数测试再改实现：新增 `FlightOperationTest` 4 项、`RosterTrackingTest` 5 项、`ReminderPolicyTest` 4 项、`FlightInfoOperationGuardTest` 7 项、`FlightRefreshInitialDelayTest` 3 项，`DutyFlightWindowTest` 追加“起点前窗口为空 / 旧排班隔天不重开”2 项并把无计划时间航段的期望改为排班日，`RosterAssignmentCompletionTest` 追加“别的日子的预计时间不阻止完成”1 项，`DutyViewModelTest` 追加“头天晚上导入只保存并提示起点 / 起点前自动刷新无请求、手动下拉仍可全量”2 项。仪器测试同步改动：`DutyWindowRefreshInstrumentedTest` 的 `baseTime` 由 8 小时后改为 1 小时后、`RosterStoreInstrumentedTest` 的 upcoming 任务改为 2 小时后且“全量刷新救回自动完成项”改用相差 6 小时的预计时间、`FlightRefreshSchedulerInstrumentedTest` 默认任务改为 1 小时后并新增“明天的排班首轮延迟超过 1 小时”1 项。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 282 项通过、0 项失败、2 项条件跳过；detekt 首轮拦下测试辅助函数的 LongParameterList、`initialDelayMinutes` 的 ReturnCount 与两个 `Duration.ofHours` 的 MagicNumber，分别改为按航段拆分的辅助函数、单表达式与命名常量后 0 新发现；Lint 基线外零新增（仍提示基线中 22 条记录已不存在）；仪器测试编译通过；Debug APK 生成。随后在用户确认手机空闲后接入真机（vivo V2505A，Android 16 / API 36，前台为桌面）执行标准单批次 `connectedDebugAndroidTest`：覆盖安装 0.11.2（version code 50），61 项执行、0 失败、5 项按 `assumeFalse` 跳过（`FlightRefreshSchedulerInstrumentedTest` 全部 5 项，含新增的首轮延迟用例，因手机上配置了真实 API Key），用时 1 分 8 秒；改过时间假设的 duty-window 9 项、数据层 19 项与 Compose 用例全部通过，主应用与本地数据保留。
+
+随后在用户授权花费查询额度后，用手机上已存的 Key 做了一次真实查询探针（新增可选用例 `VariFlightLiveProbeInstrumentedTest`，必须以 `airshift.liveVariFlight=true` 显式开启，明文 Key 只在进程内解密、不写日志）。手机上留存的 09-04 夜班排班本身就是故障现场：`MU2418` 计划 09-05 01:00 到达，存储里的预计到达却是 09-06 00:31，`last_live_refresh` 停在 09-05 13:42（交接班日仍在刷新）。探针结果：`MU2418@2026-09-04` 返回 PKX→LHW 计划 09-04 22:40 → 09-05 01:00、实际 09-05 00:40 到达、机位 342，即排班里的这一班；`MU2418@2026-09-05` 返回 09-05 22:40 出发、09-06 01:00 到达的下一班——App 原先按到达日 09-05 查询，拿到的正是它；`FM9211@2026-09-04`（两天前）返回正确的历史班次与实际时间。结论：`date` 是出发日，过去日期查询可靠，漂移来自跨零点到达航班的查询日期。据此把进港 lookup 改为按运行日（06:00 前到达算前一天）查询，`FlightInfoOperationGuardTest` 追加 2 项、`DutyFlightWindowTest` 追加 1 项锁定；三个仪器测试类的 lookup 日期改用 `inboundLookupDate`，避免深夜运行时日期错位。同时移除 `FlightRefreshSchedulerInstrumentedTest` 的“已配置 Key 则跳过”假设：其 tearDown 不再调用会删除 Keystore 别名的 `clearVariFlightApiKey()`，只删带前缀的隔离文件，因此在配置了真实 Key 的手机上也能安全运行；首轮延迟用例的上限断言改为与 `initialDelayMinutes` 的计算值相差不超过 2 分钟（凌晨运行时“明天 12:00”距今超过 24 小时，原上限过紧）。改动后再次执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 285 项通过、0 失败、2 项条件跳过，detekt 与 Lint 零新增；真机整批 `connectedDebugAndroidTest`：62 项执行、0 失败、1 项跳过（未开启的探针），用时 1 分 4 秒，`FlightRefreshSchedulerInstrumentedTest` 5 项在配置了真实 Key 的手机上首次实际运行并通过，运行后 Key 密文仍在。AlarmManager 实际触发仍未验证。
+
+上一轮（0.11.1）只改动效，设计、文案与业务不变。起因：真机上切换分区与展开信息条"迟钝、不干脆"。诊断：分区切换 fade-through 有 90 ms 空档并叠 96% 缩放（合计 300 ms）；展开用 Material standard 曲线（起步慢）250 ms；条在栏位间移动 400 ms 同曲线；展开内容瞬间替换、无淡入。改法见 §6.1 / §6.2 / §6.8 与 DESIGN.md 动效节。验证：JDK 21 守护进程下 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、2 项条件跳过；detekt 0 发现；Lint 基线外零新增；APK 生成并 `adb install -r` 到 vivo V2505A（0.11.1 / 49）。四页静止态截图核对：红灯落在选中标签上方、夹条三色正确、信息条外观与 0.11.0 一致。切页帧统计（`dumpsys gfxinfo`，暖机后底栏 8 次点击）：0.11.0 卡顿帧 3.2%、50/90/95/99 分位 8/18/22/57 ms；0.11.1 两轮为 2.3% 与 2.0%，分位 7/9/24/105 与 8/9/19/101 ms。framestats 拆解显示最慢帧（57 ms）是新页第一次组合（重组约 16 ms + 测量布局绘制约 33 ms），与旧版同量级，是 Debug 构建下整页组合的固有成本；99 分位升高来自紧随其后被推迟起步的一帧，不是动画本身变慢。系统动画时长比例为 1.0。随后在手机空闲时执行标准单批次 `connectedDebugAndroidTest`：60 项、0 失败、4 项按 `assumeFalse` 跳过（真实 API Key），含点条展开的 `AllDutyScreenBaysInstrumentedTest`、按 `nav_*` 切页的 `DutyWindowRefreshInstrumentedTest` 9 项与钉底按钮的 `CurrentDutyScreenIntegrationInstrumentedTest`，1 分 25 秒完成，主应用与数据保留。动效手感由用户在真机上判断。教训：向手机注入点击前先确认 `topResumedActivity` 是本应用，否则点击会落到用户正在用的其他应用上。
 
 上一轮（0.11.0）是整套界面的重设计（方向"航显板 × 进程单"，见第 6 节）。流程：先用 Claude Design 画布出 10 块高保真画板（当前执勤浅/深/过点、全部执勤、排班日历、设置、首次进入、小组件、完成动效分镜、设计系统一览）经用户确认，再按 B0–B10 分任务实现。新增 Barlow 字体、`AirShiftPalette` 双主题 token、`BoardHeader` / `DutyStrip` / `StatusLamp` / `OdometerText` / `PinnedActionBar` 等组件，四页与 Onboarding 全部重写，底栏改为四等分 + 红灯指示，页面切换 fade-through，`enableEdgeToEdge` 显式指定状态栏图标恒为浅色并修正深色模式下的图标颜色，小组件改为藏青板面并删除全部装饰 drawable。先写纯函数测试再写实现：`DutyBaysTest` 3 项（人工前缀 / 自动完成 / 无时间任务落入已完成栏位、全部完成、空排班）、`OdometerSlotsTest` 2 项、`AssignmentLegsTest` 追加 `liveKind` 1 项；androidTest 新增 `FontFeaturesInstrumentedTest`（tnum 等宽断言）2 项与 `AllDutyScreenBaysInstrumentedTest` 1 项；`CurrentDutyScreenIntegrationInstrumentedTest` 的完成辅助函数改为直接点击钉底按钮（按钮已不在滚动区内）。detekt 首轮拦下主题 token 的 MagicNumber、单文件多声明命名、多 return、超长行与 Composable 复杂度，分别用 `detekt.yml` 排除 `ui/theme`、拆文件（`LampKind.kt`、`OdometerSlot.kt`、`LegPresentation.kt`）、改 `when` 与折行归零；Lint 拦下 RemoteViews 不允许裸 `View`，行线改为空 `FrameLayout`。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 254 项通过、0 项失败、2 项条件跳过；detekt 0 新发现；Lint 基线外零新增（提示基线中 22 条记录已不存在，对应删除的旧小组件装饰与卡片文案）；Debug APK 生成。
 
@@ -691,10 +705,11 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 | 范围 | `@Test` | 主要覆盖 |
 |---|---:|---|
-| JVM `api` | 42 | 两项窗口、batch、字段/多经停映射、JSON-RPC/SSE、脱敏错误、缓存/限流/并发（含同桶航班不互相阻塞） |
-| JVM `model` | 24 | 时间线、自动完成、人工前缀和窗口、执勤日 06:00 边界 |
+| JVM `api` | 57 | 两项窗口（含跟踪起点前为空、旧排班隔天不重开、无计划时间按排班日、跨零点到达按出发日）、batch、字段/多经停映射、同一班归属过滤与 lookup 日期 9 项、Worker 首轮延迟 3 项、JSON-RPC/SSE、脱敏错误、缓存/限流/并发（含同桶航班不互相阻塞） |
+| JVM `model` | 34 | 时间线、自动完成（含别的日子的预计时间不阻止完成）、人工前缀和窗口、执勤日 06:00 边界、同一班归属 4 项、排班日跟踪时段 5 项 |
 | JVM `data` | 5 | API Key 解密失败的永久/瞬时分类 |
-| JVM `duty` | 12 | 编排层：两项窗口自动/手动刷新、完成后补查、忙碌时排队、全部完成停止、导入后首刷、旧 generation 忽略、清理后不落库、设置保存 |
+| JVM `duty` | 14 | 编排层：两项窗口自动/手动刷新、完成后补查、忙碌时排队、全部完成停止、导入后首刷、提前导入只保存并提示起点、起点前自动刷新无请求、旧 generation 忽略、清理后不落库、设置保存 |
+| JVM `reminder` | 4 | 提醒只信同一班的预计时间，别的日子的预计退回计划时间 |
 | JVM `parser` | 12 | XLSX/XLS、模板变体、姓名隔离、班次行解析；含 2 个条件式真实 fixture |
 | JVM `model/shift` | 85 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配 |
 | JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
@@ -705,7 +720,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | Android 数据层 | 19 | generation、进度、执勤日跨零点、scope 合并、旧 JSON、扩展机位、班组校准 JSON 往返与余量收敛 |
 | Android 迁移 | 3 | 遗留键一次性清理、已完成迁移不重跑、构造 `RosterStore` 不触碰遗留键 |
 | Android 刷新编排 | 14 | duty-window 9 项、foreground effect 5 项 |
-| Android WorkManager | 4 | KEEP、generation、停止和旧任务迁移 |
+| Android WorkManager | 5 | KEEP、generation、停止、旧任务迁移和明天排班的首轮延迟；不再因已配置 Key 而跳过 |
+| Android 飞常准探针 | 1 | 可选的付费真实查询，默认跳过，把返回航段写入 logcat |
 | Android Excel 分享 | 11 | Manifest/Intent/FIFO/恢复 10 项、owner 隔离 1 项 |
 | Android 当前页 Compose | 2 | 点击完成、自动跳过和新排班恢复 |
 | Android 全部执勤页 Compose | 1 | 三个栏位与点条展开 |
@@ -717,6 +733,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.4 仍缺的验证
 
+- `VariFlightLiveProbeInstrumentedTest` 是付费的真实查询探针，默认跳过，只在显式开启时运行；06:00 之后才出发、当天凌晨前到达的红眼航班（出发与到达同为凌晨）仍会被按前一天查询，归属规则会拒绝其航段而没有实时数据，尚无真实样本；
 - 标准 `connectedDebugAndroidTest` 单批次仍需在 AOSP 模拟器或无厂商后台启动限制的设备上复跑；vivo 当前只能通过预启动宿主的拆分方式完成全部场景；
 - Onboarding、全部执勤、设置页的完整 Compose 交互和无障碍；
 - 真实 `MainActivity` ActivityScenario 生命周期、进程强杀和多窗口；
@@ -744,7 +761,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 4. **分享恢复**：没有永久 URI 权限或队列长度上限，不保证强停后的 exactly-once。
 5. **XLS 静默截断**：行号 10,000 以后和列号 255 以后忽略，可能产生不完整而非明确失败的结果。
 6. **排班 JSON 整体失败**：任一损坏条目可使整份排班加载为空；MUC Codec 才是逐项容错。
-7. **自动完成启发式**：陈旧预计时间或超长延误可能在 3 小时后过早完成；无时间航段直接完成。
+7. **自动完成启发式**：陈旧预计时间或超长延误可能在 3 小时后过早完成；无时间航段直接完成。与计划相差超过 12 小时的预计时间被当成别的日子的同号航班而不采信，因此超过 12 小时的超长延误会按计划时间完成、也不会再收到提醒。
 8. **人工完成不可撤销**：没有确认/回退，并且不会取消该任务未来提醒。
 9. **过站到位语义**：尚未整体完成的过站始终按进港到位时间显示，可能在等待出港期间长期显示过点。
 10. **后台非精确**：WorkManager 15 分钟不是准点保证，系统可延后。
@@ -764,6 +781,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 24. **内置班组表无成员**：校准前无法按姓名自动识别班组，只能手动指定；这是为了不让真实姓名进入公开仓库而有意为之。
 25. **执勤日固定 06:00 切换**：`DutyProgressDay.ROLLOVER_HOUR` 不可配置；延误到 06:00 之后才手动完成的夜班任务会在切换后重新显示，直到 3 小时自动完成生效。
 26. **APK 体积**：Debug 约 252 MB、R8 后的 release 约 217 MB，主要是 OpenCV 与 ONNX Runtime 的多 ABI 原生库；要明显缩小需要 ABI split 或 App Bundle，不在当前范围内。
+27. **排班日之外不自动跟踪**：跟踪时段以排班自身日期为准，不看排班日历。排班没有识别出日期时按导入当天处理（§5.2 的“暂按今天处理”警告），若在头天晚上导入，跟踪与提醒都会落在错误的一天，需要重新导入带日期的表。已存的旧数据若含别的日子的预计时间，升级后不再影响完成判定与提醒，但任务详情仍会显示它，直到下一次导入。
+28. **凌晨到达按前一天查询**：飞常准按出发日查询，App 把 06:00 前到达的进港航班当作前一天晚上出发。凌晨出发、凌晨到达的红眼航班会被查到前一天的班次并被归属规则拒绝，只能靠排班计划时间，没有实时数据；没有按“查不到就换另一天”的重试。
 
 ## 14. 当前验收标准
 
@@ -778,6 +797,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 ### 14.2 刷新与进度
 
 - 导入、前台、后台和未完成时手动刷新只查询当前 + 下一项未完成执勤。
+- 排班日首个任务前 3 小时之前，所有自动入口（导入后首刷、前台自动、后台周期、完成补查）不发起查询；显式手动下拉不受限。
+- 与计划时间相差超过 12 小时的实时航段不合并、不参与完成判定与提醒；无计划时间的航段按排班日查询。
+- 进港航段按运行日查询：06:00 前到达的航班查前一天（飞常准 `date` 为出发日）；出港航段按计划出发日。
 - 两项窗口按航班号+日期去重，每个请求前复查最新资格。
 - 人工完成只能推进调用者所见当前任务，并只补查新进入窗口的航班。
 - 全部完成后自动刷新停止；全排班手动刷新继续可用且不重置人工进度。
@@ -787,6 +809,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 ### 14.3 提醒、MUC、定位与 Widget
 
 - 进港/过站只建到达前 15 分钟提醒，纯出港只建出发前 1 小时 10 分钟提醒。
+- 提醒只落在排班日：时间只来自任务的计划时间与同一班（相差 ≤ 12 小时）的预计时间。
 - 无权限时功能按第 2.2 节降级，不阻断排班查看。
 - 只有 MUC 白名单包的新通知可进入解析；持久化 JSON 不含原文和个人敏感字段。
 - 更晚变更/取消按时序生效，旧摘要不能恢复已取消状态。
@@ -815,6 +838,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | WPS 分享与队列 | `app/src/main/java/com/bradj/airshift/SharedExcelImport.kt` |
 | 排班模型/完成/窗口 | `app/src/main/java/com/bradj/airshift/model/RosterAssignment.kt` |
 | 执勤日边界 | `model/DutyProgressDay.kt` |
+| 排班日跟踪时段与排班日期 | `model/RosterTracking.kt` |
+| 同一班归属（12 小时） | `model/FlightOperation.kt` |
 | 航段方向枚举 | `model/LegDirection.kt`；详情条目类型 `ui/components/Lookups.kt` 的 `DetailKind` |
 | 遗留清理与解密失败分类 | `data/LegacyMigrations.kt`、`data/ApiKeyDecryptFailure.kt` |
 | 当前执勤时间线 | `app/src/main/java/com/bradj/airshift/model/DutyTimeline.kt` |
@@ -847,6 +872,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
 - 0.11.0 界面重设计"航显板 × 进程单"：新增 Barlow 字体与 `AirShiftPalette` 双主题 token；每页顶部改为贯通状态栏的藏青板面（实时钟逐位翻牌），任务统一为带方向夹条的信息条（折叠一航段一行、点开展开），全部执勤按"当前 / 接下来 / 已完成"分栏，当前执勤的"执勤完成"钉在底部并带触感，底栏改四等分红灯指示、分区切换 fade-through，状态改为小矩形灯、缺失值显示"—"；设置与日历改为板头 + 信息条，Onboarding 改整屏板面；小组件改为藏青板面并删除装饰层；`enableEdgeToEdge` 显式指定系统栏样式并新增 `values-night` 主题；`app/detekt.yml` 对 Composable 放开规则。业务、数据与 MUC 逻辑不变，已有测试契约（底栏文字、"执勤完成"、单一滚动节点、小组件 view id）保留。
 - 0.11.1 动效调整：分区切换由 fade-through 改为 shared-axis（新页 16dp 位移滑入 180 ms、旧页 70 ms 淡出、无空档）；信息条展开 / 折叠改为 `AnimatedContent` + `SizeTransform`，容器高度、条的位移与底栏红灯横移共用无回弹弹簧 `AirShiftMotion.snap`（约 200 ms 内静止），内容 120 / 70 ms 淡入淡出；底栏红灯改为在标签间横移；"执勤完成"按下缩放反馈；翻牌 220 ms；夹条改为绘制并去掉 `IntrinsicSize.Min`；`AllDutyScreen` 每条只接收自身展开布尔值。设计、文案、业务与测试契约不变。
+- 0.11.2 排班日跟踪：修正休息日仍弹同号航班提醒、不上班时仍后台刷新。新增 `model/FlightOperation.kt`（与计划相差 ≤ 12 小时才算排班里的这一班）与 `model/RosterTracking.kt`（排班日首个任务前 3 小时起才自动跟踪；`rosterDate()` 收敛为排班日期的唯一定义，`ShiftRosterBridge` 委托它）。`withLiveInfo` 先按归属过滤航段，`isDutyComplete` 与 `ReminderPolicy` 只信同一班的预计时间，`refreshIndices` 的 `DUTY_WINDOW` 在跟踪起点前为空，无计划时间的航段按排班日而非“今天”查询，Worker 首轮延迟直接睡到跟踪起点，提前导入时状态栏提示起点。界面、MUC 与存储格式不变。
 - 0.10.6 MUC 轮椅简称与角标：解析器兼容口语简称 `C轮/R轮/S轮`（与 WCHC/WCHR/WCHS 同为高置信，可与代码在同一句混用，如「WCHR改为S轮」）；`WheelchairLevel` 增加 `shortCode` 单字母；任务卡特服角标与详情行的轮椅记录改为轮椅线性图标 + 等级字母，不再显示 WCHR/WCHS/WCHC 全称。数据层与 JSON 不变。
 - 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
 - 0.10.4 界面一致性：任务卡与小组件一律只显示机位，航线网格删除登机口行；MUC 登机口变更改为卡片内单独一行提示（列表页只提示有变更，当前执勤页展示原值 → 新值与更新时间）；小组件航段行字段与视图 id 由 gate 改名为 stand。数据层不变。

@@ -6,6 +6,7 @@ import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
 import com.bradj.airshift.api.dutyWindowLookups
+import com.bradj.airshift.api.lookupFallbackDate
 import com.bradj.airshift.api.refreshIndices
 import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.api.withLiveInfo
@@ -215,8 +216,10 @@ internal class RosterStore(
         if (relevantLive.isEmpty()) return@synchronized current
 
         // Refreshes may overlap a duty completion or another refresh; merge into the latest roster.
+        // 无计划时间的航段按排班日对应 lookup，与 refreshLookups 生成请求时的日期一致。
+        val liveFallbackDate = current.assignments.lookupFallbackDate(fallbackDate)
         val updated = current.assignments.mapIndexed { index, assignment ->
-            if (index in targetIndices) assignment.withLiveInfo(relevantLive, fallbackDate) else assignment
+            if (index in targetIndices) assignment.withLiveInfo(relevantLive, liveFallbackDate) else assignment
         }
         preferences.edit {
             putString(KEY_ASSIGNMENTS, encodeAssignments(updated))

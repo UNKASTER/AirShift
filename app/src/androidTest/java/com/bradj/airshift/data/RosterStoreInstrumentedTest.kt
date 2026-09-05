@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
+import com.bradj.airshift.api.inboundLookupDate
 import com.bradj.airshift.model.DutyProgressDay
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.allDutiesComplete
@@ -21,7 +22,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.Clock
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -32,6 +32,9 @@ class RosterStoreInstrumentedTest {
     private lateinit var isolatedContext: Context
     private lateinit var prefix: String
     private lateinit var store: RosterStore
+
+    /** 两小时后的任务：未完成，且已进入排班日的跟踪时段（首个任务前 3 小时），两项窗口才会生效。 */
+    private val upcomingArrival: LocalDateTime = LocalDateTime.now().plusHours(2).withSecond(0).withNano(0)
 
     @Before
     fun setUp() {
@@ -137,7 +140,7 @@ class RosterStoreInstrumentedTest {
         assertNotNull(completion)
         assertEquals(1, store.currentDutyIndex)
         assertEquals(
-            setOf(FlightLookup.of("MU1003", duties[2].scheduledArrival!!.toLocalDate())),
+            setOf(FlightLookup.of("MU1003", duties[2].lookupDate())),
             completion!!.newlyTrackedFlights,
         )
         assertNull(store.completeCurrentDuty(generation, expectedDutyIndex = 0, now = now))
@@ -150,7 +153,7 @@ class RosterStoreInstrumentedTest {
     fun oldBatchMergesOnlyCurrentWindowAndPreservesAnotherRefresh() {
         val duties = (1..4).map { upcomingAssignment("B000$it", "MU100$it") }
         val generation = store.replaceAssignments(duties)
-        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val date = duties.first().lookupDate()
         store.setCurrentDutyIndex(1)
 
         store.mergeLiveInfoIfGeneration(
@@ -183,7 +186,7 @@ class RosterStoreInstrumentedTest {
     fun duplicateFlightOutsideWindowIsNotUpdated() {
         val duties = (1..3).map { upcomingAssignment("B000$it", "MU1001") }
         val generation = store.replaceAssignments(duties)
-        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val date = duties.first().lookupDate()
 
         val merged = store.mergeLiveInfoIfGeneration(
             mapOf(FlightLookup.of("MU1001", date) to liveLegs("MU1001", "NEW")),
@@ -201,7 +204,7 @@ class RosterStoreInstrumentedTest {
         val duties = (1..3).map { upcomingAssignment("B000$it", "MU100$it") }
         val oldGeneration = store.replaceAssignments(duties)
         val generation = store.replaceAssignments(duties)
-        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val date = duties.first().lookupDate()
         val before = store.loadSnapshot()
 
         assertNull(
@@ -229,7 +232,7 @@ class RosterStoreInstrumentedTest {
     fun allRosterMergeUpdatesCompletedFlightsWithoutResettingManualProgress() {
         val duties = (1..3).map { upcomingAssignment("B000$it", "MU100$it") }
         val generation = store.replaceAssignments(duties)
-        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val date = duties.first().lookupDate()
         store.setCurrentDutyIndex(duties.size)
         val live = mapOf(
             FlightLookup.of("MU1001", date) to liveLegs("MU1001", "NEW-FIRST"),
@@ -254,10 +257,11 @@ class RosterStoreInstrumentedTest {
 
     @Test
     fun allRosterMergeCanCorrectAnAutomaticallyCompletedDutyWithoutChangingProgress() {
+        // 计划 4 小时前、已过 3 小时宽限而自动完成；同一班的预计时间（相差 6 小时，在 12 小时内）能把它救回来。
         val now = LocalDateTime.now()
-        val duty = upcomingAssignment("B0001", "MU1001").copy(scheduledArrival = now.minusDays(1))
+        val duty = upcomingAssignment("B0001", "MU1001").copy(scheduledArrival = now.minusHours(4))
         val generation = store.replaceAssignments(listOf(duty))
-        val date = duty.scheduledArrival!!.toLocalDate()
+        val date = duty.lookupDate()
         assertTrue(listOf(duty).allDutiesComplete(now))
 
         val merged = store.mergeLiveInfoIfGeneration(
@@ -281,7 +285,7 @@ class RosterStoreInstrumentedTest {
         store.setCurrentDutyIndex(duties.size)
         store.replaceAssignments(duties)
         val before = store.loadSnapshot()
-        val date = duties.first().scheduledArrival!!.toLocalDate()
+        val date = duties.first().lookupDate()
 
         assertNull(
             store.mergeLiveInfoIfGeneration(
@@ -296,9 +300,12 @@ class RosterStoreInstrumentedTest {
         assertNull(store.lastLiveRefreshEpochMillis)
     }
 
+    /** 进港查询日期按运行日取（06:00 前到达算前一天），与 refreshLookups 生成请求时一致。 */
+    private fun RosterAssignment.lookupDate() = inboundLookupDate(LocalDateTime.now().toLocalDate())
+
     private fun upcomingAssignment(registration: String, flight: String) = assignment(registration).copy(
         inboundFlight = flight,
-        scheduledArrival = LocalDate.now().plusDays(1).atTime(12, 0),
+        scheduledArrival = upcomingArrival,
         outboundFlight = null,
         scheduledDeparture = null,
     )

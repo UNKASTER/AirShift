@@ -15,13 +15,13 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class FlightRefreshSchedulerInstrumentedTest {
@@ -34,7 +34,8 @@ class FlightRefreshSchedulerInstrumentedTest {
     @Before
     fun setUp() {
         baseContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assumeFalse("Scheduling tests must not touch a configured API credential", RosterStore(baseContext).hasVariFlightApiKey)
+        // 密文写在带前缀的隔离 SharedPreferences 里；Keystore 别名与正式应用共用，因此下面绝不能调用
+        // clearVariFlightApiKey()（它会删除别名，让手机上已配置的真实 Key 永远解不开），只删隔离文件。
         prefix = "flight-refresh-scheduler-test-${UUID.randomUUID()}-"
         isolatedContext = object : ContextWrapper(baseContext) {
             override fun getApplicationContext(): Context = this
@@ -53,7 +54,6 @@ class FlightRefreshSchedulerInstrumentedTest {
         if (!this::store.isInitialized) return
         store.setCurrentDutyIndex(store.loadAssignments().size)
         FlightRefreshScheduler.configure(isolatedContext, false).get(10, TimeUnit.SECONDS)
-        store.clearVariFlightApiKey()
         listOf("air_shift", "air_shift_secrets").forEach { name ->
             baseContext.getSharedPreferences(prefix + name, Context.MODE_PRIVATE).edit().clear().commit()
             baseContext.deleteSharedPreferences(prefix + name)
@@ -72,6 +72,23 @@ class FlightRefreshSchedulerInstrumentedTest {
         assertEquals(before.id, after.id)
         assertEquals(before.nextScheduleTimeMillis, after.nextScheduleTimeMillis)
         assertEquals(TimeUnit.MINUTES.toMillis(15), after.initialDelayMillis)
+    }
+
+    @Test
+    fun aRosterForTomorrowSleepsUntilThreeHoursBeforeItsFirstTask() {
+        // 头天晚上导入明天的排班：周期任务照常登记，但首轮直接延迟到跟踪起点，上班前不联网。
+        val roster = duties(firstTaskAt = LocalDateTime.now().plusDays(1).withHour(12).withMinute(0))
+        store.replaceAssignments(roster)
+        val expectedMillis = TimeUnit.MINUTES.toMillis(initialDelayMinutes(roster, LocalDateTime.now()))
+
+        FlightRefreshScheduler.configure(isolatedContext, true).get(10, TimeUnit.SECONDS)
+        val work = activeWork().single()
+
+        assertTrue(work.initialDelayMillis > TimeUnit.HOURS.toMillis(1))
+        assertTrue(
+            "expected about $expectedMillis ms, got ${work.initialDelayMillis} ms",
+            abs(work.initialDelayMillis - expectedMillis) <= TimeUnit.MINUTES.toMillis(2),
+        )
     }
 
     @Test
@@ -119,13 +136,14 @@ class FlightRefreshSchedulerInstrumentedTest {
         .get(10, TimeUnit.SECONDS)
         .filter { !it.state.isFinished }
 
-    private fun duties() = (1..3).map { index ->
+    /** 默认首个任务在一小时后：未完成，且已进入排班日的跟踪时段（首个任务前 3 小时）。 */
+    private fun duties(firstTaskAt: LocalDateTime = LocalDateTime.now().plusHours(1)) = (1..3).map { index ->
         RosterAssignment(
             aircraftRegistration = "B000$index",
             aircraftType = null,
             inboundFlight = "MU100$index",
             origin = null,
-            scheduledArrival = LocalDate.now().plusDays(1).atTime(12 + index, 0),
+            scheduledArrival = firstTaskAt.plusHours(index - 1L),
             outboundFlight = null,
             destination = null,
             scheduledDeparture = null,

@@ -65,7 +65,9 @@ val DUTY_COMPLETION_GRACE: Duration = Duration.ofHours(3)
 
 private fun isLegComplete(actual: LocalDateTime?, estimated: LocalDateTime?, scheduled: LocalDateTime?, now: LocalDateTime): Boolean {
     if (actual != null) return true
-    val bestKnown = estimated ?: scheduled ?: return true // 无任何时间信息，无法跟踪，视为完成
+    // 只信同一班的预计时间（FlightOperation）：别的日子的同号航班不能让任务永远完不成。
+    // 无任何时间信息时无法跟踪，视为完成。
+    val bestKnown = FlightOperation.trusted(scheduled, estimated) ?: scheduled ?: return true
     return now >= bestKnown + DUTY_COMPLETION_GRACE
 }
 
