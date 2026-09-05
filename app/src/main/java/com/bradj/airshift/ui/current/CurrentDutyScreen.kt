@@ -43,6 +43,7 @@ import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.DutyStrip
 import com.bradj.airshift.ui.components.EmptyBay
 import com.bradj.airshift.ui.components.LinearIcons
+import com.bradj.airshift.ui.components.animateListItem
 import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.OdometerText
 import com.bradj.airshift.ui.components.PinnedActionBar
@@ -156,14 +157,29 @@ private fun CurrentDutyContent(
             ),
             verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
         ) {
-            item(key = "bay_current") { BayTitle("当前", testTag = "bay_current") }
+            item(key = "bay_current") {
+                BayTitle("当前", modifier = animateListItem(), testTag = "bay_current")
+            }
             item(key = assignment.stableId) {
-                DutyStrip(assignment = assignment, muc = muc, expanded = true, emphasized = true)
+                DutyStrip(
+                    assignment = assignment,
+                    muc = muc,
+                    expanded = true,
+                    modifier = animateListItem(),
+                    emphasized = true,
+                )
             }
             if (nextAssignment != null) {
-                item(key = "bay_upcoming") { BayTitle("接下来", testTag = "bay_upcoming") }
+                item(key = "bay_upcoming") {
+                    BayTitle("接下来", modifier = animateListItem(), testTag = "bay_upcoming")
+                }
                 item(key = nextAssignment.stableId) {
-                    DutyStrip(assignment = nextAssignment, muc = muc, expanded = false)
+                    DutyStrip(
+                        assignment = nextAssignment,
+                        muc = muc,
+                        expanded = false,
+                        modifier = animateListItem(),
+                    )
                 }
             }
         }

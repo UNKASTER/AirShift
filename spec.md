@@ -356,6 +356,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 点任一条就地展开 / 折叠；展开状态跨配置变化保留。
 - `PullToRefreshBox` 触发显式手动刷新，指示器着板面色；列出整份当前排班，而非只列刷新窗口。
 - 无排班时给 `EmptyBay`（"还没有排班"）。
+- 通知条 / 空态 / 栏位标题也用同一套 `animateItem`；导入操作条在解析中 ↔ 按钮之间交叉淡化（`AnimatedContent` + `SizeTransform`）；下拉指示器只在用户下拉时显示（UI 局部 `pulled` 标志），自动刷新只在板脚给文字。
 
 ### 6.4 当前执勤与时间线
 
@@ -366,6 +367,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 到位时间：有进港航段时取 `实际到达 ?: 预计到达 ?: 计划到达` 减 15 分钟；纯出港取 `实际出发 ?: 预计出发 ?: 计划出发` 减 70 分钟。出港预计登机开始为最佳出发时间前 40 分钟；预计登机口关闭为前 15 分钟。倒计时每分钟更新。
 - 页面展示完整特服、行程取消以及 MUC 机位新旧值；MUC 登机口变更是条内单独一行"登机口变更 原值 → 新值 · MUC 更新于 HH:mm"，原值优先取 MUC 消息里的记录，缺失时回退飞常准的 `BoardGate`。
 - 尚未整体完成的过站任务始终按进港到位规则显示，即使进港已有实际时间而出港仍未完成。
+- 执勤完成后列表项用 `animateItem`：旧的当前条 Exit 档淡出，下一条（key 不变）以 default spatial 弹簧从"接下来"槽升入"当前"槽并展开（`DutyStrip` 的 `SizeTransform`），再下一条 Content 档淡入。
 
 ### 6.5 设置
 
@@ -386,7 +388,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 6.8 视觉系统
 
-- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Exit 70 / Content 120 / Enter 180 / Flip 220 / FlipExit 130 / Breath 600 ms、RevealDelay 35 ms、StaggerStep 40 ms、SectionOffset 16dp、PressedScale 0.97、`EmphasizedDecelerate` 曲线；弹簧 `fastSpatial / defaultSpatial / slowSpatial / defaultEffects / fastEffects / slowEffects` 镜像 M3 standard MotionScheme 的刚度 / 阻尼（material3 1.4.0 的 `MotionScheme` 是 internal，应用读不到）；`LocalReduceMotion` 实时读系统动画比例是否为 0）。原则：第一帧就动、退场比入场快、尺寸与位移用弹簧；tween 一律显式曲线，不用起步慢的 Material standard 曲线做入退场。
+- Design token 集中于 `ui/theme/AirShiftTheme.kt`：`AirShiftPalette`（浅 / 深两套语义色，经 `LocalAirShiftPalette` 提供，`AirShiftTokens.colors` 访问）、`AirShiftRadius`（灯 4 / 输入框与小按钮 8 / 信息条 10 / 按钮 12）、`AirShiftSpacing`（4dp 网格）、`currentCardShadow`（唯一一级阴影）、数字字阶（`BoardNumeric` 68 / `BoardValue` 26 / `BoardClock` 22 / `FlightNumberLarge` 26 / `FlightNumber` 16 / `StripTime` 16 / `NumericValue` 17 / `NumericSmall` 15）与 Material3 映射；`ui/theme/AirShiftMotion.kt` 是动效 token（Exit 70 / Content 120 / Enter 180 / Flip 220 / FlipExit 130 / Breath 600 ms、RevealDelay 35 ms、StaggerStep 40 ms、SectionOffset 16dp、PressedScale 0.97、`EmphasizedDecelerate` 曲线；弹簧 `fastSpatial / defaultSpatial / slowSpatial / defaultEffects / fastEffects` 镜像 M3 standard MotionScheme 的刚度 / 阻尼（material3 1.4.0 的 `MotionScheme` 是 internal，应用读不到）；`LocalReduceMotion` 实时读系统动画比例是否为 0）。原则：第一帧就动、退场比入场快、尺寸与位移用弹簧；tween 一律显式曲线，不用起步慢的 Material standard 曲线做入退场。
 - 色彩：板面藏青 `#14284B`、条架 `#F1F3F7`、信息条白；东航红 `#C8102E` 只给出港夹条与主操作，进港 `#2B5EA7`；墨绿 `#0F7B5F` 正常 / 已起飞，琥珀 `#B45309` 预计 / 变更 / 交接班，VIP 琥珀金。深色是夜间航显：板面与底 `#0B1526`、条 `#122036`、主文字 `#EDF1F7`、琥珀 `#F5B233`、进港 `#7FA6E6`、红字 `#FF8A98`。没有渐变。
 - 字体：`res/font/` 内置 Barlow（OFL 1.1，Regular/Medium/SemiBold/Bold）与 Barlow Semi Condensed（SemiBold/Bold）。所有 Latin 与数字用 Barlow，汉字由系统字体逐字回落；板面大数字、时钟、航班号、机位号用 Semi Condensed；全部数字样式启用 `tnum`，倒计时不跳动（`FontFeaturesInstrumentedTest` 断言等宽）。字阶 11 / 12 / 13 / 15 / 17 / 20 / 26 / 34 / 44 / 68 sp。
 - 图标：`ui/components/DesignComponents.kt` 的 `linearIcon()` 1.5px 线性图标集（`LinearIcons`）。

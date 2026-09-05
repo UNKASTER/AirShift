@@ -1,6 +1,11 @@
 package com.bradj.airshift.ui.all
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +35,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,7 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.FlightCancellationRecord
@@ -55,6 +61,7 @@ import com.bradj.airshift.ui.components.LinearIcons
 import com.bradj.airshift.ui.components.MucContext
 import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.NoticeTone
+import com.bradj.airshift.ui.components.animateListItem
 import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.components.splitIntoBays
 import com.bradj.airshift.ui.theme.AirShiftMotion
@@ -138,16 +145,26 @@ fun AllDutyScreen(
                 }
             },
         )
+        // 指示器只在用户自己下拉时出现：自动刷新（DutyViewModel 同样置 isLiveRefreshing）的状态走板脚文字，
+        // 不让指示器"无人下拉自己弹出"。isWorking 时 ViewModel 会拒绝这次下拉，不记为 pulled。
+        var pulled by remember { mutableStateOf(false) }
+        LaunchedEffect(isLiveRefreshing) {
+            if (!isLiveRefreshing) pulled = false
+        }
+        val showPullIndicator = isLiveRefreshing && pulled
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
-            isRefreshing = isLiveRefreshing,
-            onRefresh = onRefresh,
+            isRefreshing = showPullIndicator,
+            onRefresh = {
+                pulled = !isWorking
+                onRefresh()
+            },
             state = pullState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             indicator = {
                 PullToRefreshDefaults.Indicator(
                     state = pullState,
-                    isRefreshing = isLiveRefreshing,
+                    isRefreshing = showPullIndicator,
                     modifier = Modifier.align(Alignment.TopCenter),
                     containerColor = c.strip,
                     color = c.board,
@@ -168,19 +185,28 @@ fun AllDutyScreen(
                     ImportStrip(isWorking = isWorking, onImportImage = onImportImage, onImportExcel = onImportExcel)
                 }
                 if (statusMessage != null && statusMessage.length > SHORT_STATUS_MAX_CHARS) {
-                    item(key = "status") { NoticeStrip(lines = listOf(statusMessage), tone = NoticeTone.Neutral) }
+                    item(key = "status") {
+                        NoticeStrip(
+                            lines = listOf(statusMessage),
+                            modifier = animateListItem(),
+                            tone = NoticeTone.Neutral,
+                        )
+                    }
                 }
                 if (exactAlarmWarning) {
                     item(key = "exact_alarm") {
                         NoticeStrip(
                             lines = listOf("系统尚未允许精确闹钟，提醒时间可能略有偏差。"),
+                            modifier = animateListItem(),
                             actionText = "开启",
                             onAction = onOpenExactAlarmSettings,
                         )
                     }
                 }
                 if (warnings.isNotEmpty()) {
-                    item(key = "warnings") { NoticeStrip(title = "需要留意", lines = warnings) }
+                    item(key = "warnings") {
+                        NoticeStrip(title = "需要留意", lines = warnings, modifier = animateListItem())
+                    }
                 }
                 if (assignments.isEmpty()) {
                     item(key = "empty") {
@@ -188,16 +214,24 @@ fun AllDutyScreen(
                             icon = LinearIcons.Plane,
                             title = "还没有排班",
                             hint = "导入排班图片或 Excel 文件后，你的保障任务会显示在这里。",
+                            modifier = animateListItem(),
                         )
                     }
                 }
                 bays.current?.let { index ->
-                    item(key = "bay_current") { BayTitle("当前", testTag = "bay_current") }
+                    item(key = "bay_current") {
+                        BayTitle("当前", modifier = animateListItem(), testTag = "bay_current")
+                    }
                     stripItem(assignments[index], muc, expanded, toggle, emphasized = true)
                 }
                 if (bays.upcoming.isNotEmpty()) {
                     item(key = "bay_upcoming") {
-                        BayTitle("接下来", count = bays.upcoming.size, testTag = "bay_upcoming")
+                        BayTitle(
+                            "接下来",
+                            modifier = animateListItem(),
+                            count = bays.upcoming.size,
+                            testTag = "bay_upcoming",
+                        )
                     }
                     items(bays.upcoming, key = { assignments[it].stableId }) { index ->
                         val assignment = assignments[index]
@@ -206,7 +240,12 @@ fun AllDutyScreen(
                 }
                 if (bays.completed.isNotEmpty()) {
                     item(key = "bay_completed") {
-                        BayTitle("已完成", count = bays.completed.size, testTag = "bay_completed")
+                        BayTitle(
+                            "已完成",
+                            modifier = animateListItem(),
+                            count = bays.completed.size,
+                            testTag = "bay_completed",
+                        )
                     }
                     items(bays.completed, key = { assignments[it].stableId }) { index ->
                         val assignment = assignments[index]
@@ -247,20 +286,16 @@ private fun LazyItemScope.AnimatedStrip(
         emphasized = emphasized,
         completed = completed,
         onClick = { toggle(assignment.stableId) },
-        // 新增 / 移除的条淡入淡出；位置变化（被展开的条挤开、完成后移栏）用 default spatial 弹簧，与展开的 fast spatial 同一家族。
-        modifier = Modifier.animateItem(
-            fadeInSpec = AirShiftMotion.content(),
-            placementSpec = AirShiftMotion.defaultSpatial(IntOffset.VisibilityThreshold),
-            fadeOutSpec = AirShiftMotion.exit(),
-        ),
+        modifier = animateListItem(),
     )
 }
 
-/** 导入排班：一条 48dp 的操作条，两个小按钮；处理中时换成进度指示。 */
+/** 导入排班：一条 48dp 的操作条，两个小按钮；处理中时交叉淡化成进度指示，高度变化用 fast spatial 弹簧。 */
 @Composable
 private fun ImportStrip(isWorking: Boolean, onImportImage: () -> Unit, onImportExcel: () -> Unit) {
     val c = AirShiftTokens.colors
     val shape = RoundedCornerShape(AirShiftRadius.Strip)
+    val sizeSpec = AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,23 +313,38 @@ private fun ImportStrip(isWorking: Boolean, onImportImage: () -> Unit, onImportE
             tint = c.inkSecondary,
         )
         Spacer(Modifier.width(10.dp))
-        if (isWorking) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = c.board)
-            Spacer(Modifier.width(10.dp))
-            Text("正在解析排班…", style = MaterialTheme.typography.bodyMedium, color = c.inkSecondary)
-        } else {
-            Text(
-                "导入排班 · 截图或 Excel，只提取你的航班",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                color = c.inkSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.width(8.dp))
-            MiniButton(text = "图片", icon = LinearIcons.Image, onClick = onImportImage)
-            Spacer(Modifier.width(6.dp))
-            MiniButton(text = "Excel", icon = null, onClick = onImportExcel)
+        AnimatedContent(
+            targetState = isWorking,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                (fadeIn(AirShiftMotion.content()) togetherWith fadeOut(AirShiftMotion.exit()))
+                    .using(SizeTransform(clip = false) { _, _ -> sizeSpec })
+            },
+            contentAlignment = Alignment.CenterStart,
+            label = "importStrip",
+        ) { working ->
+            if (working) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = c.board)
+                    Spacer(Modifier.width(10.dp))
+                    Text("正在解析排班…", style = MaterialTheme.typography.bodyMedium, color = c.inkSecondary)
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "导入排班 · 截图或 Excel，只提取你的航班",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.inkSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    MiniButton(text = "图片", icon = LinearIcons.Image, onClick = onImportImage)
+                    Spacer(Modifier.width(6.dp))
+                    MiniButton(text = "Excel", icon = null, onClick = onImportExcel)
+                }
+            }
         }
     }
 }

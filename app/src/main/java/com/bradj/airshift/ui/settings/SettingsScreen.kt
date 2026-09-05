@@ -1,5 +1,11 @@
 package com.bradj.airshift.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +45,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.ui.components.BoardHeader
@@ -46,6 +54,7 @@ import com.bradj.airshift.ui.components.PinnedActionBar
 import com.bradj.airshift.ui.components.StatusDot
 import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.components.formatEpoch
+import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftSpacing
 import com.bradj.airshift.ui.theme.AirShiftTokens
@@ -406,9 +415,20 @@ private fun ApiKeySection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             visualTransformation = PasswordVisualTransformation(),
         )
-        connectionMessage?.let { message ->
+        // 收起时 connectionMessage 已是 null，退场内容沿用最后一条文案。
+        var lastConnectionMessage by remember { mutableStateOf("") }
+        LaunchedEffect(connectionMessage) {
+            if (connectionMessage != null) lastConnectionMessage = connectionMessage
+        }
+        AnimatedVisibility(
+            visible = connectionMessage != null,
+            enter = expandVertically(AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)) +
+                fadeIn(AirShiftMotion.content()),
+            exit = shrinkVertically(AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)) +
+                fadeOut(AirShiftMotion.exit()),
+        ) {
             NoticeStrip(
-                lines = listOf(message),
+                lines = listOf(connectionMessage ?: lastConnectionMessage),
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             )
         }
