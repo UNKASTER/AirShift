@@ -68,6 +68,11 @@ android {
     sourceSets["androidTest"].assets.directories.add(rootProject.file("testdata").absolutePath)
 }
 
+composeCompiler {
+    reportsDestination = layout.buildDirectory.dir("compose_compiler")
+    metricsDestination = layout.buildDirectory.dir("compose_compiler")
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
 
