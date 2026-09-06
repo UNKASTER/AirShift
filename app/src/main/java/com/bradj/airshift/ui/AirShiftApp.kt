@@ -5,6 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -184,19 +188,19 @@ internal fun AirShiftApp(
         // 成本挪出动画起步帧，内容的淡入（Enter 档）盖住这一帧的空白。冷启动的第一页不延后：背板还没有高度，
         // 延后会露出一帧底色。退场中的旧页 ready 已是 true，不受影响。
         var hasSwitched by remember { mutableStateOf(false) }
+        var previousSection by remember { mutableStateOf(section) }
+        LaunchedEffect(section) { previousSection = section }
         CompositionLocalProvider(LocalBoardBackdrop provides boardBackdrop) {
             AnimatedContent(
                 targetState = section,
                 transitionSpec = {
-                    val forward = targetState.ordinal >= initialState.ordinal
-                    val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
-                    // 新页从标签方向 16dp 滑入并淡入（同曲线同时长）；旧页只淡出——它 70 ms 后就看不见了，位移是白跑。
-                    val enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset }
-                    enter togetherWith fadeOut(AirShiftMotion.exit())
+                    // 旧页只淡出；新页的入场由内容自己在出现的那一帧起步（见下），容器不做尺寸动画（两页都铺满）。
+                    EnterTransition.None togetherWith fadeOut(AirShiftMotion.exit()) using null
                 },
                 label = "section",
             ) { target ->
-                var ready by remember(target) { mutableStateOf(!hasSwitched) }
+                val staged = remember(target) { hasSwitched }
+                var ready by remember(target) { mutableStateOf(!staged) }
                 LaunchedEffect(target) {
                     if (!ready) {
                         withFrameNanos { }
@@ -205,31 +209,41 @@ internal fun AirShiftApp(
                     hasSwitched = true
                 }
                 if (ready) {
-                    SectionContent(
-                        section = target,
-                        padding = padding,
-                        state = state,
-                        userName = userName,
-                        specialServiceState = specialServiceState,
-                        shiftSchedule = shiftSchedule,
-                        shiftGroupId = shiftGroupId,
-                        autoShiftGroupId = autoShiftGroupId,
-                        nextShiftText = nextShiftText,
-                        visibleSpecialServiceRecords = visibleSpecialServiceRecords,
-                        visibleGateChanges = visibleGateChanges,
-                        visibleStandChanges = visibleStandChanges,
-                        visibleFlightCancellations = visibleFlightCancellations,
-                        viewModel = viewModel,
-                        dutyNavigation = dutyNavigation,
-                        openExactAlarmSettings = openExactAlarmSettings,
-                        openNotificationAccessSettings = openNotificationAccessSettings,
-                        onImportImage = {
-                            photoPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        },
-                        onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
-                    )
+                    // 入场在内容出现的那一帧起步：从标签方向 16dp 滑入并淡入（同曲线同时长）。冷启动的第一页直接落位。
+                    val forward = remember(target) { target.ordinal >= previousSection.ordinal }
+                    val entrance = remember(target) { MutableTransitionState(!staged).apply { targetState = true } }
+                    val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
+                    AnimatedVisibility(
+                        visibleState = entrance,
+                        enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset },
+                        exit = ExitTransition.None,
+                    ) {
+                        SectionContent(
+                            section = target,
+                            padding = padding,
+                            state = state,
+                            userName = userName,
+                            specialServiceState = specialServiceState,
+                            shiftSchedule = shiftSchedule,
+                            shiftGroupId = shiftGroupId,
+                            autoShiftGroupId = autoShiftGroupId,
+                            nextShiftText = nextShiftText,
+                            visibleSpecialServiceRecords = visibleSpecialServiceRecords,
+                            visibleGateChanges = visibleGateChanges,
+                            visibleStandChanges = visibleStandChanges,
+                            visibleFlightCancellations = visibleFlightCancellations,
+                            viewModel = viewModel,
+                            dutyNavigation = dutyNavigation,
+                            openExactAlarmSettings = openExactAlarmSettings,
+                            openNotificationAccessSettings = openNotificationAccessSettings,
+                            onImportImage = {
+                                photoPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            },
+                            onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
+                        )
+                    }
                 }
             }
         }
