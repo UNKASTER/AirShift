@@ -8,11 +8,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +43,9 @@ import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.all.AllDutyScreen
 import com.bradj.airshift.ui.calendar.NextShift
 import com.bradj.airshift.ui.calendar.ShiftCalendarScreen
+import com.bradj.airshift.ui.components.BoardBackdrop
+import com.bradj.airshift.ui.components.BoardBackdropState
+import com.bradj.airshift.ui.components.LocalBoardBackdrop
 import com.bradj.airshift.ui.current.CurrentDutyScreen
 import com.bradj.airshift.ui.onboarding.OnboardingScreen
 import com.bradj.airshift.ui.settings.SettingsScreen
@@ -169,43 +172,47 @@ internal fun AirShiftApp(
         section = section,
         onSectionSelected = dutyNavigation::selectSection,
     ) { padding ->
-        // 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（Enter 档，同曲线），旧页 Exit 档淡出。
         val sectionOffsetPx = with(LocalDensity.current) { AirShiftMotion.SectionOffset.roundToPx() }
-        AnimatedContent(
-            targetState = section,
-            transitionSpec = {
-                val forward = targetState.ordinal >= initialState.ordinal
-                val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
-                val enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset }
-                // 旧页的位移沿用 Enter 档（0.11.1 行为）；切页方案的下一批会把退场改为只淡出。
-                val exit = fadeOut(AirShiftMotion.exit()) + slideOutHorizontally(AirShiftMotion.enter()) { -offset }
-                enter togetherWith exit
-            },
-            label = "section",
-        ) { target ->
-            SectionContent(
-                section = target,
-                padding = padding,
-                state = state,
-                userName = userName,
-                specialServiceState = specialServiceState,
-                shiftSchedule = shiftSchedule,
-                shiftGroupId = shiftGroupId,
-                autoShiftGroupId = autoShiftGroupId,
-                nextShiftText = nextShiftText,
-                visibleSpecialServiceRecords = visibleSpecialServiceRecords,
-                visibleGateChanges = visibleGateChanges,
-                visibleStandChanges = visibleStandChanges,
-                visibleFlightCancellations = visibleFlightCancellations,
-                viewModel = viewModel,
-                dutyNavigation = dutyNavigation,
-                openExactAlarmSettings = openExactAlarmSettings,
-                openNotificationAccessSettings = openNotificationAccessSettings,
-                onImportImage = {
-                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        // 藏青板面是一块固定在屏幕顶端的板：背板放在切页动画之外，只按弹簧变高变矮；页面内容在它之下滑入。
+        // 下面 `LocalBoardBackdrop provides boardBackdrop` 这一行是本特性的总开关：去掉它即回到各页自己画底。
+        val boardBackdrop = remember { BoardBackdropState() }
+        BoardBackdrop(state = boardBackdrop)
+        CompositionLocalProvider(LocalBoardBackdrop provides boardBackdrop) {
+            AnimatedContent(
+                targetState = section,
+                transitionSpec = {
+                    val forward = targetState.ordinal >= initialState.ordinal
+                    val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
+                    // 新页从标签方向 16dp 滑入并淡入（同曲线同时长）；旧页只淡出——它 70 ms 后就看不见了，位移是白跑。
+                    val enter = fadeIn(AirShiftMotion.enter()) + slideInHorizontally(AirShiftMotion.enter()) { offset }
+                    enter togetherWith fadeOut(AirShiftMotion.exit())
                 },
-                onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
-            )
+                label = "section",
+            ) { target ->
+                SectionContent(
+                    section = target,
+                    padding = padding,
+                    state = state,
+                    userName = userName,
+                    specialServiceState = specialServiceState,
+                    shiftSchedule = shiftSchedule,
+                    shiftGroupId = shiftGroupId,
+                    autoShiftGroupId = autoShiftGroupId,
+                    nextShiftText = nextShiftText,
+                    visibleSpecialServiceRecords = visibleSpecialServiceRecords,
+                    visibleGateChanges = visibleGateChanges,
+                    visibleStandChanges = visibleStandChanges,
+                    visibleFlightCancellations = visibleFlightCancellations,
+                    viewModel = viewModel,
+                    dutyNavigation = dutyNavigation,
+                    openExactAlarmSettings = openExactAlarmSettings,
+                    openNotificationAccessSettings = openNotificationAccessSettings,
+                    onImportImage = {
+                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
+                )
+            }
         }
     }
 }
