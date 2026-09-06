@@ -348,7 +348,7 @@ private fun SegmentedLamps(
     val shape = RoundedCornerShape(AirShiftRadius.Small)
     val fillColor = if (c.isDark) c.arrival else c.board
     val onFill = if (c.isDark) c.ground else c.onBoard
-    val selectedIndex = options.indexOf(selected).coerceAtLeast(0)
+    val selectedIndex = options.indexOf(selected)
     BoxWithConstraints(
         modifier = Modifier
             .padding(horizontal = 14.dp)
@@ -359,17 +359,19 @@ private fun SegmentedLamps(
     ) {
         val segmentWidth = maxWidth / options.size
         val fillX by animateDpAsState(
-            targetValue = segmentWidth * selectedIndex,
+            targetValue = segmentWidth * selectedIndex.coerceAtLeast(0),
             animationSpec = AirShiftMotion.fastSpatial(Dp.VisibilityThreshold),
             label = "segmentFill",
         )
-        Box(
-            modifier = Modifier
-                .offset { IntOffset(fillX.roundToPx(), 0) }
-                .width(segmentWidth)
-                .fillMaxHeight()
-                .background(fillColor),
-        )
+        if (selectedIndex >= 0) {
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(fillX.roundToPx(), 0) }
+                    .width(segmentWidth)
+                    .fillMaxHeight()
+                    .background(fillColor),
+            )
+        }
         Row(modifier = Modifier.fillMaxSize()) {
             options.forEach { option ->
                 val on = option == selected

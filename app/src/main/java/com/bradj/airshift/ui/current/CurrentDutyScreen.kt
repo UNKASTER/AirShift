@@ -82,6 +82,13 @@ private data class ActiveDuty(
     val next: RosterAssignment?,
 )
 
+/** 退场中的 ACTIVE 内容用的最后一份快照：普通字段，不是快照状态——只在 active 已为 null 的那几帧读，不需要触发重组。 */
+private class LastActiveDuty {
+    var value: ActiveDuty? = null
+}
+
+private val NoDutyAction: () -> Unit = {}
+
 /** 当前执勤页：板面倒计时 + 当前条（展开）+ 下一条（折叠）+ 钉底"执勤完成"。 */
 @Composable
 fun CurrentDutyScreen(
@@ -116,10 +123,8 @@ fun CurrentDutyScreen(
             next = window.getOrNull(1)?.let(assignments::get),
         )
     }
-    var lastActive by remember { mutableStateOf(active) }
-    LaunchedEffect(active) {
-        if (active != null) lastActive = active
-    }
+    val lastActive = remember { LastActiveDuty() }
+    if (active != null) lastActive.value = active
     // 只有从"有任务"过渡到"全部完成"时才逐行入场；冷启动就是全部完成时静态出现。
     // 状态翻转的那次组合里 previousState 仍是 ACTIVE（LaunchedEffect 在组合之后才更新它），正好用来判定。
     var previousState by remember { mutableStateOf(screenState) }
@@ -166,7 +171,7 @@ fun CurrentDutyScreen(
                 )
             }
             DutyScreenState.ACTIVE -> {
-                val duty = active ?: lastActive
+                val duty = active ?: lastActive.value
                 if (duty != null) {
                     CurrentDutyContent(
                         modifier = Modifier.fillMaxSize(),
@@ -176,7 +181,7 @@ fun CurrentDutyScreen(
                         nextAssignment = duty.next,
                         now = now,
                         muc = muc,
-                        onDutyComplete = onDutyComplete,
+                        onDutyComplete = if (active != null) onDutyComplete else NoDutyAction,
                     )
                 }
             }

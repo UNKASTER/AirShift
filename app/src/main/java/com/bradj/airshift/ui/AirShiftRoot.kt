@@ -29,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -196,10 +197,11 @@ private fun NavigationItem(
             )
             Spacer(Modifier.height(4.dp))
             val labelStyle = MaterialTheme.typography.labelSmall
+            val boldLabel = remember(labelStyle) { labelStyle.copy(fontWeight = FontWeight.SemiBold) }
             Text(
                 destination.label,
                 color = tint,
-                style = labelStyle.copy(fontWeight = FontWeight.SemiBold),
+                style = boldLabel,
                 maxLines = 1,
             )
         }

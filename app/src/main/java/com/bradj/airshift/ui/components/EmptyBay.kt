@@ -3,6 +3,7 @@ package com.bradj.airshift.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.LocalIndication
@@ -22,11 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,21 +55,21 @@ fun EmptyBay(
 ) {
     val c = AirShiftTokens.colors
     val reduceMotion = LocalReduceMotion.current
-    var shown by remember { mutableStateOf(!animateEntrance) }
-    LaunchedEffect(Unit) { shown = true }
-    val risePx = with(LocalDensity.current) { 8.dp.roundToPx() }
+    // 过渡的目标状态从第一次组合就是 true：不经过任何 effect，因此不会补播一帧空列。
+    val entrance = remember { MutableTransitionState(!animateEntrance).apply { targetState = true } }
+    val risePx = with(LocalDensity.current) { AirShiftMotion.StaggerRise.roundToPx() }
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = AirShiftSpacing.L, vertical = AirShiftSpacing.XL),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
     ) {
-        Entrance(shown, order = 0, reduceMotion = reduceMotion, risePx = risePx) {
+        Entrance(entrance, order = 0, reduceMotion = reduceMotion, risePx = risePx) {
             Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = c.hint)
         }
-        Entrance(shown, order = 1, reduceMotion = reduceMotion, risePx = risePx) {
+        Entrance(entrance, order = 1, reduceMotion = reduceMotion, risePx = risePx) {
             Text(title, style = MaterialTheme.typography.titleLarge, color = c.ink, textAlign = TextAlign.Center)
         }
-        Entrance(shown, order = 2, reduceMotion = reduceMotion, risePx = risePx) {
+        Entrance(entrance, order = 2, reduceMotion = reduceMotion, risePx = risePx) {
             Text(
                 hint,
                 style = MaterialTheme.typography.bodyMedium,
@@ -82,7 +79,7 @@ fun EmptyBay(
         }
         if (actionText != null && onAction != null) {
             Spacer(Modifier.height(AirShiftSpacing.S))
-            Entrance(shown, order = 3, reduceMotion = reduceMotion, risePx = risePx) {
+            Entrance(entrance, order = 3, reduceMotion = reduceMotion, risePx = risePx) {
                 val interaction = remember { MutableInteractionSource() }
                 Button(
                     onClick = onAction,
@@ -101,7 +98,7 @@ fun EmptyBay(
 /** 一行的入场：淡入（Content 档）+ 8dp 上浮（Enter 档），第 [order] 行延迟 order × StaggerStep；reduce-motion 时只淡入。 */
 @Composable
 private fun Entrance(
-    visible: Boolean,
+    visibleState: MutableTransitionState<Boolean>,
     order: Int,
     reduceMotion: Boolean,
     risePx: Int,
@@ -114,7 +111,7 @@ private fun Entrance(
         fadeIn(AirShiftMotion.content(delayMillis = delay)) +
             slideInVertically(AirShiftMotion.enter(delayMillis = delay)) { risePx }
     }
-    AnimatedVisibility(visible = visible, enter = enter, exit = ExitTransition.None) {
+    AnimatedVisibility(visibleState = visibleState, enter = enter, exit = ExitTransition.None) {
         content()
     }
 }

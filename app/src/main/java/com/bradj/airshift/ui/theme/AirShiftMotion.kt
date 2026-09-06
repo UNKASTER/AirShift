@@ -60,6 +60,9 @@ object AirShiftMotion {
     /** 稀有时刻（下班、首次进入）逐行入场的延迟步长；reduce-motion 时为 0。 */
     const val StaggerStepMs: Int = 40
 
+    /** 稀有时刻逐行入场时每行上浮的距离（Plan 008）。 */
+    val StaggerRise: Dp = 8.dp
+
     /** 分区切换的横向位移：按底栏标签的左右方向。 */
     val SectionOffset: Dp = 16.dp
 
