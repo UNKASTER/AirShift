@@ -199,7 +199,7 @@ private fun NavigationItem(
             Text(
                 destination.label,
                 color = tint,
-                style = if (selected) labelStyle.copy(fontWeight = FontWeight.SemiBold) else labelStyle,
+                style = labelStyle.copy(fontWeight = FontWeight.SemiBold),
                 maxLines = 1,
             )
         }

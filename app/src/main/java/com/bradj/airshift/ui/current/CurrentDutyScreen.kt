@@ -1,5 +1,6 @@
 package com.bradj.airshift.ui.current
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.VisibilityThreshold
@@ -11,6 +12,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,8 +28,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -67,6 +72,16 @@ import com.bradj.airshift.ui.theme.LocalReduceMotion
 import java.time.Duration
 import java.time.LocalDateTime
 
+private enum class DutyScreenState { EMPTY, ALL_DONE, ACTIVE }
+
+/** 有任务时板面与列表需要的数据快照；ACTIVE 退场那一帧 window 已空，退场内容要靠它。 */
+private data class ActiveDuty(
+    val assignment: RosterAssignment,
+    val position: Int,
+    val total: Int,
+    val next: RosterAssignment?,
+)
+
 /** 当前执勤页：板面倒计时 + 当前条（展开）+ 下一条（折叠）+ 钉底"执勤完成"。 */
 @Composable
 fun CurrentDutyScreen(
@@ -85,50 +100,87 @@ fun CurrentDutyScreen(
     val window = assignments.dutyWindowIndices(dutyIndex, now)
     val nextShiftBlock: (@Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit)? =
         nextShiftText?.let { text -> { NextShiftBlock(text) } }
-    when {
-        assignments.isEmpty() -> Column(modifier.fillMaxSize()) {
-            BoardHeader(
-                title = "当前执勤",
-                now = now,
-                dateText = now.toLocalDate().boardDateText(),
-                content = nextShiftBlock,
-            )
-            EmptyBay(
-                icon = LinearIcons.Plane,
-                title = "还没有排班",
-                hint = "先到“全部执勤”导入排班图片或 Excel 文件，再开始今日执勤。",
-                actionText = "去导入排班",
-                onAction = onGoToAllDuty,
-            )
-        }
-        window.isEmpty() -> Column(modifier.fillMaxSize()) {
-            BoardHeader(
-                title = "当前执勤",
-                subtitle = "${assignments.size} 项已完成",
-                now = now,
-                dateText = now.toLocalDate().boardDateText(),
-                content = nextShiftBlock,
-            )
-            EmptyBay(
-                icon = LinearIcons.PlaneTakeoff,
-                title = "今日执勤全部完成",
-                hint = "今天的保障任务已全部执行完毕，辛苦了。",
-                actionText = "返回全部执勤",
-                onAction = onGoToAllDuty,
-            )
-        }
-        else -> CurrentDutyContent(
-            modifier = modifier,
-            assignment = assignments[window.first()],
-            position = window.first() + 1,
+    val muc = remember(specialServiceRecords, gateChanges, standChanges, flightCancellations) {
+        MucContext(specialServiceRecords, gateChanges, standChanges, flightCancellations)
+    }
+    val screenState = when {
+        assignments.isEmpty() -> DutyScreenState.EMPTY
+        window.isEmpty() -> DutyScreenState.ALL_DONE
+        else -> DutyScreenState.ACTIVE
+    }
+    val active = window.firstOrNull()?.let { first ->
+        ActiveDuty(
+            assignment = assignments[first],
+            position = first + 1,
             total = assignments.size,
-            nextAssignment = window.getOrNull(1)?.let(assignments::get),
-            now = now,
-            muc = remember(specialServiceRecords, gateChanges, standChanges, flightCancellations) {
-                MucContext(specialServiceRecords, gateChanges, standChanges, flightCancellations)
-            },
-            onDutyComplete = onDutyComplete,
+            next = window.getOrNull(1)?.let(assignments::get),
         )
+    }
+    var lastActive by remember { mutableStateOf(active) }
+    LaunchedEffect(active) {
+        if (active != null) lastActive = active
+    }
+    // 只有从"有任务"过渡到"全部完成"时才逐行入场；冷启动就是全部完成时静态出现。
+    // 状态翻转的那次组合里 previousState 仍是 ACTIVE（LaunchedEffect 在组合之后才更新它），正好用来判定。
+    var previousState by remember { mutableStateOf(screenState) }
+    val celebrate = screenState == DutyScreenState.ALL_DONE && previousState == DutyScreenState.ACTIVE
+    LaunchedEffect(screenState) { previousState = screenState }
+    // 三态之间淡过渡；ACTIVE 内部的任务更替由列表项自己的 animateItem 处理（Plan 004），不经过这里。
+    AnimatedContent(
+        targetState = screenState,
+        modifier = modifier,
+        transitionSpec = { fadeIn(AirShiftMotion.enter()) togetherWith fadeOut(AirShiftMotion.exit()) },
+        label = "dutyScreen",
+    ) { state ->
+        when (state) {
+            DutyScreenState.EMPTY -> Column(Modifier.fillMaxSize()) {
+                BoardHeader(
+                    title = "当前执勤",
+                    now = now,
+                    dateText = now.toLocalDate().boardDateText(),
+                    content = nextShiftBlock,
+                )
+                EmptyBay(
+                    icon = LinearIcons.Plane,
+                    title = "还没有排班",
+                    hint = "先到“全部执勤”导入排班图片或 Excel 文件，再开始今日执勤。",
+                    actionText = "去导入排班",
+                    onAction = onGoToAllDuty,
+                )
+            }
+            DutyScreenState.ALL_DONE -> Column(Modifier.fillMaxSize()) {
+                BoardHeader(
+                    title = "当前执勤",
+                    subtitle = "${assignments.size} 项已完成",
+                    now = now,
+                    dateText = now.toLocalDate().boardDateText(),
+                    content = nextShiftBlock,
+                )
+                EmptyBay(
+                    icon = LinearIcons.PlaneTakeoff,
+                    title = "今日执勤全部完成",
+                    hint = "今天的保障任务已全部执行完毕，辛苦了。",
+                    actionText = "返回全部执勤",
+                    onAction = onGoToAllDuty,
+                    animateEntrance = celebrate,
+                )
+            }
+            DutyScreenState.ACTIVE -> {
+                val duty = active ?: lastActive
+                if (duty != null) {
+                    CurrentDutyContent(
+                        modifier = Modifier.fillMaxSize(),
+                        assignment = duty.assignment,
+                        position = duty.position,
+                        total = duty.total,
+                        nextAssignment = duty.next,
+                        now = now,
+                        muc = muc,
+                        onDutyComplete = onDutyComplete,
+                    )
+                }
+            }
+        }
     }
 }
 

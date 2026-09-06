@@ -1,7 +1,9 @@
 package com.bradj.airshift.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,14 +15,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,6 +54,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.shift.ShiftBusPlan
@@ -328,7 +336,7 @@ private fun ShiftCalendarSection(
     }
 }
 
-/** 分段选择器：一条边框里的等宽格，选中格填板面色。 */
+/** 分段选择器：一条边框里的等宽格；选中格的填充是一个物体，在格间按 fast spatial 弹簧横移，文字色随之过渡。 */
 @Composable
 private fun SegmentedLamps(
     options: List<Int>,
@@ -338,58 +346,78 @@ private fun SegmentedLamps(
 ) {
     val c = AirShiftTokens.colors
     val shape = RoundedCornerShape(AirShiftRadius.Small)
-    Row(
+    val fillColor = if (c.isDark) c.arrival else c.board
+    val onFill = if (c.isDark) c.ground else c.onBoard
+    val selectedIndex = options.indexOf(selected).coerceAtLeast(0)
+    BoxWithConstraints(
         modifier = Modifier
             .padding(horizontal = 14.dp)
             .fillMaxWidth()
+            .height(36.dp)
             .clip(shape)
             .border(1.dp, c.ruleStrong, shape),
     ) {
-        options.forEachIndexed { index, option ->
-            val on = option == selected
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(36.dp)
-                    .then(if (index > 0) Modifier.border(width = 0.dp, color = Color.Transparent) else Modifier)
-                    .background(if (on) (if (c.isDark) c.arrival else c.board) else Color.Transparent)
-                    .clickable(role = Role.RadioButton, onClick = { onSelect(option) }),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    label(option),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = when {
-                        on && c.isDark -> c.ground
-                        on -> c.onBoard
-                        else -> c.inkSecondary
-                    },
+        val segmentWidth = maxWidth / options.size
+        val fillX by animateDpAsState(
+            targetValue = segmentWidth * selectedIndex,
+            animationSpec = AirShiftMotion.fastSpatial(Dp.VisibilityThreshold),
+            label = "segmentFill",
+        )
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(fillX.roundToPx(), 0) }
+                .width(segmentWidth)
+                .fillMaxHeight()
+                .background(fillColor),
+        )
+        Row(modifier = Modifier.fillMaxSize()) {
+            options.forEach { option ->
+                val on = option == selected
+                val textColor by animateColorAsState(
+                    targetValue = if (on) onFill else c.inkSecondary,
+                    animationSpec = AirShiftMotion.defaultEffects(),
+                    label = "segmentText",
                 )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(role = Role.RadioButton, onClick = { onSelect(option) }),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(label(option), style = MaterialTheme.typography.labelLarge, color = textColor)
+                }
             }
         }
     }
 }
 
-/** 可选中的小灯：用于班组的手动指定。 */
+/** 可选中的小灯：用于班组的手动指定；选中态底色与文字色用 effects 弹簧过渡。 */
 @Composable
 private fun SelectLamp(text: String, selected: Boolean, onClick: () -> Unit) {
     val c = AirShiftTokens.colors
     val shape = RoundedCornerShape(AirShiftRadius.Small)
+    val background by animateColorAsState(
+        targetValue = if (selected) c.board else c.neutralSoft,
+        animationSpec = AirShiftMotion.defaultEffects(),
+        label = "selectLampBackground",
+    )
+    val foreground by animateColorAsState(
+        targetValue = if (selected) c.onBoard else c.inkSecondary,
+        animationSpec = AirShiftMotion.defaultEffects(),
+        label = "selectLampForeground",
+    )
     Row(
         modifier = Modifier
             .height(32.dp)
             .clip(shape)
-            .background(if (selected) c.board else c.neutralSoft)
+            .background(background)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) c.onBoard else c.inkSecondary,
-        )
+        Text(text, style = MaterialTheme.typography.labelLarge, color = foreground)
     }
 }
 
