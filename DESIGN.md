@@ -77,7 +77,7 @@
 | defaultEffects | M3 1.0 / 1600（约 115 ms 静止） | 灯色、底栏着色 |
 | SectionOffset / PressedScale / StaggerStep | 16dp / 0.97 / 40 ms | 切页位移 / 按下缩放 / 稀有时刻逐行延迟 |
 
-- 分区切换 shared-axis：新页按标签方向滑入并淡入（Enter 档，同曲线）；旧页只淡出（Exit 档，不带位移）。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`），放在切页动画之外，按 fastSpatial 弹簧变高变矮；板上内容随页面一起滑入淡入，但按背板动画高度裁剪、随板面揭开；只有藏青底板不参与切页动画。
+- 分区切换 shared-axis：新页按标签方向滑入并淡入（Enter 档，同曲线）；旧页只淡出（Exit 档，不带位移）。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`），放在切页动画之外，按 fastSpatial 弹簧变高变矮；板上内容随页面一起滑入淡入，但按背板动画高度裁剪、随板面揭开；只有藏青底板不参与切页动画；切页那一帧只画背板与底栏，新页内容下一帧再组合并淡入（冷启动第一页不延后）。
 - `LocalReduceMotion` 由 `AirShiftTheme` 提供，实时跟随系统 `ANIMATOR_DURATION_SCALE`（与 Compose 自身同源）；有限时长动画与弹簧由 Compose 自动缩放，token 只对无限循环、延迟与位移型转场做降级。
 - 时长是 0.11.1 真机手调值（在 emil / ui-animation 区间内），不吸附 M3 时长网格；空间弹簧接口带 `visibilityThreshold`，弹簧在肉眼看不见时就停。
 - 触控反馈：所有可按元素共用 `PressIndication`（`ui/theme/AirShiftIndication.kt`）——按钮 / 小按钮 / 底栏项在 draw 阶段缩到 0.97，按下 fast effects 即时、抬手 fast spatial 回弹；整宽信息条只着色（主文字色 6%）不缩放。M3 ripple 已关闭（`LocalRippleConfiguration = null`）。两行总开关只覆盖 `Modifier.clickable` 站点；六个 M3 按钮上显式的 `.indication(...)` 在开关关闭后会与 Surface 自带 ripple 叠成两层，完整关闭用 `git revert 2dbf7a0` 或同时删掉六处 `.indication`。

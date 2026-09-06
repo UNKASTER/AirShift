@@ -333,7 +333,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 - `AirShiftRoot` 使用 Material 3 `Scaffold`（`contentWindowInsets = 0`）加四等分自定义底栏，不使用 Navigation Component 或 Material `NavigationBar`；固定四页：全部执勤、排班日历、当前执勤、设置，底栏文字标签就是这四个词（testTag `nav_all / nav_calendar / nav_current / nav_settings`；因板头标题与标签同名，仪器测试按 testTag 点底栏）。
 - 底栏 64dp + 导航栏 inset，顶部 1dp 线；激活项图标与文字变主文字色，上方一枚 20×3dp 东航红"灯"在四个标签间横移到选中项（`animateDpAsState` + `AirShiftMotion.fastSpatial(Dp.VisibilityThreshold)`，约 140 ms 静止），图标与文字用 `AirShiftMotion.defaultEffects()` 变色（约 115 ms 静止）。不再有浮动圆形按钮。
-- 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（180 ms，emphasized decelerate，同曲线），旧页 70 ms 淡出。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`）：放在切页动画之外，高度由当前页 `BoardHeader` 报上来并按 fast spatial 弹簧跟随，板上内容按背板动画高度裁剪、随板面揭开；切页时板面不淡出淡入、不横移。
+- 分区切换用 shared-axis：新页按底栏标签的左右方向从 16dp 位移滑入并淡入（180 ms，emphasized decelerate，同曲线），旧页 70 ms 淡出。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`）：放在切页动画之外，高度由当前页 `BoardHeader` 报上来并按 fast spatial 弹簧跟随，板上内容按背板动画高度裁剪、随板面揭开；切页时板面不淡出淡入、不横移。切页那一帧只画背板与底栏，新页内容在下一帧组合并随 Enter 档淡入（冷启动第一页不延后）。
 - 每页顶部是 `BoardHeader`：藏青"板面"贯通到状态栏之下（板内 `statusBarsPadding`），左侧分区名 + 副标题，右侧实时钟（逐位翻牌）与日期；板面主体与板脚由各页给出。因此状态栏图标恒为浅色（`MainActivity.enableEdgeToEdge(statusBarStyle = dark(TRANSPARENT))`），导航栏透明跟随底栏。
 - 新 ViewModel 默认当前执勤；冷启动、进程重建和真正从后台恢复都会回到当前执勤。旋转等 `isChangingConfigurations=true` 的停止不算离开应用，保持当前页。
 

@@ -16,7 +16,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
@@ -177,6 +180,10 @@ internal fun AirShiftApp(
         // 下面 `LocalBoardBackdrop provides boardBackdrop` 这一行是本特性的总开关：去掉它即回到各页自己画底。
         val boardBackdrop = remember { BoardBackdropState() }
         BoardBackdrop(state = boardBackdrop)
+        // 分阶段组合（Plan 007 Task 4b）：切页那一帧只画背板与底栏，新页内容在下一帧组合——把首帧的组合 / 测量
+        // 成本挪出动画起步帧，内容的淡入（Enter 档）盖住这一帧的空白。冷启动的第一页不延后：背板还没有高度，
+        // 延后会露出一帧底色。退场中的旧页 ready 已是 true，不受影响。
+        var hasSwitched by remember { mutableStateOf(false) }
         CompositionLocalProvider(LocalBoardBackdrop provides boardBackdrop) {
             AnimatedContent(
                 targetState = section,
@@ -189,29 +196,41 @@ internal fun AirShiftApp(
                 },
                 label = "section",
             ) { target ->
-                SectionContent(
-                    section = target,
-                    padding = padding,
-                    state = state,
-                    userName = userName,
-                    specialServiceState = specialServiceState,
-                    shiftSchedule = shiftSchedule,
-                    shiftGroupId = shiftGroupId,
-                    autoShiftGroupId = autoShiftGroupId,
-                    nextShiftText = nextShiftText,
-                    visibleSpecialServiceRecords = visibleSpecialServiceRecords,
-                    visibleGateChanges = visibleGateChanges,
-                    visibleStandChanges = visibleStandChanges,
-                    visibleFlightCancellations = visibleFlightCancellations,
-                    viewModel = viewModel,
-                    dutyNavigation = dutyNavigation,
-                    openExactAlarmSettings = openExactAlarmSettings,
-                    openNotificationAccessSettings = openNotificationAccessSettings,
-                    onImportImage = {
-                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
-                )
+                var ready by remember(target) { mutableStateOf(!hasSwitched) }
+                LaunchedEffect(target) {
+                    if (!ready) {
+                        withFrameNanos { }
+                        ready = true
+                    }
+                    hasSwitched = true
+                }
+                if (ready) {
+                    SectionContent(
+                        section = target,
+                        padding = padding,
+                        state = state,
+                        userName = userName,
+                        specialServiceState = specialServiceState,
+                        shiftSchedule = shiftSchedule,
+                        shiftGroupId = shiftGroupId,
+                        autoShiftGroupId = autoShiftGroupId,
+                        nextShiftText = nextShiftText,
+                        visibleSpecialServiceRecords = visibleSpecialServiceRecords,
+                        visibleGateChanges = visibleGateChanges,
+                        visibleStandChanges = visibleStandChanges,
+                        visibleFlightCancellations = visibleFlightCancellations,
+                        viewModel = viewModel,
+                        dutyNavigation = dutyNavigation,
+                        openExactAlarmSettings = openExactAlarmSettings,
+                        openNotificationAccessSettings = openNotificationAccessSettings,
+                        onImportImage = {
+                            photoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                        onImportExcel = { excelPicker.launch(SUPPORTED_EXCEL_MIME_TYPES.toTypedArray()) },
+                    )
+                }
             }
         }
     }
