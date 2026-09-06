@@ -200,6 +200,8 @@ internal fun AirShiftApp(
                 label = "section",
             ) { target ->
                 val staged = remember(target) { hasSwitched }
+                // 方向要在这个 target 的第一次组合里定下来：那时 previousSection 还是上一页；放进 if (ready) 会晚一帧、永远算成向前。
+                val forward = remember(target) { target.ordinal >= previousSection.ordinal }
                 var ready by remember(target) { mutableStateOf(!staged) }
                 LaunchedEffect(target) {
                     if (!ready) {
@@ -210,7 +212,6 @@ internal fun AirShiftApp(
                 }
                 if (ready) {
                     // 入场在内容出现的那一帧起步：从标签方向 16dp 滑入并淡入（同曲线同时长）。冷启动的第一页直接落位。
-                    val forward = remember(target) { target.ordinal >= previousSection.ordinal }
                     val entrance = remember(target) { MutableTransitionState(!staged).apply { targetState = true } }
                     val offset = if (forward) sectionOffsetPx else -sectionOffsetPx
                     AnimatedVisibility(
