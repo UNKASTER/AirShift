@@ -34,8 +34,11 @@ android {
 
     buildTypes {
         release {
-            // 未配置发布签名，release 仍不可直接安装；开启压缩是为了把 POI/OpenCV/ONNX 的体积问题
-            // 与 keep 规则提前在 assembleRelease 上暴露。规则见 proguard-rules.pro。
+            // 个人使用：用 debug 签名让 release 可直接安装，日常与取证都用它（R8、非 debuggable）。
+            signingConfig = signingConfigs.getByName("debug")
+            // 允许 shell 侧 profiling / 应用层 Trace 段被 Perfetto 收集；不放开调试。
+            isProfileable = true
+            // 开启压缩是为了把 POI/OpenCV/ONNX 的体积问题与 keep 规则提前在 assembleRelease 上暴露。规则见 proguard-rules.pro。
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
