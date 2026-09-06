@@ -24,7 +24,7 @@ AirShift 把一张面向多人、包含多架飞机的日排班，转换成某�
 
 ## 五分钟上手
 
-1. 在 Android 13 或以上设备安装 Debug APK，并首次打开应用。
+1. 在 Android 13 或以上设备安装 release APK（debug 签名，可直接覆盖安装；`assembleRelease` 产物），并首次打开应用。
 2. 输入排班表中的姓名。去除首尾空格后需为 2–20 个字符；姓名保存在应用私有数据中，直到修改、清除应用数据或卸载。
 3. 进入“全部执勤”，从系统图片选择器导入排班截图，或从系统文件选择器导入 `.xls` / `.xlsx`。也可以在 WPS 等应用中把单个 Excel 文件分享给“航勤智排”。
 4. 如需实时航班，在“设置”中输入自己的飞常准 API Key。测试连接前必须先有一条包含航班号的排班。
@@ -282,7 +282,8 @@ Gradle 守护进程固定使用 JDK 21（`gradle/gradle-daemon-jvm.properties`�
 - Barlow Semi Condensed 的 tabular 数字宽度仍有约 7% 差异，倒计时与时钟因此用固定位宽的翻牌槽位；信息条里的时间列允许这点差异。
 - `arrivalBridge` 已解析并持久化，但当前 UI 未展示；提醒 ID 使用 32 位 `stableId.hashCode()`，理论上可能碰撞。
 - 真实飞常准、真实 WPS/MUC、ContentProvider 授权、定位、闹钟、通知和锁屏流程仍需物理设备端到端验证。
-- 仓库有 GitHub Actions（单元测试 + Android Lint + detekt），但没有发布签名或商店分发配置；release 已开启 R8 压缩，但未签名、未在真机验证，Debug APK 仍是唯一可安装的产物。
+- 仓库有 GitHub Actions（单元测试 + Android Lint + detekt），但没有发布签名或商店分发配置；release 已开启 R8 压缩并用 debug 签名（`isProfileable = true`），可直接覆盖安装，是日常安装与性能取证用的包；压缩后的 OCR / Excel 导入、飞常准、小组件、MUC 五项功能核对仍待真机完成。
+- 性能验收环境：vivo V2505A，release（debug 签名）包，系统对本应用按 60 Hz 排帧（高刷设置不生效），预算 16.7 ms，连续 ≥ 2 帧超预算视为掉帧；取证协议与结果见 `plans/002-perf-evidence.md`。
 
 ## 开源许可
 
