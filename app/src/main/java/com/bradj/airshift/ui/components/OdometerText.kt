@@ -21,7 +21,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import com.bradj.airshift.ui.theme.AirShiftMotion
+
+/** 槽宽按 (TextStyle, Density) 缓存：同一字号在四页之间切换时不再重复测 0–9 十个字形。只在主线程的组合中访问。 */
+private val SlotWidthCache = HashMap<Pair<TextStyle, Density>, Dp>()
 
 /**
  * 翻牌数字：整串数值变大时所有变化的位向上翻，变小时向下翻（220 ms 减速曲线）；旧数字 130 ms 淡出，比新数字快。
@@ -38,8 +43,8 @@ fun OdometerText(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val slotWidth = remember(style, density) {
-        with(density) {
-            (0..9).maxOf { measurer.measure(it.toString(), style).size.width }.toDp()
+        SlotWidthCache.getOrPut(style to density) {
+            with(density) { (0..9).maxOf { measurer.measure(it.toString(), style).size.width }.toDp() }
         }
     }
     // 方向按整串数值算一次，再交给每个槽位；update 对同一 text 是幂等的。
