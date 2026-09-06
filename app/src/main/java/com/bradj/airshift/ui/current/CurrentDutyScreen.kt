@@ -1,10 +1,16 @@
 package com.bradj.airshift.ui.current
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +36,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.DutyTimeline
 import com.bradj.airshift.model.RosterAssignment
@@ -247,10 +254,19 @@ private fun CountdownNumbers(remaining: Duration) {
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
     Row(verticalAlignment = Alignment.Bottom) {
-        if (hours > 0) {
-            OdometerText(text = hours.toString(), style = BoardNumeric, color = c.onBoard)
-            CountdownUnit("小时")
-            Spacer(Modifier.width(AirShiftSpacing.S))
+        // 跨过 60 分钟时"小时"一组横向展开 / 收起，"分"随之被推开而不是跳位。
+        AnimatedVisibility(
+            visible = hours > 0,
+            enter = expandHorizontally(AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)) +
+                fadeIn(AirShiftMotion.content()),
+            exit = shrinkHorizontally(AirShiftMotion.fastSpatial(IntSize.VisibilityThreshold)) +
+                fadeOut(AirShiftMotion.exit()),
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                OdometerText(text = hours.coerceAtLeast(1).toString(), style = BoardNumeric, color = c.onBoard)
+                CountdownUnit("小时")
+                Spacer(Modifier.width(AirShiftSpacing.S))
+            }
         }
         OdometerText(text = minutes.toString(), style = BoardNumeric, color = c.onBoard)
         CountdownUnit("分")

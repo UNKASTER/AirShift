@@ -1,7 +1,6 @@
 package com.bradj.airshift.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -25,7 +24,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import com.bradj.airshift.ui.theme.AirShiftMotion
 
 /**
- * 翻牌数字：每一位数字变化时上下翻（增大向上、减小向下），220 ms（`AirShiftMotion.FlipMs`）减速曲线；
+ * 翻牌数字：整串数值变大时所有变化的位向上翻，变小时向下翻（220 ms 减速曲线）；旧数字 130 ms 淡出，比新数字快。
  * 非数字字符不动。每个数字槽位固定为 0–9 中最宽一位的宽度，位置不随数字变化。
  * 无障碍上整体读作一段文字。
  */
@@ -43,6 +42,9 @@ fun OdometerText(
             (0..9).maxOf { measurer.measure(it.toString(), style).size.width }.toDp()
         }
     }
+    // 方向按整串数值算一次，再交给每个槽位；update 对同一 text 是幂等的。
+    val tracker = remember { OdometerDirectionTracker() }
+    val rollUp = tracker.update(text)
     Row(
         modifier = modifier.clearAndSetSemantics { contentDescription = text },
         verticalAlignment = Alignment.Bottom,
@@ -53,12 +55,11 @@ fun OdometerText(
                     AnimatedContent(
                         targetState = slot.char,
                         transitionSpec = {
-                            val up = targetState > initialState
-                            val enter = slideInVertically(AirShiftMotion.flip()) { if (up) it else -it } +
+                            val enter = slideInVertically(AirShiftMotion.flip()) { if (rollUp) it else -it } +
                                 fadeIn(AirShiftMotion.flip())
-                            val exit = slideOutVertically(AirShiftMotion.flip()) { if (up) -it else it } +
-                                fadeOut(AirShiftMotion.flip())
-                            (enter togetherWith exit).using(SizeTransform(clip = true))
+                            val exit = slideOutVertically(AirShiftMotion.flip()) { if (rollUp) -it else it } +
+                                fadeOut(AirShiftMotion.flipExit())
+                            enter togetherWith exit
                         },
                         label = "odometer$index",
                     ) { digit ->

@@ -51,7 +51,7 @@
 | `StatusLamp` / `LampKind` | `StatusLamp.kt` | 22dp 小矩形灯（不是胶囊）；`dot` 给飞行状态，`icon` 给轮椅 |
 | `Modifier.directionHolder` / `holderColors` / `HolderBar` | `DirectionHolder.kt` | 6dp 夹条：沿信息条左边缘绘制，进港蓝、出港红、过站上蓝下红；`HolderBar` 给日历按日型着色 |
 | `BayTitle` | `Bay.kt` | 栏位标签：小字 + 数量 + 向右延伸的线 |
-| `OdometerText` | `OdometerText.kt` | 逐位翻牌，220 ms 减速；非数字字符静止 |
+| `OdometerText` | `OdometerText.kt` | 逐位翻牌：方向由整串数值决定（时钟向上、倒计时向下），220 ms 减速入场、130 ms 退场；非数字字符静止 |
 | `PinnedActionBar` | `PinnedActionBar.kt` | 钉底主操作（执勤完成 / 保存） |
 | `EmptyBay` / `NoticeStrip` | 同名文件 | 空态；提示条分 `NoticeTone.Warning`（琥珀底，警告与权限）与 `Neutral`（条底 + 线，状态说明） |
 | `LinearIcons` | `DesignComponents.kt` | 1.5px 线性图标 |
