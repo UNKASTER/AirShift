@@ -39,6 +39,6 @@ class OdometerDirectionTrackerTest {
         tracker.update("60")
         tracker.update("59")
         assertFalse(tracker.update("—"))
-        assertFalse(tracker.update("3"))
+        assertTrue(tracker.update("99"))
     }
 }

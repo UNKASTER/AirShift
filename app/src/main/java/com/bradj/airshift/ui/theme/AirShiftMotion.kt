@@ -101,6 +101,9 @@ object AirShiftMotion {
     private const val FAST_EFFECTS_STIFFNESS = 3800f
     private const val DEFAULT_EFFECTS_STIFFNESS = 1600f
 
+    /** 以像素为单位的弹簧收敛阈值（背板高度等整数像素动画）。 */
+    const val IntPxThreshold: Int = 1
+
     /**
      * 条展开 / 折叠高度、底栏红灯横移、抬手回弹、分段器填充块：约 140 ms 静止。
      * 空间属性（Dp / IntOffset / IntSize / Rect）传对应的 `VisibilityThreshold`，弹簧在肉眼看不见时就停

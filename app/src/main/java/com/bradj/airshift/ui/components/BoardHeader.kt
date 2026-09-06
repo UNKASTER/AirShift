@@ -1,7 +1,7 @@
 package com.bradj.airshift.ui.components
 
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,36 +66,43 @@ class BoardBackdropState {
     /** 当前页板面的实际高度（含状态栏），由 BoardHeader 的 onSizeChanged 写入。 */
     var heightPx: Int by mutableIntStateOf(0)
 
-    /** 背板动画中的高度，由 BoardBackdrop 每帧写入；BoardHeader 用它裁剪自己的绘制。 */
-    var animatedHeightPx: Int by mutableIntStateOf(0)
+    /**
+     * 背板动画中的高度。Animatable 本身就是快照状态（snapshot state）：
+     * [BoardBackdrop] 与 [BoardHeader] 都只在各自的 draw 阶段读它，逐帧只重绘、不重组。
+     */
+    internal val animatedHeight = Animatable(0, Int.VectorConverter)
+
+    /** 供 [BoardHeader] 的 draw 读取；等价于 [animatedHeight] 的 `.value`。 */
+    val animatedHeightPx: Int get() = animatedHeight.value
 }
 
 val LocalBoardBackdrop = staticCompositionLocalOf<BoardBackdropState?> { null }
 
 /**
- * 常驻背板：首次报高直接落位（冷启动不"长出来"），之后用 fast spatial 弹簧跟随；
- * 高度不参与布局（背板用 drawBehind 画，板头用 drawWithContent 裁剪）；弹簧期间 BoardBackdrop
- * 本身会逐帧重组，这是 animateIntAsState 的正常行为。
+ * 常驻背板：高度不参与布局（背板用 drawBehind 画，板头用 drawWithContent 裁剪）。
+ * 首次报高直接 `snapTo` 落位（冷启动不"长出来"）；之后每次报高都用 fast spatial 弹簧 `animateTo`，
+ * 从当前值、当前速度接续——重启的 [LaunchedEffect] 会打断上一段，这正是弹簧该有的行为。
+ * [BoardBackdrop] 与 [BoardHeader] 都只在 draw 里读 [BoardBackdropState.animatedHeight] 这一个
+ * 快照状态：动画的每一帧只让两处重绘，两者都不会因为这支弹簧而重组。
  */
 @Composable
 fun BoardBackdrop(state: BoardBackdropState, modifier: Modifier = Modifier) {
     val c = AirShiftTokens.colors
-    val height = animateIntAsState(
-        targetValue = state.heightPx,
-        // 还没有高度（首次挂载）时直接落位，之后用 fast spatial 弹簧跟随。
-        animationSpec = if (state.animatedHeightPx == 0) {
-            snap()
+    val target = state.heightPx
+    LaunchedEffect(target) {
+        if (state.animatedHeight.value == 0) {
+            state.animatedHeight.snapTo(target)
         } else {
-            AirShiftMotion.fastSpatial(visibilityThreshold = 1)
-        },
-        label = "boardBackdrop",
-    )
-    // 把动画值同步给裁剪方。SideEffect 在每次重组之后写，与 draw 同一帧。
-    SideEffect { state.animatedHeightPx = height.value }
+            val spec = AirShiftMotion.fastSpatial(visibilityThreshold = AirShiftMotion.IntPxThreshold)
+            state.animatedHeight.animateTo(target, spec)
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxSize()
-            .drawBehind { drawRect(color = c.board, size = Size(size.width, height.value.toFloat())) },
+            .drawBehind {
+                drawRect(color = c.board, size = Size(size.width, state.animatedHeight.value.toFloat()))
+            },
     )
 }
 

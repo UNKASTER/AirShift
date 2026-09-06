@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -151,13 +152,14 @@ fun AllDutyScreen(
         // 被 ViewModel 静默拒绝的下拉（isLiveRefreshing 不会变 true）会随指示器缩回一起清零。
         var pulled by remember { mutableStateOf(false) }
         val pullState = rememberPullToRefreshState()
-        val pullFraction = pullState.distanceFraction
-        val pullAnimating = pullState.isAnimating
-        LaunchedEffect(pullFraction, pullAnimating, isLiveRefreshing) {
-            when {
-                pullFraction > 0f && !pullAnimating && !isLiveRefreshing -> pulled = true
-                pullFraction == 0f && !isLiveRefreshing -> pulled = false
-            }
+        LaunchedEffect(pullState, isLiveRefreshing) {
+            snapshotFlow { pullState.distanceFraction to pullState.isAnimating }
+                .collect { (fraction, animating) ->
+                    when {
+                        fraction > 0f && !animating && !isLiveRefreshing -> pulled = true
+                        fraction == 0f && !isLiveRefreshing -> pulled = false
+                    }
+                }
         }
         PullToRefreshBox(
             isRefreshing = isLiveRefreshing,

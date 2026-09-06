@@ -70,17 +70,17 @@
 | Exit | 70 ms · Linear | 旧页、折叠前内容、移除的条淡出 |
 | Content | 120 ms · Linear（可带 35 ms RevealDelay） | 展开内容、新增的条淡入 |
 | Enter | 180 ms · EmphasizedDecelerate | 新页滑入 **与** 淡入（同曲线） |
-| Flip / FlipExit | 220 / 130 ms | 翻牌位移与新数字淡入 / 旧数字淡出（130 ms 由后续翻牌批次启用，当前仍为 220 ms） |
+| Flip / FlipExit | 220 / 130 ms | 翻牌位移与新数字淡入 / 旧数字淡出 |
 | Breath | 600 ms 往返 · Standard | "应立即到位"红灯光晕；`LocalReduceMotion` 为 true 时静止在 0.25 |
 | fastSpatial | M3 0.9 / 1400（约 140 ms 静止） | 条的展开 / 折叠高度、底栏红灯横移 |
 | defaultSpatial | M3 0.9 / 700（约 190 ms 静止） | 条在栏位间移动、被挤开 |
 | defaultEffects | M3 1.0 / 1600（约 115 ms 静止） | 灯色、底栏着色 |
 | SectionOffset / PressedScale / StaggerStep | 16dp / 0.97 / 40 ms | 切页位移 / 按下缩放 / 稀有时刻逐行延迟 |
 
-- 分区切换 shared-axis：新页按标签方向滑入并淡入（Enter 档，同曲线）；旧页只淡出（Exit 档，不带位移）。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`），放在切页动画之外，按 fastSpatial 弹簧变高变矮；板上内容按背板动画高度裁剪、随板面揭开，不参与切页的位移与淡出淡入。
+- 分区切换 shared-axis：新页按标签方向滑入并淡入（Enter 档，同曲线）；旧页只淡出（Exit 档，不带位移）。藏青板面是常驻背板（`BoardBackdrop` + `LocalBoardBackdrop`），放在切页动画之外，按 fastSpatial 弹簧变高变矮；板上内容随页面一起滑入淡入，但按背板动画高度裁剪、随板面揭开；只有藏青底板不参与切页动画。
 - `LocalReduceMotion` 由 `AirShiftTheme` 提供，实时跟随系统 `ANIMATOR_DURATION_SCALE`（与 Compose 自身同源）；有限时长动画与弹簧由 Compose 自动缩放，token 只对无限循环、延迟与位移型转场做降级。
 - 时长是 0.11.1 真机手调值（在 emil / ui-animation 区间内），不吸附 M3 时长网格；空间弹簧接口带 `visibilityThreshold`，弹簧在肉眼看不见时就停。
-- 触控反馈：所有可按元素共用 `PressIndication`（`ui/theme/AirShiftIndication.kt`）——按钮 / 小按钮 / 底栏项在 draw 阶段缩到 0.97，按下 fast effects 即时、抬手 fast spatial 回弹；整宽信息条只着色（主文字色 6%）不缩放。M3 ripple 已关闭（`LocalRippleConfiguration = null`）。
+- 触控反馈：所有可按元素共用 `PressIndication`（`ui/theme/AirShiftIndication.kt`）——按钮 / 小按钮 / 底栏项在 draw 阶段缩到 0.97，按下 fast effects 即时、抬手 fast spatial 回弹；整宽信息条只着色（主文字色 6%）不缩放。M3 ripple 已关闭（`LocalRippleConfiguration = null`）。两行总开关只覆盖 `Modifier.clickable` 站点；六个 M3 按钮上显式的 `.indication(...)` 在开关关闭后会与 Surface 自带 ripple 叠成两层，完整关闭用 `git revert 2dbf7a0` 或同时删掉六处 `.indication`。
 - 稀有时刻：从有任务过渡到"全部完成"时空态四行按 40 ms 逐行淡入并上浮 8dp（`LocalReduceMotion` 时只淡入、无延迟），冷启动直接进入空态时静态出现；设置页分段器的选中填充是一个物体，按 fast spatial 弹簧在格间横移；底栏文字常驻 SemiBold，不再因选中加粗而跳位。
 
 ## 系统栏与主题

@@ -44,7 +44,7 @@ fun OdometerText(
     }
     // 方向按整串数值算一次，再交给每个槽位；update 对同一 text 是幂等的。
     val tracker = remember { OdometerDirectionTracker() }
-    val rollUp = tracker.update(text)
+    val rollUp = remember(text) { tracker.update(text) }
     Row(
         modifier = modifier.clearAndSetSemantics { contentDescription = text },
         verticalAlignment = Alignment.Bottom,
