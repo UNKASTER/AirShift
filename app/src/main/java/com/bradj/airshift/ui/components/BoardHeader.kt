@@ -81,7 +81,7 @@ val LocalBoardBackdrop = staticCompositionLocalOf<BoardBackdropState?> { null }
 /**
  * 常驻背板：高度不参与布局（背板用 drawBehind 画，板头用 drawWithContent 裁剪）。
  * 首次报高直接 `snapTo` 落位（冷启动不"长出来"）；之后每次报高都用 fast spatial 弹簧 `animateTo`，
- * 从当前值、当前速度接续——重启的 [LaunchedEffect] 会打断上一段，这正是弹簧该有的行为。
+ * 从当前值接续（重启的 [LaunchedEffect] 取消上一段时 Animatable 会把速度归零，所以是从静止重新起弹，位置不跳）。
  * [BoardBackdrop] 与 [BoardHeader] 都只在 draw 里读 [BoardBackdropState.animatedHeight] 这一个
  * 快照状态：动画的每一帧只让两处重绘，两者都不会因为这支弹簧而重组。
  */
