@@ -283,7 +283,7 @@ Gradle 守护进程固定使用 JDK 21（`gradle/gradle-daemon-jvm.properties`�
 - `arrivalBridge` 已解析并持久化，但当前 UI 未展示；提醒 ID 使用 32 位 `stableId.hashCode()`，理论上可能碰撞。
 - 真实飞常准、真实 WPS/MUC、ContentProvider 授权、定位、闹钟、通知和锁屏流程仍需物理设备端到端验证。
 - 仓库有 GitHub Actions（单元测试 + Android Lint + detekt），但没有发布签名或商店分发配置；release 已开启 R8 压缩并用 debug 签名（`isProfileable = true`），可直接覆盖安装，是日常安装与性能取证用的包；压缩后的 OCR / Excel 导入、飞常准、小组件、MUC 五项功能核对仍待真机完成。
-- 性能验收环境：vivo V2505A，release（debug 签名）包，系统对本应用按 60 Hz 排帧（高刷设置不生效），预算 16.7 ms，连续 ≥ 2 帧超预算视为掉帧；取证协议与结果见 `plans/002-perf-evidence.md`。
+- 性能验收环境：vivo V2505A，release（debug 签名）包；应用在前台自行请求 120 Hz（系统默认对本应用锁 60 Hz），预算 8.3 ms，连续 ≥ 2 帧超预算视为掉帧；取证协议与结果见 `plans/002-perf-evidence.md`。
 
 ## 开源许可
 

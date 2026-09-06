@@ -36,6 +36,23 @@ class MainActivity : ComponentActivity() {
         DutyViewModel.factory(AppDutyPorts.create(applicationContext))
     }
 
+    /**
+     * 请求高刷新率。vivo 默认把本应用按 60 Hz 排帧（取证：`mActiveModeId=4`、应用未请求帧率），动画只有一半的帧；
+     * 请求后切到 120 Hz（vsync 16.6 → 8.3 ms）。只对本窗口生效，退到后台即恢复系统默认。
+     * 选同分辨率下不超过 [MAX_REQUESTED_REFRESH_RATE] 的最高模式，不用 144 Hz。
+     */
+    private fun requestHighRefreshRate() {
+        val current = display.mode
+        val target = display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .filter { it.refreshRate <= MAX_REQUESTED_REFRESH_RATE }
+            .maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = target.modeId
+            preferredRefreshRate = target.refreshRate
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) sharedExcelImportQueue.enqueue(intent)
@@ -48,6 +65,7 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT,
             ),
         )
+        requestHighRefreshRate()
         ReminderReceiver.createChannel(this)
         LegacyMigrations.runOnce(this)
         val store = RosterStore(this)
@@ -96,5 +114,10 @@ class MainActivity : ComponentActivity() {
                 data = "package:$packageName".toUri()
             },
         )
+    }
+
+    private companion object {
+        /** 请求的刷新率上限：120 Hz 已让动画帧数翻倍，144 Hz 只多耗电。 */
+        const val MAX_REQUESTED_REFRESH_RATE = 121f
     }
 }
