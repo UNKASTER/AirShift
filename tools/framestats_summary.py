@@ -9,9 +9,13 @@
   sync   = ISSUE_DRAW_COMMANDS_START - SYNC_START
   gpu    = SWAP_BUFFERS - ISSUE_DRAW_COMMANDS_START         （RenderThread 发 GPU 命令；saveLayer 成本落在这里与 draw）
   total  = FRAME_COMPLETED - INTENDED_VSYNC
+列名按 dumpsys 头行匹配（IntendedVsync 等驼峰名），大小写与下划线不敏感；头行与数据行的尾随逗号忽略。
 另输出：首帧（第一个 Flags==0 的帧）是否超预算、动画期间连续超预算的最长帧数——分别对应"首帧长"与"中途掉帧"。
 """
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BUDGET_MS = float(sys.argv[sys.argv.index("--budget") + 1]) if "--budget" in sys.argv else 8.3
 files = [a for a in sys.argv[1:] if a.endswith(".txt")]
@@ -27,6 +31,10 @@ stages = {
 }
 
 
+def norm(name):
+    return name.replace("_", "").lower()
+
+
 def parse(path):
     cols, rows, in_data = {}, [], False
     with open(path, encoding="utf-8", errors="ignore") as f:
@@ -39,7 +47,7 @@ def parse(path):
                 continue
             parts = line.split(",")
             if parts[0] == "Flags":
-                cols = {name: i for i, name in enumerate(parts)}
+                cols = {norm(name): i for i, name in enumerate(parts) if name != ""}
                 continue
             try:
                 vals = [int(p) for p in parts if p != ""]
@@ -47,11 +55,11 @@ def parse(path):
                 continue
             if len(vals) >= len(cols):
                 rows.append(vals)
-    return cols, [r for r in rows if r[cols["Flags"]] == 0]
+    return cols, [r for r in rows if r[cols[norm("Flags")]] == 0]
 
 
 def ms(cols, row, a, b):
-    return (row[cols[b]] - row[cols[a]]) / 1e6
+    return (row[cols[norm(b)]] - row[cols[norm(a)]]) / 1e6
 
 
 def pct(xs, p):
