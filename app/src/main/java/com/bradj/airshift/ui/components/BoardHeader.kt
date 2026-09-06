@@ -22,12 +22,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -63,6 +61,7 @@ fun BoardClock(now: LocalDateTime, dateText: String?, modifier: Modifier = Modif
  * 由一块放在切页动画之外、之下的常驻背板按弹簧变高 / 变矮；板上的内容按 [animatedHeightPx] 裁剪，
  * 随板面长高而揭开，不会画到背板之外的底色上。没有宿主时（测试、Onboarding）[BoardHeader] 照旧自己画底。
  */
+@Stable
 class BoardBackdropState {
     /** 当前页板面的实际高度（含状态栏），由 BoardHeader 的 onSizeChanged 写入。 */
     var heightPx: Int by mutableIntStateOf(0)
@@ -73,25 +72,30 @@ class BoardBackdropState {
 
 val LocalBoardBackdrop = staticCompositionLocalOf<BoardBackdropState?> { null }
 
-/** 常驻背板：首次报高直接落位（冷启动不"长出来"），之后用 fast spatial 弹簧跟随；高度只在 draw 阶段读，不触发布局。 */
+/**
+ * 常驻背板：首次报高直接落位（冷启动不"长出来"），之后用 fast spatial 弹簧跟随；
+ * 高度不参与布局（背板用 drawBehind 画，板头用 drawWithContent 裁剪）；弹簧期间 BoardBackdrop
+ * 本身会逐帧重组，这是 animateIntAsState 的正常行为。
+ */
 @Composable
 fun BoardBackdrop(state: BoardBackdropState, modifier: Modifier = Modifier) {
     val c = AirShiftTokens.colors
-    var settled by remember { mutableStateOf(false) }
-    val height by animateIntAsState(
+    val height = animateIntAsState(
         targetValue = state.heightPx,
-        animationSpec = if (settled) AirShiftMotion.fastSpatial(visibilityThreshold = 1) else snap(),
+        // 还没有高度（首次挂载）时直接落位，之后用 fast spatial 弹簧跟随。
+        animationSpec = if (state.animatedHeightPx == 0) {
+            snap()
+        } else {
+            AirShiftMotion.fastSpatial(visibilityThreshold = 1)
+        },
         label = "boardBackdrop",
     )
-    LaunchedEffect(state.heightPx) {
-        if (state.heightPx > 0) settled = true
-    }
     // 把动画值同步给裁剪方。SideEffect 在每次重组之后写，与 draw 同一帧。
-    SideEffect { state.animatedHeightPx = height }
+    SideEffect { state.animatedHeightPx = height.value }
     Box(
         modifier = modifier
             .fillMaxSize()
-            .drawBehind { drawRect(color = c.board, size = Size(size.width, height.toFloat())) },
+            .drawBehind { drawRect(color = c.board, size = Size(size.width, height.value.toFloat())) },
     )
 }
 
@@ -119,11 +123,21 @@ fun BoardHeader(
                     when (val backdrop = LocalBoardBackdrop.current) {
                         null -> Modifier.background(c.board)
                         else -> Modifier
+                            // 切页的 70 ms 淡出期间旧板头仍在，只要它的尺寸不变就不会再报高；两页同时改高度的情况极少，若出现以后报的为准。
                             .onSizeChanged { backdrop.heightPx = it.height }
-                            // 只画到背板已经长到的高度：内容随板面揭开，不落在底色上。
                             .drawWithContent {
                                 val visible = backdrop.animatedHeightPx.toFloat()
-                                clipRect(bottom = minOf(size.height, visible)) { this@drawWithContent.drawContent() }
+                                if (visible <= 0f) {
+                                    // 背板还没收到本页的高度（首次挂载 / 旋转后的第一帧）：先自己画底、不裁剪，
+                                    // 下一帧背板 snap 到位后再交给它——两处同色，看不出接缝。
+                                    drawRect(color = c.board)
+                                    drawContent()
+                                } else {
+                                    // 只画到背板已经长到的高度：内容随板面揭开，不落在底色上。
+                                    clipRect(bottom = minOf(size.height, visible)) {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                }
                             }
                     },
                 )
