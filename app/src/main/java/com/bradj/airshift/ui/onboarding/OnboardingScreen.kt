@@ -1,6 +1,9 @@
 package com.bradj.airshift.ui.onboarding
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +28,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -126,9 +130,11 @@ fun OnboardingScreen(now: LocalDateTime, onSave: (String) -> Unit) {
             )
         }
         Spacer(Modifier.weight(1f))
+        val saveInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = { onSave(name.trim()) },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            interactionSource = saveInteraction,
+            modifier = Modifier.fillMaxWidth().height(52.dp).indication(saveInteraction, LocalIndication.current),
             shape = RoundedCornerShape(AirShiftRadius.Button),
             enabled = valid,
             colors = ButtonDefaults.buttonColors(

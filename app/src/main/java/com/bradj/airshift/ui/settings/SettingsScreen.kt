@@ -6,9 +6,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -259,9 +262,14 @@ private fun MucSection(
                 if (lastProcessingResult != null) append("。$lastProcessingResult")
             },
         )
+        val interaction = remember { MutableInteractionSource() }
         OutlinedButton(
             onClick = onOpenNotificationAccessSettings,
-            modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp).height(44.dp),
+            interactionSource = interaction,
+            modifier = Modifier
+                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
+                .height(44.dp)
+                .indication(interaction, LocalIndication.current),
             shape = RoundedCornerShape(AirShiftRadius.Small),
             border = androidx.compose.foundation.BorderStroke(1.dp, c.ruleStrong),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = c.ink),
@@ -436,16 +444,22 @@ private fun ApiKeySection(
             modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val testInteraction = remember { MutableInteractionSource() }
             TextButton(
                 onClick = onTest,
                 enabled = apiKey.isNotBlank() && !isTesting,
+                interactionSource = testInteraction,
+                modifier = Modifier.indication(testInteraction, LocalIndication.current),
                 colors = ButtonDefaults.textButtonColors(contentColor = c.arrivalText),
             ) { Text(if (isTesting) "测试中…" else "测试连接", style = MaterialTheme.typography.labelLarge) }
             Spacer(Modifier.weight(1f))
             if (hasStoredApiKey || apiKey.isNotBlank()) {
+                val clearInteraction = remember { MutableInteractionSource() }
                 TextButton(
                     onClick = onClear,
                     enabled = !isTesting,
+                    interactionSource = clearInteraction,
+                    modifier = Modifier.indication(clearInteraction, LocalIndication.current),
                     colors = ButtonDefaults.textButtonColors(contentColor = c.departureText),
                 ) { Text("清除 API Key", style = MaterialTheme.typography.labelLarge) }
             }

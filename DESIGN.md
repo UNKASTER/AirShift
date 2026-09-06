@@ -79,6 +79,7 @@
 
 - `LocalReduceMotion` 由 `AirShiftTheme` 提供，实时跟随系统 `ANIMATOR_DURATION_SCALE`（与 Compose 自身同源）；有限时长动画与弹簧由 Compose 自动缩放，token 只对无限循环、延迟与位移型转场做降级。
 - 时长是 0.11.1 真机手调值（在 emil / ui-animation 区间内），不吸附 M3 时长网格；空间弹簧接口带 `visibilityThreshold`，弹簧在肉眼看不见时就停。
+- 触控反馈：所有可按元素共用 `PressIndication`（`ui/theme/AirShiftIndication.kt`）——按钮 / 小按钮 / 底栏项在 draw 阶段缩到 0.97，按下 fast effects 即时、抬手 fast spatial 回弹；整宽信息条只着色（主文字色 6%）不缩放。M3 ripple 已关闭（`LocalRippleConfiguration = null`）。
 
 ## 系统栏与主题
 

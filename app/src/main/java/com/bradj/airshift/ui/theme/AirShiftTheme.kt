@@ -1,7 +1,9 @@
 package com.bradj.airshift.ui.theme
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -408,13 +410,19 @@ fun AirShiftTheme(
         LocalAirShiftPalette provides palette,
         LocalReduceMotion provides reduceMotion,
     ) {
-        // material3 1.4.0 的 MotionScheme / MaterialTheme.motionScheme 是 internal：应用自己的弹簧值在
-        // AirShiftMotion 里镜像 M3 standard，这里不传 motionScheme（M3 组件用它内部的同一组值）。
+        // 不传 motionScheme：默认即 M3 standard（material3 1.4.0 的 MotionScheme.standard() 是 internal）。
         MaterialTheme(
             colorScheme = palette.toColorScheme(),
             typography = AirShiftTypography,
             shapes = AirShiftShapes,
-            content = content,
-        )
+        ) {
+            // 所有 Modifier.clickable 默认拿到按下缩放；M3 Button 系列写死 ripple，用 LocalRippleConfiguration = null 关掉，
+            // 再在各按钮上显式挂 Modifier.indication(interactionSource, LocalIndication.current)。
+            CompositionLocalProvider(
+                LocalIndication provides AirShiftIndication.button(),
+                LocalRippleConfiguration provides null,
+                content = content,
+            )
+        }
     }
 }

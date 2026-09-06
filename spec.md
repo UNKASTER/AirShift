@@ -394,7 +394,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 图标：`ui/components/DesignComponents.kt` 的 `linearIcon()` 1.5px 线性图标集（`LinearIcons`）。
 - 组件（`ui/components/`）：`BoardHeader` / `BoardClock`、`DutyStrip`、`StatusLamp`（`LampKind`）、`holderColors` / `Modifier.directionHolder` / `HolderBar`、`BayTitle`、`OdometerText`、`PinnedActionBar`、`EmptyBay`、`NoticeStrip`、`StatusDot`；纯计算在 `LegPresentation.kt`（状态灯规则、本站/对方机位、缺失判定）、`DutyBays.kt`（分栏）、`BoardFormats.kt`（日期与剩余时长文案）、`OdometerSlot.kt`（翻牌槽位）。
 - 弹簧与有限时长动画由 Compose 跟随系统"动画时长比例"；无限循环的呼吸灯读 `LocalReduceMotion`（实时）。
-- `PinnedActionBar`（执勤完成 / 保存）按下缩到 97%（`AirShiftMotion.PressedScale`，effects 弹簧），抬手回弹（`collectIsPressedAsState` + `graphicsLayer`）；点击语义与 testTag 不变。
+- 触控反馈统一走 `PressIndication`（`IndicationNodeFactory`，draw 阶段缩放，不改布局、不重组）：按钮与底栏项缩到 0.97，按下 `fastEffects`、抬手 `fastSpatial`；`DutyStrip` 用只着色的 `AirShiftIndication.row()`；M3 `Button` 系列显式 `Modifier.indication(interactionSource, LocalIndication.current)`，ripple 通过 `LocalRippleConfiguration = null` 关闭。点击语义与 testTag 不变。
 - detekt 通过 `app/detekt.yml` 对 `@Composable` 放开命名 / 长度 / 复杂度 / 魔法数字规则，并把 `ui/theme` 排除出 MagicNumber；业务代码不受影响。
 
 ## 7. 飞常准实时航班

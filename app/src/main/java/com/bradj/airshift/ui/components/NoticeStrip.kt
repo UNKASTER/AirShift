@@ -1,7 +1,10 @@
 package com.bradj.airshift.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,8 +71,11 @@ fun NoticeStrip(
         }
         if (actionText != null && onAction != null) {
             Spacer(Modifier.width(AirShiftSpacing.S))
+            val interaction = remember { MutableInteractionSource() }
             TextButton(
                 onClick = onAction,
+                interactionSource = interaction,
+                modifier = Modifier.indication(interaction, LocalIndication.current),
                 colors = ButtonDefaults.textButtonColors(contentColor = if (warning) c.estimate else c.arrivalText),
             ) {
                 Text(actionText, style = MaterialTheme.typography.labelLarge)

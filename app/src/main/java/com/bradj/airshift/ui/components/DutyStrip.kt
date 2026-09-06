@@ -49,6 +49,7 @@ import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.FlightCancellationScope
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.ServiceType
+import com.bradj.airshift.ui.theme.AirShiftIndication
 import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftRadius
 import com.bradj.airshift.ui.theme.AirShiftTokens
@@ -99,7 +100,18 @@ fun DutyStrip(
             .clip(shape)
             .background(c.strip)
             .then(if (emphasized) Modifier else Modifier.border(1.dp, c.rule, shape))
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = null,
+                        indication = AirShiftIndication.row(),
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .directionHolder(holderTop, holderBottom)
             .padding(start = HolderWidth),
         transitionSpec = {
