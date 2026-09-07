@@ -3,6 +3,7 @@ package com.bradj.airshift.parser
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftCycle
 import com.bradj.airshift.model.shift.ShiftSchedule
+import com.bradj.airshift.model.shift.ShiftTeam
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -67,17 +68,19 @@ class XlsRosterParserRealFileTest {
             val file = directory.resolve(fileName)
             assertTrue("缺少测试文件：$fileName", file.isFile)
             val observed = XlsRosterParser.parse(file, testName, clock).observedShiftGroups
-            if (!ShiftCycle.dayKind(date).isFullWorkday) {
+            if (!ShiftCycle.dayKind(date, ShiftTeam.FIRST).isFullWorkday) {
                 // 交接班日的半天表格没有班次行。
                 assertEquals("$fileName 不应含班次行", null, observed)
                 return@forEach
             }
             val groups = requireNotNull(observed) { "$fileName 未解析到班次行" }
             assertTrue("$fileName 的班次行不完整", groups.isUsable)
+            assertTrue("$fileName 带真实组号", !groups.hasSyntheticIds)
             assertEquals("$fileName 的班组顺序", groups.orderedGroupIds, schedule.orderFor(date))
             // 用该表自校正后，其余日期的顺序不应改变。
             val calibrated = ShiftSchedule(ShiftCalibration(date, groups))
-            expectedDates.values.filter { ShiftCycle.dayKind(it).isFullWorkday }.forEach { other ->
+            assertEquals(ShiftTeam.FIRST, calibrated.team)
+            expectedDates.values.filter { ShiftCycle.dayKind(it, ShiftTeam.FIRST).isFullWorkday }.forEach { other ->
                 assertEquals(
                     "以 $fileName 校正后 $other 的顺序",
                     schedule.orderFor(other),
@@ -88,5 +91,38 @@ class XlsRosterParserRealFileTest {
         }
 
         assertTrue("没有任何整班工作日表格参与校验", checked > 0)
+    }
+
+    /**
+     * 二组真实表（`9.7.xls`，2026-09-07 接班日）：小组没有编号、姓名连写、夜班写作“候机夜航”。
+     * 夹具目录里没有该文件时跳过。
+     */
+    @Test
+    fun parsesTheSecondTeamSheetIntoSyntheticGroups() {
+        val configured = fixtures()
+        assumeTrue(configured != null)
+        val (directory, testName) = configured!!
+        val file = directory.resolve("9.7.xls")
+        assumeTrue(file.isFile)
+
+        val result = XlsRosterParser.parse(file, testName, clock)
+        assertEquals(LocalDate.of(2026, 9, 7), result.rosterDate)
+        val observed = requireNotNull(result.observedShiftGroups) { "9.7.xls 未解析到班次行" }
+        assertTrue(observed.isUsable)
+        assertTrue(observed.hasSyntheticIds)
+        assertEquals(listOf(3, 4, 3), listOf(observed.early.size, observed.mid.size, observed.night.size))
+        assertEquals((1..10).toList(), observed.orderedGroupIds)
+        observed.orderedGroupIds.forEach { id ->
+            val members = observed.members[id].orEmpty()
+            assertTrue("组 $id 没有成员", members.isNotEmpty())
+            assertTrue("组 $id 成员未切开：$members", members.all { it.length in 2..4 })
+        }
+
+        val calibration = ShiftCalibration(result.rosterDate, observed)
+        assertEquals(ShiftTeam.SECOND, calibration.team)
+        val schedule = ShiftSchedule(calibration)
+        assertEquals(ShiftTeam.SECOND, schedule.team)
+        assertEquals(observed.orderedGroupIds, schedule.orderFor(LocalDate.of(2026, 9, 7)))
+        assertTrue(schedule.labelOf(1).endsWith("组"))
     }
 }

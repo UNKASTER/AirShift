@@ -37,6 +37,7 @@ import com.bradj.airshift.model.shift.ShiftDayKind
 import com.bradj.airshift.model.shift.ShiftEstimateSource
 import com.bradj.airshift.model.shift.ShiftRosterBridge
 import com.bradj.airshift.model.shift.ShiftSchedule
+import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.ui.components.BayTitle
 import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.EmptyBay
@@ -102,7 +103,7 @@ fun ShiftCalendarScreen(
             subtitle = if (groupId != null) "上三休三 · 第 $groupId 组" else "上三休三",
             now = now,
             dateText = today.boardDateText(),
-            content = { TodayBlock(todayRow = todayRow, today = today, hasGroup = groupId != null) },
+            content = { TodayBlock(todayRow = todayRow, today = today, team = schedule.team, hasGroup = groupId != null) },
             footer = { CalendarFooter(todayRow = todayRow, calibrated = schedule.isCalibrated) },
         )
         if (groupId == null) {
@@ -142,9 +143,9 @@ fun ShiftCalendarScreen(
 
 /** 板面主体：今天的班次大字 + 一句说明，右侧班车时间。 */
 @Composable
-private fun TodayBlock(todayRow: ShiftCalendarRow?, today: LocalDate, hasGroup: Boolean) {
+private fun TodayBlock(todayRow: ShiftCalendarRow?, today: LocalDate, team: ShiftTeam, hasGroup: Boolean) {
     val c = AirShiftTokens.colors
-    val cycleDay = ShiftCycle.dayIndexInCycle(today) + 1
+    val cycleDay = ShiftCycle.dayIndexInCycle(today, team) + 1
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,

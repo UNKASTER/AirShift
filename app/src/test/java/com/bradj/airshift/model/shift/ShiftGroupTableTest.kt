@@ -22,6 +22,7 @@ class ShiftGroupTableTest {
 
     /** 与内置表同一环形顺序，但带合成成员，模拟一次 Excel 校准之后的班组表。 */
     private val table = ShiftGroupTable(
+        team = ShiftTeam.FIRST,
         cycleOrder = ShiftGroupTable.DEFAULT_CYCLE_ORDER,
         groups = members.mapValues { (id, names) -> ShiftGroup(id, names) },
         tierSizes = ShiftTierSizes.DEFAULT,
@@ -178,5 +179,60 @@ class ShiftGroupTableTest {
         assertTrue(
             !ObservedShiftGroups(listOf(1), listOf(1), listOf(3), emptyMap()).isUsable,
         )
+    }
+
+    /** 二组：小组没有编号，解析给的是合成 id；成员已切成单人姓名，只有一个组没切开。 */
+    private val secondTeamTable = ShiftGroupTable(
+        team = ShiftTeam.SECOND,
+        cycleOrder = listOf(1, 2, 3),
+        groups = mapOf(
+            1 to ShiftGroup(1, listOf("王甲子", "李乙丑")),
+            2 to ShiftGroup(2, listOf("周丙寅", "吴丁卯", "郑戊辰")),
+            3 to ShiftGroup(3, listOf("测试甲测试乙")),
+        ),
+        tierSizes = ShiftTierSizes(1, 1, 1),
+    )
+
+    @Test
+    fun `the second team has no built in groups`() {
+        val builtIn = ShiftGroupTable.builtIn(ShiftTeam.SECOND)
+        assertEquals(ShiftTeam.SECOND, builtIn.team)
+        assertEquals(0, builtIn.size)
+        assertNull(builtIn.findGroupIdForName("王甲子"))
+        assertEquals(ShiftGroupTable.DEFAULT, ShiftGroupTable.builtIn(ShiftTeam.FIRST))
+    }
+
+    @Test
+    fun `first team groups are labelled by number and second team groups by their first member`() {
+        assertEquals("第 8 组", ShiftGroupTable.DEFAULT.labelOf(8))
+        assertEquals("王甲子组", secondTeamTable.labelOf(1))
+        assertEquals("周丙寅组", secondTeamTable.labelOf(2))
+        assertEquals("第 9 组", secondTeamTable.labelOf(9))
+    }
+
+    @Test
+    fun `an unsplit member string matches by containment only when it is clearly several names`() {
+        assertEquals(1, secondTeamTable.findGroupIdForName("李乙丑"))
+        assertEquals(3, secondTeamTable.findGroupIdForName("测试乙"))
+        assertEquals(3, secondTeamTable.findGroupIdForName("测试甲"))
+        // 三字成员不是连写串，短姓名仍不能命中更长的同事。
+        assertNull(secondTeamTable.findGroupIdForName("王甲"))
+        assertNull(secondTeamTable.findGroupIdForName("丁卯"))
+    }
+
+    @Test
+    fun `calibrating the second team keeps its team and member order`() {
+        val observed = ObservedShiftGroups(
+            early = listOf(1),
+            mid = listOf(2),
+            night = listOf(3),
+            members = mapOf(1 to listOf("王甲子", "李乙丑"), 2 to listOf("周丙寅"), 3 to listOf("吴丁卯")),
+            hasSyntheticIds = true,
+        )
+        val calibrated = ShiftGroupTable.from(observed, base = ShiftGroupTable.builtIn(ShiftTeam.SECOND))
+        assertEquals(ShiftTeam.SECOND, calibrated.team)
+        assertEquals(listOf(1, 2, 3), calibrated.cycleOrder)
+        assertEquals("王甲子组", calibrated.labelOf(1))
+        assertEquals(1, calibrated.findGroupIdForName("李乙丑"))
     }
 }

@@ -137,20 +137,145 @@ class ShiftScheduleTest {
     }
 
     @Test
-    fun `a calibration on a non working day is ignored`() {
+    fun `a calibration dated on the workday of the other team switches the schedule to that team`() {
+        // 9/1 一组交接班、二组接班：带班次行的表只可能是二组的。
         val calibrated = ShiftSchedule(
             ShiftCalibration(
                 date = date(9, 1),
                 observed = ObservedShiftGroups(
-                    early = listOf(11, 8, 9),
-                    mid = listOf(2, 6, 4, 10),
-                    night = listOf(3, 1, 5),
+                    early = listOf(1, 2, 3),
+                    mid = listOf(4, 5, 6, 7),
+                    night = listOf(8, 9, 10),
                     members = emptyMap(),
+                    hasSyntheticIds = true,
                 ),
             ),
+            fallbackTeam = ShiftTeam.FIRST,
         )
-        assertFalse(calibrated.isCalibrated)
-        assertEquals(ShiftGroupTable.DEFAULT.cycleOrder, calibrated.table.cycleOrder)
+        assertTrue(calibrated.isCalibrated)
+        assertEquals(ShiftTeam.SECOND, calibrated.team)
+        assertEquals((1..10).toList(), calibrated.orderFor(date(9, 1)))
+        assertEquals(ShiftDayKind.WORK_FIRST, calibrated.dayKind(date(9, 1)))
+        // 一组的整班日是二组的休息日。
+        assertNull(calibrated.orderFor(date(8, 31)))
+        assertEquals(ShiftDayKind.REST, calibrated.dayFor(1, date(8, 31)).kind)
+    }
+
+    @Test
+    fun `without a calibration the second team only yields day kinds`() {
+        val second = ShiftSchedule(fallbackTeam = ShiftTeam.SECOND)
+        assertEquals(ShiftTeam.SECOND, second.team)
+        assertFalse(second.isCalibrated)
+        assertEquals(0, second.table.size)
+        val workday = second.dayFor(1, date(9, 7))
+        assertEquals(ShiftDayKind.WORK_FIRST, workday.kind)
+        assertNull(workday.slot)
+        assertTrue("上班日仍要到岗，只是不知道槽位", workday.attends)
+        val handover = second.dayFor(1, date(9, 10))
+        assertEquals(ShiftDayKind.HANDOVER, handover.kind)
+        assertTrue(handover.attends)
+        assertFalse(handover.isHandoverExempt)
+        assertFalse(second.dayFor(1, date(9, 11)).attends)
+    }
+
+    @Test
+    fun `an unknown group on the first team still does not attend`() {
+        assertFalse(schedule.dayFor(7, date(8, 30)).attends)
+    }
+
+    private val septemberSeventh = ShiftCalibration(
+        date = date(9, 7),
+        observed = ObservedShiftGroups(
+            early = listOf(1, 2, 3),
+            mid = listOf(4, 5, 6, 7),
+            night = listOf(8, 9, 10),
+            members = mapOf(
+                1 to listOf("王甲子", "李乙丑", "周丙寅"),
+                2 to listOf("吴丁卯", "郑戊辰"),
+                3 to listOf("冯己巳", "陈庚午"),
+                4 to listOf("褚辛未", "卫壬申"),
+                5 to listOf("蒋癸酉", "沈甲戌", "韩乙亥"),
+                6 to listOf("杨丙子", "朱丁丑"),
+                7 to listOf("秦戊寅", "尤己卯"),
+                8 to listOf("许庚辰", "何辛巳"),
+                9 to listOf("吕壬午", "施癸未"),
+                10 to listOf("张甲申", "孔乙酉"),
+            ),
+            hasSyntheticIds = true,
+        ),
+    )
+
+    @Test
+    fun `a later second team sheet is aligned to the previous ids by shared members`() {
+        // 9/8：整体左移 3 位后位次全变；组 5 少了一个人、组 10 多了一个人。
+        val next = ShiftCalibration(
+            date = date(9, 8),
+            observed = ObservedShiftGroups(
+                early = listOf(1, 2, 3),
+                mid = listOf(4, 5, 6, 7),
+                night = listOf(8, 9, 10),
+                members = mapOf(
+                    1 to listOf("褚辛未", "卫壬申"),
+                    2 to listOf("蒋癸酉", "韩乙亥"),
+                    3 to listOf("杨丙子", "朱丁丑"),
+                    4 to listOf("秦戊寅", "尤己卯"),
+                    5 to listOf("许庚辰", "何辛巳"),
+                    6 to listOf("吕壬午", "施癸未"),
+                    7 to listOf("张甲申", "孔乙酉", "沈甲戌"),
+                    8 to listOf("王甲子", "李乙丑", "周丙寅"),
+                    9 to listOf("吴丁卯", "郑戊辰"),
+                    10 to listOf("冯己巳", "陈庚午"),
+                ),
+                hasSyntheticIds = true,
+            ),
+        ).alignedWith(septemberSeventh)
+
+        assertEquals(listOf(4, 5, 6), next.observed.early)
+        assertEquals(listOf(7, 8, 9, 10), next.observed.mid)
+        assertEquals(listOf(1, 2, 3), next.observed.night)
+        assertEquals(listOf("张甲申", "孔乙酉", "沈甲戌"), next.observed.members[10])
+        assertTrue(next.observed.hasSyntheticIds)
+        // 对齐后的校准和 9/7 的校准算出同一张日历。
+        val fromFirst = ShiftSchedule(septemberSeventh)
+        val fromNext = ShiftSchedule(next)
+        listOf(date(9, 7), date(9, 8), date(9, 9), date(9, 13)).forEach { day ->
+            assertEquals("$day", fromFirst.orderFor(day), fromNext.orderFor(day))
+        }
+        assertEquals("王甲子组", fromNext.labelOf(1))
+    }
+
+    @Test
+    fun `a brand new group gets an id neither sheet has used`() {
+        val next = ShiftCalibration(
+            date = date(9, 8),
+            observed = ObservedShiftGroups(
+                early = listOf(1, 2),
+                mid = listOf(3),
+                night = listOf(4),
+                members = mapOf(
+                    1 to listOf("王甲子"),
+                    2 to listOf("新人甲", "新人乙"),
+                    3 to listOf("吴丁卯"),
+                    4 to listOf("冯己巳"),
+                ),
+                hasSyntheticIds = true,
+            ),
+        ).alignedWith(septemberSeventh)
+        assertEquals(listOf(1, 11), next.observed.early)
+        assertEquals(listOf(2), next.observed.mid)
+        assertEquals(listOf(3), next.observed.night)
+        assertEquals(listOf("新人甲", "新人乙"), next.observed.members[11])
+    }
+
+    @Test
+    fun `alignment leaves first team sheets and other team histories alone`() {
+        val firstTeam = ShiftCalibration(
+            date = date(8, 25),
+            observed = ObservedShiftGroups(listOf(8, 9, 2), listOf(6, 4, 10, 3), listOf(1, 5, 11), emptyMap()),
+        )
+        assertEquals(firstTeam, firstTeam.alignedWith(septemberSeventh))
+        assertEquals(septemberSeventh, septemberSeventh.alignedWith(firstTeam))
+        assertEquals(septemberSeventh, septemberSeventh.alignedWith(null))
     }
 
     @Test

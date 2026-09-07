@@ -2,6 +2,7 @@ package com.bradj.airshift.parser
 
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.shift.ObservedShiftGroups
+import com.bradj.airshift.model.shift.ShiftTeam
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.helpers.DefaultHandler
@@ -37,6 +38,10 @@ internal object ExcelRosterParser {
     private val assigneeDelimiterRegex = Regex("[\\s\\u00A0,，、;；/|]+")
     private val parentheticalNoteRegex = Regex("[（(][^）)]*[）)]")
     private val shiftGroupEntryRegex = Regex("(\\d{1,2})\\s*([^\\d]+)")
+    // 二组班次行里数字跟在每个小组后面，只起分隔作用。
+    private val trailingGroupNumberRegex = Regex("\\s*\\d+\\s*")
+    private val cipTokenRegex = Regex("(?<![A-Z])CIP(?![A-Z])")
+    private const val MIN_NAME_LENGTH = 2
     // 单元格级热路径：findHeader 对每张表的每个单元格调用 normalizeHeader，正则必须只编译一次。
     private val nameNoiseRegex = Regex("[\\s\\p{P}\\p{S}]")
     private val nonAlphanumericRegex = Regex("[^A-Z0-9]")
@@ -122,13 +127,24 @@ internal object ExcelRosterParser {
         if (assignments.isEmpty()) {
             warnings += "表中没有找到姓名“${userName.trim()}”对应的航班"
         }
+        val rosterDate = parsedDates.firstOrNull() ?: workbookDate ?: today
+        val observedShiftGroups = recognizedSheets.asSequence()
+            .mapNotNull { parseObservedShiftGroups(it.sheet.rows) }
+            .firstOrNull()
+        if (observedShiftGroups != null && workbookDate != null) {
+            // 带班次行的表只出现在整班日，日期决定大组；写法与大组对不上多半是表格日期写错了。
+            val team = ShiftTeam.onFullWorkday(rosterDate)
+            val looksLikeSecondTeam = observedShiftGroups.hasSyntheticIds
+            if (looksLikeSecondTeam != (team == ShiftTeam.SECOND)) {
+                val style = if (looksLikeSecondTeam) ShiftTeam.SECOND else ShiftTeam.FIRST
+                warnings += "班次行是${style.label}的写法，但 ${rosterDate.monthValue}/${rosterDate.dayOfMonth} 是${team.label}的整班日，请核对表格日期"
+            }
+        }
         return RosterParseResult(
             assignments = assignments,
-            rosterDate = parsedDates.firstOrNull() ?: workbookDate ?: today,
+            rosterDate = rosterDate,
             warnings = warnings,
-            observedShiftGroups = recognizedSheets.asSequence()
-                .mapNotNull { parseObservedShiftGroups(it.sheet.rows) }
-                .firstOrNull(),
+            observedShiftGroups = observedShiftGroups,
         )
     }
 
@@ -286,7 +302,7 @@ internal object ExcelRosterParser {
      * 三行缺任意一行时返回 null——交接班日的半天表格本就没有这些行。
      */
     private fun parseObservedShiftGroups(rows: List<ExcelRow>): ObservedShiftGroups? {
-        val lines = mutableMapOf<ShiftLineKind, List<Pair<Int, List<String>>>>()
+        val lines = mutableMapOf<ShiftLineKind, List<ShiftLineEntry>>()
         for (row in rows) {
             for (cell in row.cells.values) {
                 val kind = shiftLineKind(cell.text) ?: continue
@@ -298,11 +314,18 @@ internal object ExcelRosterParser {
         val early = lines[ShiftLineKind.EARLY] ?: return null
         val mid = lines[ShiftLineKind.MID] ?: return null
         val night = lines[ShiftLineKind.NIGHT] ?: return null
+        val entries = early + mid + night
+        val synthetic = entries.all { it.id == null }
+        // 同一张表里一组、二组两种写法混用，不知道该信哪种，当作没有班次行。
+        if (!synthetic && entries.any { it.id == null }) return null
+        // 二组的小组没有编号：按早→中→晚位次给 1..N 合成 id。
+        val ids = if (synthetic) List(entries.size) { it + 1 } else entries.map { requireNotNull(it.id) }
         return ObservedShiftGroups(
-            early = early.map { it.first },
-            mid = mid.map { it.first },
-            night = night.map { it.first },
-            members = (early + mid + night).toMap(),
+            early = ids.take(early.size),
+            mid = ids.drop(early.size).take(mid.size),
+            night = ids.drop(early.size + mid.size),
+            members = ids.zip(entries.map(ShiftLineEntry::names)).toMap(),
+            hasSyntheticIds = synthetic,
         ).takeIf(ObservedShiftGroups::isUsable)
     }
 
@@ -311,39 +334,65 @@ internal object ExcelRosterParser {
         return when {
             normalized.startsWith("候机早班") || normalized.startsWith("早班人员") -> ShiftLineKind.EARLY
             normalized.startsWith("候机中班") || normalized.startsWith("中班人员") -> ShiftLineKind.MID
-            normalized.startsWith("候机夜班") || normalized.startsWith("候机晚班") ||
-                normalized.startsWith("夜班人员") || normalized.startsWith("晚班人员") -> ShiftLineKind.NIGHT
+            NIGHT_LINE_LABELS.any(normalized::startsWith) -> ShiftLineKind.NIGHT
             else -> null
         }
     }
 
     /**
-     * 把“候机早班：1甲子 甲丑5乙子 乙丑 乙寅”解析为有序的 (组号, 成员) 列表。
-     * 组号只起分隔作用，出现顺序才决定早几 / 中几 / 晚几。
+     * 把一行班次行解析为有序的成员分组。两种写法：
+     * - 一组：“候机早班：1甲子 甲丑5乙子 乙丑 乙寅”，组号在前、姓名以空格分隔，组号即 [ShiftLineEntry.id]；
+     * - 二组：“候机早班：甲子甲丑4 乙子乙丑乙寅4 丙子丙丑 4”，姓名连写、数字在后且只是分隔符，
+     *   [ShiftLineEntry.id] 为 null，由 [parseObservedShiftGroups] 按位次给合成 id。
+     * 两种写法里数字都只起分隔作用，出现顺序才决定早几 / 中几 / 晚几。
      */
-    private fun parseShiftGroupEntries(raw: String): List<Pair<Int, List<String>>> {
-        val firstDigit = raw.indexOfFirst(Char::isDigit)
-        if (firstDigit < 0) return emptyList()
-        return shiftGroupEntryRegex.findAll(raw.substring(firstDigit)).mapNotNull { match ->
-            val id = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            val names = match.groupValues[2]
-                .replace(parentheticalNoteRegex, " ")
-                .split(assigneeDelimiterRegex)
-                .filter(String::isNotBlank)
-            names.takeIf { it.isNotEmpty() }?.let { id to it }
-        }.toList()
+    private fun parseShiftGroupEntries(raw: String): List<ShiftLineEntry> {
+        val labelEnd = raw.indexOfFirst { it == '：' || it == ':' }
+        val body = when {
+            labelEnd >= 0 -> raw.substring(labelEnd + 1)
+            else -> raw.indexOfFirst(Char::isDigit).takeIf { it >= 0 }?.let { raw.substring(it) } ?: return emptyList()
+        }.trim()
+        if (body.isEmpty()) return emptyList()
+        return if (body.first().isDigit()) {
+            shiftGroupEntryRegex.findAll(body).mapNotNull { match ->
+                val id = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+                splitMembers(match.groupValues[2]).takeIf { it.isNotEmpty() }?.let { ShiftLineEntry(id, it) }
+            }.toList()
+        } else {
+            body.split(trailingGroupNumberRegex)
+                .map(::splitMembers)
+                .filter { it.isNotEmpty() }
+                .map { ShiftLineEntry(id = null, names = it) }
+        }
     }
+
+    /** 去掉括号备注，按分隔符切开，再把连写的多人姓名切成单人姓名。 */
+    private fun splitMembers(raw: String): List<String> = raw
+        .replace(parentheticalNoteRegex, " ")
+        .split(assigneeDelimiterRegex)
+        .filter(String::isNotBlank)
+        .flatMap(ChineseNameSplitter::split)
+
+    private data class ShiftLineEntry(val id: Int?, val names: List<String>)
 
     private enum class ShiftLineKind { EARLY, MID, NIGHT }
 
+    /** 夜班行的写法：一组“候机夜班”，二组“候机夜航”。 */
+    private val NIGHT_LINE_LABELS = listOf("候机夜班", "候机晚班", "候机夜航", "夜班人员", "晚班人员", "夜航人员")
+
+    /**
+     * 要客区：一组写“VIP信息自查 严禁外泄”，下面一行一个航班，遇到独立的 “CIP” 单元格后不再计入；
+     * 二组写“要客：要客信息自查”，CIP 直接标在航班行里（“MU2448 南京-兰州 CIP 姓名”），这类行同样不计入。
+     */
     private fun parseVipFlightNumbers(rows: List<ExcelRow>): Set<String> {
         val flights = mutableSetOf<String>()
         rows.forEachIndexed { rowPosition, row ->
             row.cells.forEach { (columnIndex, cell) ->
                 val normalized = normalizeHeader(cell.text).uppercase()
-                if (!normalized.startsWith("VIP信息") && !normalized.startsWith("要客信息")) return@forEach
+                if (!normalized.startsWith("VIP信息") && !normalized.startsWith("要客")) return@forEach
 
                 row.cells.filterKeys { it > columnIndex }.values
+                    .filterNot { containsCipToken(it.text) }
                     .mapNotNullTo(flights) { cleanFlightNumber(it.text) }
                 var blankRows = 0
                 for (candidate in rows.drop(rowPosition + 1).take(30)) {
@@ -355,23 +404,24 @@ internal object ExcelRosterParser {
                     }
                     blankRows = 0
                     if (relevant.any { isVipStopMarker(it.text) }) break
-                    relevant.mapNotNullTo(flights) { cleanFlightNumber(it.text) }
+                    relevant.filterNot { containsCipToken(it.text) }
+                        .mapNotNullTo(flights) { cleanFlightNumber(it.text) }
                 }
             }
         }
         return flights
     }
 
+    private fun containsCipToken(raw: String): Boolean = cipTokenRegex.containsMatchIn(raw.uppercase())
+
     private fun isVipStopMarker(raw: String): Boolean {
         val normalized = normalizeHeader(raw).uppercase()
         return normalized == "CIP" ||
             normalized.startsWith("候机早班") ||
             normalized.startsWith("候机中班") ||
-            normalized.startsWith("候机夜班") ||
-            normalized.startsWith("候机晚班") ||
             normalized.startsWith("早班人员") ||
             normalized.startsWith("中班人员") ||
-            normalized.startsWith("晚班人员")
+            NIGHT_LINE_LABELS.any(normalized::startsWith)
     }
 
     private fun cleanRegistration(raw: String): String? {
@@ -384,6 +434,10 @@ internal object ExcelRosterParser {
     private fun cleanLocation(raw: String): String? =
         raw.replace(locationNoiseRegex, "").takeIf(String::isNotBlank)
 
+    /**
+     * 人员栏是否含用户。有分隔符时逐项精确匹配；没有分隔符（二组连写）时先切成单人姓名再精确匹配，
+     * 切不开的串才按包含判断，且要求串里至少还容得下另一个两字姓名，避免把别人的长姓名误判为用户。
+     */
     private fun containsAssignee(raw: String, userName: String): Boolean {
         val compactUserName = normalizeName(userName)
         if (compactUserName.isBlank()) return false
@@ -394,8 +448,11 @@ internal object ExcelRosterParser {
             .filter(String::isNotBlank)
         if (hasDelimiter) return names.any { it == compactUserName }
         val compactAssignees = normalizeName(withoutNotes)
-        return compactAssignees == compactUserName ||
-            (compactAssignees.length >= compactUserName.length * 2 && compactAssignees.contains(compactUserName))
+        if (compactAssignees == compactUserName) return true
+        val split = ChineseNameSplitter.split(compactAssignees)
+        if (split.size > 1) return split.any { it == compactUserName }
+        return compactAssignees.length >= compactUserName.length + MIN_NAME_LENGTH &&
+            compactAssignees.contains(compactUserName)
     }
 
     private fun normalizeName(raw: String): String = raw.replace(nameNoiseRegex, "")

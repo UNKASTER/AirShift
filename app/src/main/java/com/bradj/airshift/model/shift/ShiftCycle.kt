@@ -28,17 +28,14 @@ enum class ShiftDayKind(val label: String) {
 }
 
 /**
- * 上三休三周期与班组轮转。
+ * 上三休三周期与班组轮转。每个函数都要指明大组 [ShiftTeam]：两大组共用同一套规则，只是锚点错开 3 天。
  *
- * 规律由 2026-08-24 至 2026-09-01 的六份真实排班表反推，样本内零反例：
+ * 规律由 2026-08-24 至 2026-09-01 的六份一组真实排班表反推，样本内零反例；用户确认二组规则相同：
  * - 六天一个周期：整班 3 天、交接班上午 1 天、休息 2 天；
  * - 班组序列只在整班工作日左移 3 位，交接班日与休息日不推进；
  * - 按日历日推进无解（4k ≡ 3 mod 10 无整数解），故“仅工作日推进”是唯一自洽解释。
  */
 object ShiftCycle {
-    /** 用户确认的第一个上班日，即周期第 1 天。 */
-    val ANCHOR: LocalDate = LocalDate.of(2026, 8, 23)
-
     const val CYCLE_LENGTH_DAYS = 6
 
     /** 每个整班工作日班组序列左移的位数。 */
@@ -53,43 +50,45 @@ object ShiftCycle {
         ShiftDayKind.REST,
     )
 
-    /** 日期在六天周期内的序号 0..5；锚点之前的日期同样有效。 */
-    fun dayIndexInCycle(date: LocalDate): Int =
-        Math.floorMod(ChronoUnit.DAYS.between(ANCHOR, date), CYCLE_LENGTH_DAYS.toLong()).toInt()
+    /** 日期在该大组六天周期内的序号 0..5；锚点之前的日期同样有效。 */
+    fun dayIndexInCycle(date: LocalDate, team: ShiftTeam): Int =
+        Math.floorMod(ChronoUnit.DAYS.between(team.anchor, date), CYCLE_LENGTH_DAYS.toLong()).toInt()
 
-    fun dayKind(date: LocalDate): ShiftDayKind = KINDS[dayIndexInCycle(date)]
+    fun dayKind(date: LocalDate, team: ShiftTeam): ShiftDayKind = KINDS[dayIndexInCycle(date, team)]
 
     /**
      * 整班工作日的全局序号（只数 D1/D2/D3，交接班日与休息日不计）。
      * 锚点当天为 0；非整班工作日返回 null。
      */
-    fun workOrdinal(date: LocalDate): Long? {
-        val index = dayIndexInCycle(date)
+    fun workOrdinal(date: LocalDate, team: ShiftTeam): Long? {
+        val index = dayIndexInCycle(date, team)
         if (index > 2) return null
-        val elapsed = ChronoUnit.DAYS.between(ANCHOR, date)
+        val elapsed = ChronoUnit.DAYS.between(team.anchor, date)
         val cycleNumber = Math.floorDiv(elapsed, CYCLE_LENGTH_DAYS.toLong())
         return cycleNumber * 3 + index
     }
 
     /**
-     * 班组序列的旋转偏移，已校准到 2026-08-24（workOrdinal = 1）偏移为 0。
+     * 班组序列的旋转偏移。一组已校准到 2026-08-24（workOrdinal = 1）偏移为 0；
+     * 二组没有内置班组表，这里的原始偏移只作相对值，由校准表决定相位（见 [ShiftSchedule]）。
      * 非整班工作日返回 null——交接班日的班次继承 [previousFullWorkday]。
      */
-    fun rotationOffset(date: LocalDate, tableSize: Int = ShiftGroupTable.DEFAULT.size): Int? {
+    fun rotationOffset(date: LocalDate, team: ShiftTeam, tableSize: Int): Int? {
         if (tableSize <= 0) return null
-        val ordinal = workOrdinal(date) ?: return null
+        val ordinal = workOrdinal(date, team) ?: return null
         return Math.floorMod((ordinal - 1) * ROTATION_STEP.toLong(), tableSize.toLong()).toInt()
     }
 
     /** 前一个整班工作日；交接班日据此继承班次与到岗规则。 */
-    fun previousFullWorkday(date: LocalDate): LocalDate? {
+    fun previousFullWorkday(date: LocalDate, team: ShiftTeam): LocalDate? {
         for (back in 1..CYCLE_LENGTH_DAYS) {
             val candidate = date.minusDays(back.toLong())
-            if (dayKind(candidate).isFullWorkday) return candidate
+            if (dayKind(candidate, team).isFullWorkday) return candidate
         }
         return null
     }
 
     /** 该日期所属周期的第一天（D1）。 */
-    fun cycleStart(date: LocalDate): LocalDate = date.minusDays(dayIndexInCycle(date).toLong())
+    fun cycleStart(date: LocalDate, team: ShiftTeam): LocalDate =
+        date.minusDays(dayIndexInCycle(date, team).toLong())
 }
