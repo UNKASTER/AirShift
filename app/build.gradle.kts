@@ -18,6 +18,14 @@ detekt {
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach { jvmTarget = "17" }
 tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach { jvmTarget = "17" }
 
+// 应用版本。仪器测试会把 Debug 版装到手机上、覆盖日常用的 release：两者 versionCode 相同时 vivo 安装器把
+// release 当“相同版本”，`adb install -r` 只会失败，只能在手机弹框里手工点“重新安装”。因此 Debug 变体用
+// 更高的固定偏移与 -debug 后缀（见下方 androidComponents）：测试装 Debug 是升级；装回 release 用
+// `adb install -r -d`——对已装的可调试包允许降级——两个方向都不再撞“相同版本”。
+val appVersionCode = 53
+val appVersionName = "0.13.1"
+val debugVersionCodeOffset = 1_000_000
+
 android {
     namespace = "com.bradj.airshift"
     compileSdk = 37
@@ -26,8 +34,8 @@ android {
         applicationId = "com.bradj.airshift"
         minSdk = 33
         targetSdk = 37
-        versionCode = 52
-        versionName = "0.13.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,6 +77,16 @@ android {
     }
 
     sourceSets["androidTest"].assets.directories.add(rootProject.file("testdata").absolutePath)
+}
+
+// Debug 变体的版本号：versionCode 加固定偏移、versionName 加 -debug，理由见文件顶部。
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.outputs.forEach { output ->
+            output.versionCode.set(appVersionCode + debugVersionCodeOffset)
+            output.versionName.set("$appVersionName-debug")
+        }
+    }
 }
 
 composeCompiler {
