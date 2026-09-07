@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +46,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -64,6 +66,8 @@ import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.NoticeTone
 import com.bradj.airshift.ui.components.animateListItem
 import com.bradj.airshift.ui.components.boardDateText
+import com.bradj.airshift.ui.components.followCollapse
+import com.bradj.airshift.ui.components.followExpansion
 import com.bradj.airshift.ui.components.splitIntoBays
 import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftRadius
@@ -107,9 +111,24 @@ fun AllDutyScreen(
     // 展开态跨配置变化保留；用换行拼接的字符串存 stableId 集合。
     var expandedIds by rememberSaveable { mutableStateOf("") }
     val expanded = remember(expandedIds) { expandedIds.split(EXPANDED_SEPARATOR).filter { it.isNotEmpty() }.toSet() }
+    // 点开一条：随它的尺寸弹簧把列表推上去，展开的内容留在视口里（最后一条尤其需要）；收起：把推上去的距离还回去。
+    // 同一条反复点也要重新触发，所以请求带流水号；每条推过的像素按 key 记住，配置变化后丢失也只是少了回拉。
+    val listState = rememberLazyListState()
+    var reveal by remember { mutableStateOf<RevealRequest?>(null) }
+    val pushedPx = remember { mutableMapOf<String, Int>() }
     val toggle: (String) -> Unit = { id ->
-        val next = if (id in expanded) expanded - id else expanded + id
+        val expanding = id !in expanded
+        val next = if (expanding) expanded + id else expanded - id
         expandedIds = next.joinToString(EXPANDED_SEPARATOR)
+        reveal = RevealRequest(key = id, expanding = expanding, serial = (reveal?.serial ?: 0) + 1)
+    }
+    LaunchedEffect(reveal) {
+        val request = reveal ?: return@LaunchedEffect
+        if (request.expanding) {
+            pushedPx[request.key] = listState.followExpansion(request.key)
+        } else {
+            listState.followCollapse(request.key, pushedPx.remove(request.key) ?: 0)
+        }
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -183,7 +202,8 @@ fun AllDutyScreen(
             },
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                modifier = Modifier.fillMaxSize().testTag("duty_list"),
                 contentPadding = PaddingValues(
                     start = AirShiftSpacing.M,
                     end = AirShiftSpacing.M,
@@ -267,6 +287,9 @@ fun AllDutyScreen(
         }
     }
 }
+
+/** 一次"点开 / 收起某条"的跟随请求；[serial] 让同一条反复点也能重新触发 `LaunchedEffect`。 */
+private data class RevealRequest(val key: String, val expanding: Boolean, val serial: Int)
 
 private fun LazyListScope.stripItem(
     assignment: RosterAssignment,

@@ -15,14 +15,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +65,9 @@ import java.time.LocalDateTime
 /** 日历向前看 7 天、向后看 6 周，覆盖当前周期与接下来的整数个周期。 */
 private const val DAYS_BEFORE_TODAY = 7L
 private const val DAYS_AFTER_TODAY = 42L
+
+/** 列表顶部内边距：比条间距多 4dp，是板面与第一条之间的呼吸。 */
+private val ListTopPadding = 12.dp
 
 /**
  * 排班日历页：板面给今天的班次与班车，下面按月排信息条。
@@ -104,6 +112,20 @@ fun ShiftCalendarScreen(
         }.orEmpty()
     }
     val todayRow = rows.firstOrNull { it.isToday }
+    val items = remember(rows) { rows.toCalendarItems() }
+    val todayIndex = items.todayIndex()
+
+    // 每次进入日历，列表第一条就是今天（前 7 天往上划仍看得到）。LazyColumn 把第 n 项放在顶部内边距之下时，
+    // 上一条的底边会在内边距里露出一线（内边距 12dp 比条间距 8dp 多 4dp），所以再多滚这 4dp：
+    // 今天的条离板面正好一个条间距，上面什么也不露。以今天的下标为 key：跨零点后重建、回到新的今天；
+    // 同一天里的旋转等配置变化仍保留滚动位置。切页会重新组合本页，所以每次切过来都从今天开始。
+    val density = LocalDensity.current
+    val listState = rememberSaveable(todayIndex, saver = LazyListState.Saver) {
+        LazyListState(
+            firstVisibleItemIndex = todayIndex,
+            firstVisibleItemScrollOffset = with(density) { ListTopPadding.roundToPx() - AirShiftSpacing.S.roundToPx() },
+        )
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         BoardHeader(
@@ -127,24 +149,21 @@ fun ShiftCalendarScreen(
             )
         } else {
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth().testTag("calendar_list"),
                 contentPadding = PaddingValues(
                     start = AirShiftSpacing.M,
                     end = AirShiftSpacing.M,
-                    top = 12.dp,
+                    top = ListTopPadding,
                     bottom = AirShiftSpacing.M,
                 ),
                 verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
             ) {
-                var lastMonth = -1
-                rows.forEach { row ->
-                    if (row.day.date.monthValue != lastMonth) {
-                        lastMonth = row.day.date.monthValue
-                        item(key = "month-${row.day.date.year}-${row.day.date.monthValue}") {
-                            BayTitle("${row.day.date.monthValue}月")
-                        }
+                items(items, key = { it.key }, contentType = { it::class }) { item ->
+                    when (item) {
+                        is ShiftCalendarItem.Month -> BayTitle("${item.month}月")
+                        is ShiftCalendarItem.Day -> ShiftStrip(item.row)
                     }
-                    item(key = row.day.date.toString()) { ShiftStrip(row) }
                 }
             }
         }
@@ -252,6 +271,7 @@ private fun ShiftStrip(row: ShiftCalendarRow) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("shift_${row.day.date}")
             .then(if (row.isToday) Modifier.currentCardShadow(shape) else Modifier)
             .clip(shape)
             .then(if (rest) Modifier else Modifier.background(c.strip))

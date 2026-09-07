@@ -82,6 +82,7 @@
 - 时长是 0.11.1 真机手调值（在 emil / ui-animation 区间内），不吸附 M3 时长网格；空间弹簧接口带 `visibilityThreshold`，弹簧在肉眼看不见时就停。
 - 触控反馈：所有可按元素共用 `PressIndication`（`ui/theme/AirShiftIndication.kt`）——按钮 / 小按钮 / 底栏项在 draw 阶段缩到 0.97，按下 fast effects 即时、抬手 fast spatial 回弹；整宽信息条只着色（主文字色 6%）不缩放。M3 ripple 已关闭（`LocalRippleConfiguration = null`）。两行总开关只覆盖 `Modifier.clickable` 站点；六个 M3 按钮上显式的 `.indication(...)` 在开关关闭后会与 Surface 自带 ripple 叠成两层，完整关闭用 `git revert 2dbf7a0` 或同时删掉六处 `.indication`。
 - 刷新率：应用在前台以 `preferredRefreshRate` 请求同分辨率下不超过 120 Hz 的最高模式的刷新率，不钉死显示模式（vivo 默认把本应用锁在 60 Hz，动画只有一半的帧）；退到后台恢复系统默认，不用 144 Hz。
+- 展开跟随：条在视口底部点开时，列表逐帧跟着条的尺寸弹簧推上去（不另起曲线、只滞后一帧，最多推到条顶离视口顶一个条间距），条看起来是原地顶上去展开；收起时按同样的方式落回原处。排班日历每次进入都从今天开始：今天离板面一个条间距，上一条一像素不露，往上划才见前 7 天。
 - 稀有时刻：从有任务过渡到"全部完成"时空态四行按 40 ms 逐行淡入并上浮 8dp（`LocalReduceMotion` 时只淡入、无延迟），冷启动直接进入空态时静态出现；设置页分段器的选中填充是一个物体，按 fast spatial 弹簧在格间横移；底栏文字常驻 SemiBold，不再因选中加粗而跳位。
 
 ## 系统栏与主题
