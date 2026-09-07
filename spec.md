@@ -201,11 +201,17 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 4.5 排班周期与班次轮转
 
-排班日历的全部规则由 2026-08-24 至 2026-09-01 的六份真实排班表反推，样本内零反例。实现集中在 `model/shift/`，为纯 Kotlin、无 Android 依赖。
+排班日历的全部规则由 2026-08-24 至 2026-09-01 的六份一组真实排班表反推，样本内零反例；用户确认二组沿用同一套规则。实现集中在 `model/shift/`，为纯 Kotlin、无 Android 依赖。
+
+#### 两大组
+
+`ShiftTeam` 枚举一组、二组：都上三休三，在同一个六天周期里错开 3 天交替上班（一组 D1 D2 D3 交 休 休，二组 交 休 休 D1 D2 D3），因此任何一天恰有一个大组在整班，`ShiftTeam.onFullWorkday(date)` 恒有唯一解。一组锚点 2026-08-23 由用户确认；二组锚点 2026-08-26 由 2026-09-07 的二组表反推（那天一组交接班，二组的表从 10:40 出港开始并带三行班次行，正是接班日）。`ShiftCycle` 的每个函数都要指明大组。
+
+当前大组的判定：有可用校准表时取 `ShiftCalibration.team`（带班次行的表只出现在整班日，日期唯一确定大组）；没有校准时取设置中的手动大组 `manualShiftTeam`，缺省一组（`ShiftSchedule(calibration, fallbackTeam)`）。
 
 #### 六天周期
 
-锚点 `ShiftCycle.ANCHOR = 2026-08-23` 为周期第 1 天，`floorMod` 保证锚点之前的日期同样有效：
+以所属大组的锚点为周期第 1 天，`floorMod` 保证锚点之前的日期同样有效：
 
 | 周期内序号 | `ShiftDayKind` | 当天形态 |
 |---|---|---|
@@ -217,9 +223,9 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 #### 班组轮转
 
-- 10 个在编班组（7、12 号空缺）按固定环形顺序 `1 → 5 → 11 → 8 → 9 → 2 → 6 → 4 → 10 → 3` 排列。
+- 一组 10 个在编班组（7、12 号空缺）按固定环形顺序 `1 → 5 → 11 → 8 → 9 → 2 → 6 → 4 → 10 → 3` 排列。二组的小组在表上没有编号，解析时按校准日早→中→晚位次给 1..N 合成 id（`ObservedShiftGroups.hasSyntheticIds`），环形顺序即校准日顺序。
 - 序列**只在整班工作日**左移 `ROTATION_STEP = 3`；交接班日与休息日不推进，因此 `workOrdinal` 只数 D1/D2/D3。
-- `rotationOffset = floorMod((workOrdinal - 1) * 3, 10)`，已校准到 2026-08-24 偏移为 0。
+- `rotationOffset = floorMod((workOrdinal - 1) * 3, size)`，一组已校准到 2026-08-24 偏移为 0；二组没有内置相位，原始偏移只作相对值，由校准表归零。
 - 按日历日推进无解（`4k ≡ 3 (mod 10)` 无整数解），故“仅工作日推进”是唯一自洽解释。
 - 某组当天位置 = `floorMod(cycleIndex - rotationOffset, size)`。
 
@@ -241,9 +247,11 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 #### 校准
 
-`ShiftCalibration` 承载一次真实观测（日期 + 有序分组）。有校准数据时以观测当天的顺序为相位基准，其余日期相对它旋转；成员按“观测优先、未被任何观测行认领的基表成员保留”合并（`ShiftGroupTable.from(observed, base)`，基表默认为内置表），因此病假缺席的人不会丢失归属，真正换组的人也不会留在旧组。只有整班工作日的表格带班次行，故只有这类日期能作为校准点。
+`ShiftCalibration` 承载一次真实观测（日期 + 有序分组），`team` 由日期推导。有校准数据时以观测当天的顺序为相位基准，其余日期相对它旋转；成员按“观测优先、未被任何观测行认领的基表成员保留”合并（`ShiftGroupTable.from(observed, base)`，基表为所属大组的内置表 `builtIn(team)`），因此病假缺席的人不会丢失归属，真正换组的人也不会留在旧组。只有整班工作日的表格带班次行，故只有这类日期能作为校准点。
 
-内置表 `ShiftGroupTable.DEFAULT` 只含环形顺序与 3/4/3 槽位分层，成员名单为空：仓库公开，真实姓名只存在于用户设备上的校准数据。校准前 `findGroupIdForName` 恒为 null，排班日历依赖设置中的手动班组。
+二组的合成 id 换一天导入位次就变，`ShiftCalibration.alignedWith(previous)` 在落库前把与上一份同大组校准共享至少一个成员的组改用旧 id，其余分配双方都没用过的新 id，设置里手动指定的班组因此不会漂移；一组表带真实组号、上一份属于另一大组时原样返回。
+
+内置表：一组 `ShiftGroupTable.DEFAULT` 只含环形顺序与 3/4/3 槽位分层，成员名单为空——仓库公开，真实姓名只存在于用户设备上的校准数据；二组 `builtIn(SECOND)` 是空表（`size = 0`），校准前 `rotationOffset` 为 null，日历只出日型（整班日与交接班日按到岗、槽位留空），班次与班车要等导入。班组称呼 `labelOf`：一组“第 N 组”，二组“首位成员 + 组”。`findGroupIdForName` 先按整名精确匹配；只有落空时才对至少 5 字的“切不开的连写成员串”按包含判断，仍要求唯一。
 
 ## 5. 排班导入规格
 
@@ -283,11 +291,13 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 每张有效表优先使用自身表头之前的日期；再回退第一张有效表日期，最后回退设备当天并给出警告。
 - 支持 1900/1904 日期系统、完整日期、月日、Excel serial、时间小数、整数/文本 HHmm 和 `+` 次日。
 - 有分隔符的人员栏先移除括号备注，再按空白、逗号、顿号、分号、斜杠或竖线切分并逐项精确匹配。
-- 无分隔符时，人员栏可与姓名完全相同；组合签名只有长度至少为姓名两倍且包含完整姓名时才匹配。
+- 无分隔符时（二组连写，如五字的两人小组），人员栏可与姓名完全相同；否则先经 `ChineseNameSplitter` 切成单人姓名后逐项精确匹配；切不开的串只有长度至少为姓名加两字且包含完整姓名时才匹配。
+- `ChineseNameSplitter`：姓名 2–3 字（复姓 3–4 字），首字须在姓氏表内（前 100 常见姓按名次计代价，其余百家姓与复姓代价固定），动态规划取总代价最小的切法，因此歧义时偏向常见姓氏；长度不足 4、含非汉字或找不到全合法切法时整串原样返回。姓氏表只含姓氏字，不含任何真实姓名。
 - 仅生成具有合法机号、至少一个合法航班号且匹配姓名的行。
-- 扫描 `VIP信息/要客信息` 区域；向下最多看 30 行，遇到班次标志或连续空行停止，只把航班号集合映射为任务布尔值。
+- 扫描 `VIP信息` / `要客` 区域；向下最多看 30 行，遇到班次标志、独立的 `CIP` 单元格或连续空行停止，含独立 `CIP` 词的行（二组把 CIP 标在航班行里）不计入，只把航班号集合映射为任务布尔值。
 - 多表结果按 `stableId` 去重，并按计划到达优先/计划出发回退排序。
-- 另行扫描“候机早班/中班/夜班”三行，按数字串切分为有序的 (组号, 成员)，组号只作分隔、顺序才决定槽位；括号备注不进入姓名。三行缺任意一行即返回 null，`RosterParseResult.observedShiftGroups` 为可空且带默认值，图片 OCR 路径不受影响。
+- 另行扫描“候机早班/中班/夜班（或夜航）”三行，两种写法：一组“组号 + 姓名（空格分隔）”按数字串切分为有序的 (组号, 成员)；二组“连写姓名 + 数字”按数字串切成成员块（数字只是分隔符），成员经 `ChineseNameSplitter` 切分，组号为 null、由 `parseObservedShiftGroups` 按早→中→晚位次给 1..N 合成 id 并置 `hasSyntheticIds`。顺序才决定槽位；括号备注不进入姓名。三行缺任意一行、或两种写法混用即返回 null，`RosterParseResult.observedShiftGroups` 为可空且带默认值，图片 OCR 路径不受影响。
+- 班次行写法与表格日期推出的大组不符（二组写法落在一组整班日或反之）时追加警告“请核对表格日期”，不阻断解析。
 
 ### 5.3 图片 OCR 导入
 
@@ -372,14 +382,15 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 ### 6.5 设置
 
-- 板头：分区名 + "姓名 · 第 N 组"。分组信息条：MUC 通知读取（状态点 + 已授权/未授权、最近成功识别与最近处理结果、描边按钮打开系统授权页）、排班日历（我的班组；姓名匹配不到时才出现可点选的班组小灯；"到位余量"一行标签 + 三格分段选择器 0/15/30 分钟 + 说明）、个人信息（姓名输入框）、飞常准 API Key（密码输入框、测试连接 / 清除 API Key 文字按钮、连接结果用琥珀提示条）。
+- 板头：分区名 + "姓名 · 一组 · 第 N 组"（二组为"姓名 · 二组 · 某某组"）。分组信息条：MUC 通知读取（状态点 + 已授权/未授权、最近成功识别与最近处理结果、描边按钮打开系统授权页）、排班日历（"大组"一行：有校准表时"按排班表自动识别"，否则"手动指定"并给一组/二组两枚小灯；"我的班组"一行用班组标签，姓名匹配不到时才出现可点选的班组小灯，二组无校准时改为提示导入；"到位余量"一行标签 + 三格分段选择器 0/15/30 分钟 + 说明）、个人信息（姓名输入框）、飞常准 API Key（密码输入框、测试连接 / 清除 API Key 文字按钮、连接结果用琥珀提示条）。
 - "保存"钉在底部（`PinnedActionBar`），姓名去空格后不足 2 字或测试中禁用。
 - 修改姓名只影响后续导入，不重新解析旧排班。API Key 文本状态不使用 `rememberSaveable`，明文不进入 saved-instance-state。测试连接从现有排班中选择首个带航班号的任务；无候选时直接失败。保存非空 API Key 后清缓存并重配刷新；空文本不会隐式清除已有 Key，必须点击"清除 API Key"。
 - 到位余量分段器的选中填充是一个物体，按 fast spatial 弹簧在格间横移；班组小灯选中态用 effects 弹簧过渡。
 
 ### 6.6 排班日历
 
-- 板头：分区名 + "上三休三 · 第 N 组"；板面主体是今天的班次大字（"晚二" / "休息" / "不到岗"）+ 日型说明 + 右侧班车时间；板脚给预计下班（交接班日为交班）时间与校正来源。
+- 板头：分区名 + "上三休三 · 一组 · 第 N 组"（二组为"上三休三 · 二组 · 某某组"）；板面主体是今天的班次大字（"晚二" / "休息" / "不到岗"；二组校准前为"上班"）+ 日型说明 + 右侧班车时间；板脚给预计下班（交接班日为交班）时间与校正来源（二组校准前提示"没有内置班组表"）。
+- 二组校准前没有班组表：不必匹配到班组就用占位组号算出日型，整班日与交接班日的行仍渲染，班次灯与班车列留空、中间给一句"导入带班次行的排班表后显示班次与班车"。
 - 范围为今天前 7 天至后 42 天，按月给 `BayTitle`；每天一条：日期列（M/D + 周几）| 班次灯（整班藏青蓝、交接班琥珀）+ 日型说明 + "今天"灯 | 到位 / 到场 / 富余 / 预估或按当日排班 | 右侧班车时刻与下班/交班时间。夹条：今天藏青、整班东航红、交接班琥珀、休息与不到岗灰。
 - 休息日与交接班日不到岗时无底无边，只显示日期与说明。到场晚于到位时间（`spareMinutes < 0`）时班车时刻变琥珀并加灯"晚 N 分 · 建议提前一班"；没有合适班车时给琥珀文字。
 - 没有匹配到班组时不渲染日期行，只给 `EmptyBay` 并提供跳转设置的入口。
@@ -593,7 +604,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 非法日期字符串退化为 null；
 - `aircraftRegistration` 和 `assignees` 是必需键；外层 JSON 或任一条目抛错会让整份排班加载为空，不会逐项跳过。
 
-排班日历的三个键独立于 generation 与 `rosterLock` 不变量：`shift_report_margin_minutes` 写入时收敛到 0–120；`shift_group_calibration` 解析失败时返回 null 并回退内置班组表，不抛错；`shift_manual_group_id` 只在姓名匹配不到班组时参与判定。
+排班日历的键独立于 generation 与 `rosterLock` 不变量：`shift_report_margin_minutes` 写入时收敛到 0–120；`shift_group_calibration` 解析失败时返回 null 并回退内置班组表，不抛错，JSON 新增 `syntheticIds` 布尔（缺省 false）；`shift_manual_group_id` 只在姓名匹配不到班组时参与判定，且只对 `shift_manual_group_team`（缺省一组，兼容 0.13 之前的旧值）记录的大组有效；`shift_manual_team` 只在没有任何校准表时决定大组。
 
 API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败由 `ApiKeyDecryptFailure` 分类：GCM 标签不符、密钥失效/不可恢复（含 `KeyPermanentlyInvalidatedException`）、密文 Base64 损坏为永久失败，清除密文和对应 key；Keystore 服务暂不可用、Provider 或 I/O 错误为瞬时失败，保留密文、本次返回 null。任何情况下都不返回不可信明文。`hasVariFlightApiKey` 只检查密文是否存在，不解密、不访问 Keystore，因此瞬时故障不会让后台刷新被取消。
 
@@ -625,7 +636,7 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败�
 - 飞常准请求只包含航班号、日期、JSON-RPC/MCP 字段和鉴权头；应用不记录 Key、完整请求头或原始错误载荷。
 - 设备位置不写入持久化，也不由应用发送给飞常准；定位来源仍是 Google Play Services。
 - MUC 原文不持久化，见第 9.5 节。
-- 源码、测试与文档不含真实员工姓名：内置班组表只有组号与轮转顺序，测试 fixture 使用天干地支合成名；成员名单只存在于用户设备的校准数据中。
+- 源码、测试与文档不含真实员工姓名：内置班组表只有组号与轮转顺序，测试 fixture 使用天干地支合成名（切分用例用“常见姓氏 + 天干地支”）；`ChineseNameSplitter` 的姓氏表只含姓氏字；成员名单只存在于用户设备的校准数据中。
 
 ## 12. 工程、构建与验证
 
@@ -656,7 +667,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（分支 `motion-0.12`，动效重构，版本号未变）按 `plans/` 里的 001 / 004 / 003 / 006 / 005 / 008 六批与 002 的无设备部分执行，每批一个实现者、一次任务审查、修复轮后再审，最后整分支终审（发现并修正计划 005 自身的一个 Critical：背板高度用 `SideEffect` 同步、弹簧期间从不更新）。改法见 §6.1–§6.5 / §6.8 与 DESIGN.md 动效节；执行记录、全部裁定与各批 Before/After/Why 自检表在 `plans/motion-0.12-execution-record.md`。验证：每次提交后在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`，最终树（b4f0b6f）JVM 290 项通过、0 失败、2 项条件跳过（含新增的 `OdometerDirectionTrackerTest` 5 项，TDD），detekt 0 发现，Lint 基线外零新增。随后在用户确认手机空闲后接入真机（vivo V2505A，Android 16 / API 36，先把本应用拉到前台）执行标准单批次 `connectedDebugAndroidTest`：覆盖安装 0.11.2（version code 50）动效版，62 项执行、0 失败、0 错误、1 项跳过（未以 `airshift.liveVariFlight=true` 开启的探针），用时 1 分 50 秒；终审点名的三处高风险断言全部通过——`DutyWindowRefreshInstrumentedTest` 9 项（含手动时钟下"今日执勤全部完成"的断言，空态行内容自首帧即存在）、`CurrentDutyScreenIntegrationInstrumentedTest` 2 项（三态淡过渡下的 `assertDoesNotExist`）、`AllDutyScreenBaysInstrumentedTest`（弹簧展开后的机号断言）；主应用与本地数据保留。用户随后在真机完成动效 feel-check（评价“很不错”）。性能取证（Plan 002，release 包 = debug 签名 + profileable，先在 Debug 上跑切页作对照）：手机把本应用锁在 60 Hz（`mActiveModeId=4`，`requestedFrameRate 0`，高刷设置无效），预算按 16.7 ms；每次交互单独 `gfxinfo reset → framestats`，`tools/framestats_summary.py` 解析。切页 8 次：release 首帧 45 / 4 / 11 / 37 / 31 / 20 / 25 / 15 ms（5 次超预算，最长连续 2 帧，第二帧是被推迟的空帧），Debug 36–103 ms；atrace 拆解最慢帧 37.2 ms = 首次重组 8.6 + Compose 测量布局 22.8 + 绘制 5.0。展开 / 折叠 6 次与滚动已完成栏位 4 次在 release 上全部帧在预算内（RenderThread ≤ 7 ms）；Debug 独有 gpu≈16 ms 平台不复现。H2 的 ModulateAlpha A/B（临时改动，不合入）无改善。判定：H1 首帧组合成本成立（性质“首帧长”），H2 / H3 / H4 不成立，H5 以“系统锁 60 Hz”形式成立。未测：执勤完成场景（当日已全部完成）、Layout Inspector 重组计数、005 Task 0 录屏。版本号提到 0.12.0（51）。随后两项：Plan 007 Task 4（里程表槽宽进程内缓存，41cb417）复测无可测收益（首帧 22 / 10 / 20 / 64 / 7 / 28 / 23 / 15 ms，噪声 ±20 ms），保留；高刷实验有效——`MainActivity` 在前台请求同分辨率下 ≤ 120 Hz 的最高显示模式后 `mActiveModeId` 4 → 1，vsync 16.6 → 8.3 ms，每次切页约 25 帧而非 14 帧，首帧绝对耗时不变（12–48 ms），正式保留（6df9646 改为只给 `preferredRefreshRate` 提示，不钉死显示模式，效果相同；前台静止 20 s 面板仍 120 Hz）。Plan 007 Task 4b（切页分阶段组合，c9ab2e7）复审两轮：默认 `SizeTransform` 在空子项上被激活、包装层淡入在内容出现前已跑一半 → e1ecfaf 改为容器 `using null` 只管旧页淡出、新页入场放进 `AnimatedVisibility(visibleState)` 随内容第一帧从 0 起步；方向判定晚一帧永远向前 → def7544 提到目标页首次组合。真机：点击帧从 12–48 ms 降到 5–17 ms（重组 ≤ 3 ms），重组帧后移，超截止帧数不减（2–4 / 次）；仪器测试 62 项、0 失败、1 跳过（e1ecfaf）；动画缩放 0 时切页仅 5 帧（背板与内容一起 snap）；用户 feel-check 通过。
+本轮（0.13.0，分支 `team-0.13`，自 `main` 快进到 motion-0.12 后新开）让排班日历支持一组、二组两大组。起因：用户给出二组 09-07 表与一组 09-01 表，二组表的班次行写法（姓名连写、数字在后、“候机夜航”）让现有解析静默不校准，且五字连写人员栏会漏掉三字姓名的航班；两表日期对照得出两大组错开半个周期。先改 `model/shift`（`ShiftTeam`、`ShiftCycle` 按大组、二组空内置表、`labelOf`、`alignedWith`）并重写 `ShiftCycleTest` / `ShiftRotationTest` / `ShiftScheduleTest` / `ShiftGroupTableTest`、新增 `ShiftTeamTest` 5 项，再改解析（`ChineseNameSplitter` 7 项、`ExcelRosterParserTest` 追加 5 项：二组写法、五字连写匹配、混用写法丢弃、`要客` 与行内 CIP、写法与日期不符的提示），最后数据层与两页界面。JVM 在 Android Studio 自带 JDK 守护进程下执行 `:app:testDebugUnitTest`，并配置 `AIRSHIFT_XLS_FIXTURES_DIR` 指向含六份一组表与 `9.7.xls` 的目录、`AIRSHIFT_XLS_TEST_NAME` 为用户姓名：322 项通过、0 失败、0 跳过——`XlsRosterParserRealFileTest` 3 项实跑：六份一组表的班组顺序仍与纯计算逐位一致且带真实组号；`9.7.xls` 日期解析为 09-07、三行班次行切成 10 个合成组（3/4/3）、每组成员都是 2–4 字的单人姓名、大组判定为二组、校准后 09-07 顺序即观测顺序。detekt 首轮拦下 20 条（`parseSheets` 过长、5 处 ReturnCount、`ShiftTeam` 日期字面量 MagicNumber、切分器的循环跳转与长行、测试长行），拆出 `findWorkbookDate` / `shiftLineStyleWarning` / `shiftLineBody` / `segment`、改单表达式与 `when`、日期常量加 `@Suppress("MagicNumber")` 后第二轮剩 3 条（ComplexCondition、仍超 1 行的 LongMethod、顶层属性的 MagicNumber），再改后 0 新发现。随后 `:app:assembleDebug :app:assembleRelease :app:compileDebugAndroidTestKotlin :app:lintDebug`：Debug APK 264.8 MB、R8 release APK 228.0 MB 生成，仪器测试源码编译通过（`RosterStorePersistenceInstrumentedTest` 改 1 项、新增 3 项：手动班组连同大组保存、旧值按一组读、手动大组、合成组号 JSON 往返），Lint 基线外零新增（仍提示基线中 22 条记录已不存在）。本轮手机未接入：仪器测试与真机手工核对（分享 `9.7.xls` → 设置显示“二组 · 按排班表自动识别”、手动选“某某组”→ 日历 09-07 接班日早一、09-10 交接班、09-11/12 休息 → 再导入一组表回到第 8 组）待补。
+
+上一轮（分支 `motion-0.12`，动效重构，版本号未变）按 `plans/` 里的 001 / 004 / 003 / 006 / 005 / 008 六批与 002 的无设备部分执行，每批一个实现者、一次任务审查、修复轮后再审，最后整分支终审（发现并修正计划 005 自身的一个 Critical：背板高度用 `SideEffect` 同步、弹簧期间从不更新）。改法见 §6.1–§6.5 / §6.8 与 DESIGN.md 动效节；执行记录、全部裁定与各批 Before/After/Why 自检表在 `plans/motion-0.12-execution-record.md`。验证：每次提交后在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`，最终树（b4f0b6f）JVM 290 项通过、0 失败、2 项条件跳过（含新增的 `OdometerDirectionTrackerTest` 5 项，TDD），detekt 0 发现，Lint 基线外零新增。随后在用户确认手机空闲后接入真机（vivo V2505A，Android 16 / API 36，先把本应用拉到前台）执行标准单批次 `connectedDebugAndroidTest`：覆盖安装 0.11.2（version code 50）动效版，62 项执行、0 失败、0 错误、1 项跳过（未以 `airshift.liveVariFlight=true` 开启的探针），用时 1 分 50 秒；终审点名的三处高风险断言全部通过——`DutyWindowRefreshInstrumentedTest` 9 项（含手动时钟下"今日执勤全部完成"的断言，空态行内容自首帧即存在）、`CurrentDutyScreenIntegrationInstrumentedTest` 2 项（三态淡过渡下的 `assertDoesNotExist`）、`AllDutyScreenBaysInstrumentedTest`（弹簧展开后的机号断言）；主应用与本地数据保留。用户随后在真机完成动效 feel-check（评价“很不错”）。性能取证（Plan 002，release 包 = debug 签名 + profileable，先在 Debug 上跑切页作对照）：手机把本应用锁在 60 Hz（`mActiveModeId=4`，`requestedFrameRate 0`，高刷设置无效），预算按 16.7 ms；每次交互单独 `gfxinfo reset → framestats`，`tools/framestats_summary.py` 解析。切页 8 次：release 首帧 45 / 4 / 11 / 37 / 31 / 20 / 25 / 15 ms（5 次超预算，最长连续 2 帧，第二帧是被推迟的空帧），Debug 36–103 ms；atrace 拆解最慢帧 37.2 ms = 首次重组 8.6 + Compose 测量布局 22.8 + 绘制 5.0。展开 / 折叠 6 次与滚动已完成栏位 4 次在 release 上全部帧在预算内（RenderThread ≤ 7 ms）；Debug 独有 gpu≈16 ms 平台不复现。H2 的 ModulateAlpha A/B（临时改动，不合入）无改善。判定：H1 首帧组合成本成立（性质“首帧长”），H2 / H3 / H4 不成立，H5 以“系统锁 60 Hz”形式成立。未测：执勤完成场景（当日已全部完成）、Layout Inspector 重组计数、005 Task 0 录屏。版本号提到 0.12.0（51）。随后两项：Plan 007 Task 4（里程表槽宽进程内缓存，41cb417）复测无可测收益（首帧 22 / 10 / 20 / 64 / 7 / 28 / 23 / 15 ms，噪声 ±20 ms），保留；高刷实验有效——`MainActivity` 在前台请求同分辨率下 ≤ 120 Hz 的最高显示模式后 `mActiveModeId` 4 → 1，vsync 16.6 → 8.3 ms，每次切页约 25 帧而非 14 帧，首帧绝对耗时不变（12–48 ms），正式保留（6df9646 改为只给 `preferredRefreshRate` 提示，不钉死显示模式，效果相同；前台静止 20 s 面板仍 120 Hz）。Plan 007 Task 4b（切页分阶段组合，c9ab2e7）复审两轮：默认 `SizeTransform` 在空子项上被激活、包装层淡入在内容出现前已跑一半 → e1ecfaf 改为容器 `using null` 只管旧页淡出、新页入场放进 `AnimatedVisibility(visibleState)` 随内容第一帧从 0 起步；方向判定晚一帧永远向前 → def7544 提到目标页首次组合。真机：点击帧从 12–48 ms 降到 5–17 ms（重组 ≤ 3 ms），重组帧后移，超截止帧数不减（2–4 / 次）；仪器测试 62 项、0 失败、1 跳过（e1ecfaf）；动画缩放 0 时切页仅 5 帧（背板与内容一起 snap）；用户 feel-check 通过。
 
 上一轮（0.11.2）修正“休息时仍弹通知、不上班时仍在后台刷新”。用户报告：休息日收到排班里同号航班的“即将进港”提醒。代码审查得到的路径：`withLiveInfo` 原样接受飞常准返回的任何航段，若接口对过去日期的查询返回了别的日子的同号航班（休息日手动下拉走 `ALL_ROSTER` 时尤其可能），其预计时间会写进任务，`isDutyComplete` 因而重新变为未完成、`ReminderPolicy` 据此排出落在休息日的提醒、Worker 也被重新启用并逐日漂移；此外没有计划时间的航段一直按“今天”查询。修法见 §4.3（`FlightOperation` 12 小时归属、`RosterTracking` 跟踪时段）、§7.1 / §7.2 / §7.4 / §7.6 与 §8.1：合并只收同一班的航段，自动完成与提醒只信同一班的预计时间，所有自动刷新入口在排班日首个任务前 3 小时之前返回空集，Worker 首轮延迟直接睡到跟踪起点，无计划时间的航段按排班日查询。飞常准按日期查询的真实语义仍未离线验证，归属规则是本地兜底。先写纯函数测试再改实现：新增 `FlightOperationTest` 4 项、`RosterTrackingTest` 5 项、`ReminderPolicyTest` 4 项、`FlightInfoOperationGuardTest` 7 项、`FlightRefreshInitialDelayTest` 3 项，`DutyFlightWindowTest` 追加“起点前窗口为空 / 旧排班隔天不重开”2 项并把无计划时间航段的期望改为排班日，`RosterAssignmentCompletionTest` 追加“别的日子的预计时间不阻止完成”1 项，`DutyViewModelTest` 追加“头天晚上导入只保存并提示起点 / 起点前自动刷新无请求、手动下拉仍可全量”2 项。仪器测试同步改动：`DutyWindowRefreshInstrumentedTest` 的 `baseTime` 由 8 小时后改为 1 小时后、`RosterStoreInstrumentedTest` 的 upcoming 任务改为 2 小时后且“全量刷新救回自动完成项”改用相差 6 小时的预计时间、`FlightRefreshSchedulerInstrumentedTest` 默认任务改为 1 小时后并新增“明天的排班首轮延迟超过 1 小时”1 项。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：JVM 282 项通过、0 项失败、2 项条件跳过；detekt 首轮拦下测试辅助函数的 LongParameterList、`initialDelayMinutes` 的 ReturnCount 与两个 `Duration.ofHours` 的 MagicNumber，分别改为按航段拆分的辅助函数、单表达式与命名常量后 0 新发现；Lint 基线外零新增（仍提示基线中 22 条记录已不存在）；仪器测试编译通过；Debug APK 生成。随后在用户确认手机空闲后接入真机（vivo V2505A，Android 16 / API 36，前台为桌面）执行标准单批次 `connectedDebugAndroidTest`：覆盖安装 0.11.2（version code 50），61 项执行、0 失败、5 项按 `assumeFalse` 跳过（`FlightRefreshSchedulerInstrumentedTest` 全部 5 项，含新增的首轮延迟用例，因手机上配置了真实 API Key），用时 1 分 8 秒；改过时间假设的 duty-window 9 项、数据层 19 项与 Compose 用例全部通过，主应用与本地数据保留。
 
@@ -756,6 +769,8 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 当前执勤页带倒计时的板面与"执勤完成"动效只在仪器测试中驱动过，真机上排班已全部完成，未截到实时倒计时画面；
 - 条展开 / 折叠与移栏的动效只有静止态截图、帧统计与仪器测试的终态断言，没有逐帧画面；
 - 导入带班次行的 Excel 后自校正的真机端到端（JVM 已用真实文件覆盖解析与相位，真机只验证了存储往返）；
+- 二组的第二份整班表：轮转步长对二组只有用户口头确认与 09-07 一份样本，`alignedWith` 的跨日对齐只有合成用例；
+- 二组连写姓名切分在生僻姓氏、四字姓名与复姓上的真实表现；
 - 跨越 2026 年末的日期、设备改时区/改时对周期判定的影响；
 - 班组人员真实调整、新增第 7/12 组后 3/4/3 变为 4/4/4 的实际表格。
 
@@ -781,14 +796,15 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 18. **未消费字段**：`arrivalBridge` 已解析/持久化，但 UI 未展示。
 19. **提醒 ID**：`stableId.hashCode()` 是 32 位，理论上存在碰撞。
 20. **发布状态**：中文硬编码、无发布签名与商店分发；release 已用 debug 签名并开启 profileable，作为日常安装与取证的包，2026-09-06 起装机使用；压缩后的 OCR / Excel 导入、飞常准、小组件、MUC 五项功能核对待真机完成，未通过则补 keep 规则或退回 Debug 包。
-21. **排班规律为外推**：六天周期、轮转步长 3、槽位分层和交接班到岗规则由六份实测排班表反推，样本内零反例但属外推；实际排班调整后需靠导入 Excel 的班次行自校正，应用不会主动发现漂移。
+21. **排班规律为外推**：六天周期、轮转步长 3、槽位分层和交接班到岗规则由六份一组实测排班表反推，样本内零反例但属外推；二组按用户确认沿用同一规则，实测只有 09-07 一份表，相位完全来自校准；实际排班调整后需靠导入 Excel 的班次行自校正，应用不会主动发现漂移。
 22. **日历班车多为预估**：只有与当前已导入排班同一天的那一行使用真实航班时间；其余行按实测的典型首个任务推算，个别日期观测到首任务时间离群（如 08-24 晚二 10:40、08-30 晚一 08:25）。
 23. **单份排班的限制**：App 只保存一份当前排班，因此日历无法为多个日期同时提供真实数据。
-24. **内置班组表无成员**：校准前无法按姓名自动识别班组，只能手动指定；这是为了不让真实姓名进入公开仓库而有意为之。
+24. **内置班组表无成员**：一组校准前无法按姓名自动识别班组，只能手动指定；二组连内置表也没有，校准前只显示日型。这是为了不让真实姓名进入公开仓库而有意为之。
 25. **执勤日固定 06:00 切换**：`DutyProgressDay.ROLLOVER_HOUR` 不可配置；延误到 06:00 之后才手动完成的夜班任务会在切换后重新显示，直到 3 小时自动完成生效。
 26. **APK 体积**：Debug 约 252 MB、R8 后的 release 约 217 MB，主要是 OpenCV 与 ONNX Runtime 的多 ABI 原生库；要明显缩小需要 ABI split 或 App Bundle，不在当前范围内。
 27. **排班日之外不自动跟踪**：跟踪时段以排班自身日期为准，不看排班日历。排班没有识别出日期时按导入当天处理（§5.2 的“暂按今天处理”警告），若在头天晚上导入，跟踪与提醒都会落在错误的一天，需要重新导入带日期的表。已存的旧数据若含别的日子的预计时间，升级后不再影响完成判定与提醒，但任务详情仍会显示它，直到下一次导入。
 28. **凌晨到达按前一天查询**：飞常准按出发日查询，App 把 06:00 前到达的进港航班当作前一天晚上出发。凌晨出发、凌晨到达的红眼航班会被查到前一天的班次并被归属规则拒绝，只能靠排班计划时间，没有实时数据；没有按“查不到就换另一天”的重试。
+29. **二组姓名切分与组号是启发式**：连写姓名按姓氏表切分，生僻姓氏或两种切法都合法时可能切错（切不开的串退回包含匹配，切错的串会漏掉本人航班或让班组匹配落空，需手动指定）；二组小组的序号是校准时按位次给的，只靠共享成员对齐，整组换人会得到新序号。大组自动跟随最近一次带班次行的导入，误导入另一大组的表会切换大组，重新导入自己的表即恢复。
 
 ## 14. 当前验收标准
 
@@ -824,8 +840,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 14.4 排班日历
 
-- 六份实测排班表的班次行必须能被纯计算逐位复现，交接班日不产生班次行。
+- 六份一组实测排班表的班次行必须能被纯计算逐位复现，交接班日不产生班次行；任何日期恰有一个大组在整班，09-07 的二组表解析为 10 个合成组（3/4/3）且大组判定为二组。
 - 交接班日只有前一个整班工作日排到早班/中班的组到岗，晚班组标记为不到岗且不给班车。
+- 二组连写人员栏中的两字与三字姓名都能整名匹配到本人航班，短姓名不命中更长的同事；再导入的二组表按共享成员对齐到旧序号，两次校准算出同一张日历。
 - 任何日型、槽位与可选余量组合下，推荐班车的到场时间都不晚于到位时间。
 - 与当前排班同一天的行使用真实航班时间并标注来源，其余行标注预估。
 - 解析不到班次行、姓名匹配不到班组或校准 JSON 损坏时，一律回退内置班组表，不影响其他页面。
@@ -878,6 +895,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.9.0 新增排班日历：`model/shift/` 纯 Kotlin 周期与轮转算法、导航第 2 页、Excel 班次行自校正、到位余量设置；既有导入、执勤窗口、实时刷新、提醒、MUC 与小组件行为不变。
 - 0.11.0 界面重设计"航显板 × 进程单"：新增 Barlow 字体与 `AirShiftPalette` 双主题 token；每页顶部改为贯通状态栏的藏青板面（实时钟逐位翻牌），任务统一为带方向夹条的信息条（折叠一航段一行、点开展开），全部执勤按"当前 / 接下来 / 已完成"分栏，当前执勤的"执勤完成"钉在底部并带触感，底栏改四等分红灯指示、分区切换 fade-through，状态改为小矩形灯、缺失值显示"—"；设置与日历改为板头 + 信息条，Onboarding 改整屏板面；小组件改为藏青板面并删除装饰层；`enableEdgeToEdge` 显式指定系统栏样式并新增 `values-night` 主题；`app/detekt.yml` 对 Composable 放开规则。业务、数据与 MUC 逻辑不变，已有测试契约（底栏文字、"执勤完成"、单一滚动节点、小组件 view id）保留。
 - 0.11.1 动效调整：分区切换由 fade-through 改为 shared-axis（新页 16dp 位移滑入 180 ms、旧页 70 ms 淡出、无空档）；信息条展开 / 折叠改为 `AnimatedContent` + `SizeTransform`，容器高度、条的位移与底栏红灯横移共用无回弹弹簧 `AirShiftMotion.snap`（约 200 ms 内静止），内容 120 / 70 ms 淡入淡出；底栏红灯改为在标签间横移；"执勤完成"按下缩放反馈；翻牌 220 ms；夹条改为绘制并去掉 `IntrinsicSize.Min`；`AllDutyScreen` 每条只接收自身展开布尔值。设计、文案、业务与测试契约不变。
+- 0.13.0 两大组：新增 `ShiftTeam`（一组锚 08-23、二组锚 08-26，错开半个周期交替上班），`ShiftCycle` 全部按大组计算，大组由最近一次带班次行的导入按日期自动判定、无校准时可在设置手动选；二组没有内置班组表，小组按首位成员命名、合成序号按共享成员跨日对齐（`ShiftCalibration.alignedWith`）；Excel 解析支持二组写法（“候机夜航”、数字在后的班次行、连写姓名、`要客` 区块与行内 CIP），新增 `ChineseNameSplitter` 按姓氏表切分连写姓名，人员栏匹配改为先切名再整名比较；设置页新增“大组”行，日历与设置的班组改用标签；存储新增 `shift_manual_team`、`shift_manual_group_team` 与校准 JSON 的 `syntheticIds`。既有一组行为与六份表的回归锁不变。
 - 0.11.2 排班日跟踪：修正休息日仍弹同号航班提醒、不上班时仍后台刷新。新增 `model/FlightOperation.kt`（与计划相差 ≤ 12 小时才算排班里的这一班）与 `model/RosterTracking.kt`（排班日首个任务前 3 小时起才自动跟踪；`rosterDate()` 收敛为排班日期的唯一定义，`ShiftRosterBridge` 委托它）。`withLiveInfo` 先按归属过滤航段，`isDutyComplete` 与 `ReminderPolicy` 只信同一班的预计时间，`refreshIndices` 的 `DUTY_WINDOW` 在跟踪起点前为空，无计划时间的航段按排班日而非“今天”查询，Worker 首轮延迟直接睡到跟踪起点，提前导入时状态栏提示起点。界面、MUC 与存储格式不变。
 - 0.10.6 MUC 轮椅简称与角标：解析器兼容口语简称 `C轮/R轮/S轮`（与 WCHC/WCHR/WCHS 同为高置信，可与代码在同一句混用，如「WCHR改为S轮」）；`WheelchairLevel` 增加 `shortCode` 单字母；任务卡特服角标与详情行的轮椅记录改为轮椅线性图标 + 等级字母，不再显示 WCHR/WCHS/WCHC 全称。数据层与 JSON 不变。
 - 0.10.5 到位提前量调整：进港到位与提醒改为实时到达前 15 分钟（原 10 分钟），纯出港改为实时起飞前 70 分钟（原 60 分钟）。提前量收敛为 `DutyTimeline` 的两个公开常量，`ReminderPolicy` 与 `ShiftBusPlan` 直接复用；当前执勤页、小组件倒计时、系统提醒和排班日历班车推荐随之一致变化，其余行为不变。
