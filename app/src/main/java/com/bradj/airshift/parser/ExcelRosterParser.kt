@@ -87,15 +87,7 @@ internal object ExcelRosterParser {
         }
 
         val today = LocalDate.now(clock)
-        val workbookDate = recognizedSheets.asSequence()
-            .mapNotNull { recognized ->
-                findRosterDate(
-                    rows = recognized.sheet.rows.filter { it.index <= recognized.header.rowIndex },
-                    today = today,
-                    uses1904DateSystem = uses1904DateSystem,
-                )
-            }
-            .firstOrNull()
+        val workbookDate = findWorkbookDate(recognizedSheets, today, uses1904DateSystem)
         val warnings = mutableListOf<String>()
         if (workbookDate == null) warnings += "未识别到排班日期，暂按今天处理"
 
@@ -132,13 +124,7 @@ internal object ExcelRosterParser {
             .mapNotNull { parseObservedShiftGroups(it.sheet.rows) }
             .firstOrNull()
         if (observedShiftGroups != null && workbookDate != null) {
-            // 带班次行的表只出现在整班日，日期决定大组；写法与大组对不上多半是表格日期写错了。
-            val team = ShiftTeam.onFullWorkday(rosterDate)
-            val looksLikeSecondTeam = observedShiftGroups.hasSyntheticIds
-            if (looksLikeSecondTeam != (team == ShiftTeam.SECOND)) {
-                val style = if (looksLikeSecondTeam) ShiftTeam.SECOND else ShiftTeam.FIRST
-                warnings += "班次行是${style.label}的写法，但 ${rosterDate.monthValue}/${rosterDate.dayOfMonth} 是${team.label}的整班日，请核对表格日期"
-            }
+            shiftLineStyleWarning(observedShiftGroups, rosterDate)?.let(warnings::add)
         }
         return RosterParseResult(
             assignments = assignments,
@@ -146,6 +132,33 @@ internal object ExcelRosterParser {
             warnings = warnings,
             observedShiftGroups = observedShiftGroups,
         )
+    }
+
+    /** 第一张能在表头之前找到日期的有效表的日期，作为整个工作簿的回退日期。 */
+    private fun findWorkbookDate(
+        recognizedSheets: List<RecognizedSheet>,
+        today: LocalDate,
+        uses1904DateSystem: Boolean,
+    ): LocalDate? = recognizedSheets.asSequence()
+        .mapNotNull { recognized ->
+            findRosterDate(
+                rows = recognized.sheet.rows.filter { it.index <= recognized.header.rowIndex },
+                today = today,
+                uses1904DateSystem = uses1904DateSystem,
+            )
+        }
+        .firstOrNull()
+
+    /**
+     * 带班次行的表只出现在整班日，日期决定大组；一组、二组的班次行写法不同，
+     * 写法与日期推出的大组对不上，多半是表格日期写错了。只提示，不阻断。
+     */
+    private fun shiftLineStyleWarning(observed: ObservedShiftGroups, rosterDate: LocalDate): String? {
+        val team = ShiftTeam.onFullWorkday(rosterDate)
+        val style = if (observed.hasSyntheticIds) ShiftTeam.SECOND else ShiftTeam.FIRST
+        if (style == team) return null
+        return "班次行是${style.label}的写法，但 ${rosterDate.monthValue}/${rosterDate.dayOfMonth} 是${team.label}的整班日，" +
+            "请核对表格日期"
     }
 
     private fun parseAssignment(
@@ -347,23 +360,25 @@ internal object ExcelRosterParser {
      * 两种写法里数字都只起分隔作用，出现顺序才决定早几 / 中几 / 晚几。
      */
     private fun parseShiftGroupEntries(raw: String): List<ShiftLineEntry> {
-        val labelEnd = raw.indexOfFirst { it == '：' || it == ':' }
-        val body = when {
-            labelEnd >= 0 -> raw.substring(labelEnd + 1)
-            else -> raw.indexOfFirst(Char::isDigit).takeIf { it >= 0 }?.let { raw.substring(it) } ?: return emptyList()
-        }.trim()
-        if (body.isEmpty()) return emptyList()
-        return if (body.first().isDigit()) {
-            shiftGroupEntryRegex.findAll(body).mapNotNull { match ->
+        val body = shiftLineBody(raw)
+        return when {
+            body.isEmpty() -> emptyList()
+            body.first().isDigit() -> shiftGroupEntryRegex.findAll(body).mapNotNull { match ->
                 val id = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
                 splitMembers(match.groupValues[2]).takeIf { it.isNotEmpty() }?.let { ShiftLineEntry(id, it) }
             }.toList()
-        } else {
-            body.split(trailingGroupNumberRegex)
+            else -> body.split(trailingGroupNumberRegex)
                 .map(::splitMembers)
                 .filter { it.isNotEmpty() }
                 .map { ShiftLineEntry(id = null, names = it) }
         }
+    }
+
+    /** 去掉“候机早班：”这类标签：优先按冒号切，没有冒号时从第一个数字起（一组写法的组号）。 */
+    private fun shiftLineBody(raw: String): String {
+        val labelEnd = raw.indexOfFirst { it == '：' || it == ':' }
+        val start = if (labelEnd >= 0) labelEnd + 1 else raw.indexOfFirst(Char::isDigit)
+        return if (start < 0) "" else raw.substring(start).trim()
     }
 
     /** 去掉括号备注，按分隔符切开，再把连写的多人姓名切成单人姓名。 */

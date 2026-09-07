@@ -20,7 +20,9 @@ import com.bradj.airshift.data.RosterSnapshot
 import com.bradj.airshift.location.AirportMatch
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ScheduleSummary
 import com.bradj.airshift.specialservice.SpecialServiceState
@@ -467,7 +469,8 @@ private class FakeRosterRepository(private val clock: Clock) : RosterRepository 
     }
 
     override var shiftReportMarginMinutes: Int = 15
-    override var manualShiftGroupId: Int? = null
+    override var manualShiftTeam: ShiftTeam? = null
+    override var manualShiftGroup: ManualShiftGroup? = null
     override var shiftCalibration: ShiftCalibration? = null
 
     override val currentDutyIndex: Int get() = dutyIndex

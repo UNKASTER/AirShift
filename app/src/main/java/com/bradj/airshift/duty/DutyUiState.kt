@@ -3,8 +3,10 @@ package com.bradj.airshift.duty
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.model.dutyWindowIndices
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftTeam
 import java.time.LocalDateTime
 
 /** 四页界面共用的编排状态；页面只读取，不直接修改。 */
@@ -24,7 +26,9 @@ internal data class DutyUiState(
     val hasVariFlightApiKey: Boolean = false,
     val notificationAccessGranted: Boolean = false,
     val shiftCalibration: ShiftCalibration? = null,
-    val manualShiftGroupId: Int? = null,
+    /** 手动大组，只在没有校准表时生效；手动班组只对指定时所在的大组有效。 */
+    val manualShiftTeam: ShiftTeam? = null,
+    val manualShiftGroup: ManualShiftGroup? = null,
     val shiftReportMarginMinutes: Int = ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES,
 ) {
     /** 当前未完成执勤的下标；全部完成时等于 assignments.size。 */

@@ -74,9 +74,8 @@ object ShiftCycle {
      * 非整班工作日返回 null——交接班日的班次继承 [previousFullWorkday]。
      */
     fun rotationOffset(date: LocalDate, team: ShiftTeam, tableSize: Int): Int? {
-        if (tableSize <= 0) return null
-        val ordinal = workOrdinal(date, team) ?: return null
-        return Math.floorMod((ordinal - 1) * ROTATION_STEP.toLong(), tableSize.toLong()).toInt()
+        val ordinal = if (tableSize > 0) workOrdinal(date, team) else null
+        return ordinal?.let { Math.floorMod((it - 1) * ROTATION_STEP.toLong(), tableSize.toLong()).toInt() }
     }
 
     /** 前一个整班工作日；交接班日据此继承班次与到岗规则。 */

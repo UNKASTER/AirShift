@@ -13,9 +13,11 @@ import com.bradj.airshift.api.withLiveInfo
 import com.bradj.airshift.model.DutyProgressDay
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ObservedShiftGroups
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftTeam
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Clock
@@ -77,14 +79,38 @@ internal class RosterStore(
             preferences.edit { putInt(KEY_SHIFT_REPORT_MARGIN, value.coerceIn(0, MAX_SHIFT_REPORT_MARGIN)) }
         }
 
-    /** 排班日历：手动指定班组，仅在姓名匹配不到任何班组时作为兜底。 */
-    override var manualShiftGroupId: Int?
-        get() = preferences.getInt(KEY_SHIFT_MANUAL_GROUP, 0).takeIf { it > 0 }
+    /** 排班日历：手动指定大组，只在没有任何校准表时生效；有校准表时大组由表格日期决定。 */
+    override var manualShiftTeam: ShiftTeam?
+        get() = preferences.getString(KEY_SHIFT_MANUAL_TEAM, null)?.let(::decodeTeam)
         set(value) {
             preferences.edit {
-                if (value == null) remove(KEY_SHIFT_MANUAL_GROUP) else putInt(KEY_SHIFT_MANUAL_GROUP, value)
+                if (value == null) remove(KEY_SHIFT_MANUAL_TEAM) else putString(KEY_SHIFT_MANUAL_TEAM, value.name)
             }
         }
+
+    /**
+     * 排班日历：手动指定班组，仅在姓名匹配不到任何班组时作为兜底，连同指定时所在的大组一起保存。
+     * 0.13 之前只存组号，那时只有一组，缺大组键的旧值按一组读。
+     */
+    override var manualShiftGroup: ManualShiftGroup?
+        get() {
+            val id = preferences.getInt(KEY_SHIFT_MANUAL_GROUP, 0).takeIf { it > 0 } ?: return null
+            val team = preferences.getString(KEY_SHIFT_MANUAL_GROUP_TEAM, null)?.let(::decodeTeam) ?: ShiftTeam.FIRST
+            return ManualShiftGroup(team, id)
+        }
+        set(value) {
+            preferences.edit {
+                if (value == null) {
+                    remove(KEY_SHIFT_MANUAL_GROUP)
+                    remove(KEY_SHIFT_MANUAL_GROUP_TEAM)
+                } else {
+                    putInt(KEY_SHIFT_MANUAL_GROUP, value.id)
+                    putString(KEY_SHIFT_MANUAL_GROUP_TEAM, value.team.name)
+                }
+            }
+        }
+
+    private fun decodeTeam(raw: String): ShiftTeam? = ShiftTeam.entries.firstOrNull { it.name == raw }
 
     /**
      * 排班日历：最近一次从 Excel“候机早班/中班/夜班”行读到的真实分组。
@@ -270,6 +296,7 @@ internal class RosterStore(
             put("early", JSONArray(calibration.observed.early))
             put("mid", JSONArray(calibration.observed.mid))
             put("night", JSONArray(calibration.observed.night))
+            put("syntheticIds", calibration.observed.hasSyntheticIds)
             put(
                 "members",
                 JSONObject().apply {
@@ -291,6 +318,7 @@ internal class RosterStore(
                     val id = key.toIntOrNull() ?: return@mapNotNull null
                     id to members.getJSONArray(key).toStringList()
                 }?.toMap().orEmpty(),
+                hasSyntheticIds = json.optBoolean("syntheticIds", false),
             ),
         )
     }.getOrNull()
@@ -376,6 +404,8 @@ internal class RosterStore(
         private const val KEY_ASSIGNMENTS = "assignments"
         private const val KEY_SHIFT_REPORT_MARGIN = "shift_report_margin_minutes"
         private const val KEY_SHIFT_MANUAL_GROUP = "shift_manual_group_id"
+        private const val KEY_SHIFT_MANUAL_GROUP_TEAM = "shift_manual_group_team"
+        private const val KEY_SHIFT_MANUAL_TEAM = "shift_manual_team"
         private const val KEY_SHIFT_CALIBRATION = "shift_group_calibration"
         private const val MAX_SHIFT_REPORT_MARGIN = 120
     }

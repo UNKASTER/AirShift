@@ -14,7 +14,9 @@ import com.bradj.airshift.api.refreshLookups
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.RosterTracking
 import com.bradj.airshift.model.allDutiesComplete
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.specialservice.SpecialServiceState
 import kotlinx.coroutines.CancellationException
@@ -68,7 +70,8 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
             hasVariFlightApiKey = store.hasVariFlightApiKey,
             notificationAccessGranted = ports.isNotificationAccessGranted(),
             shiftCalibration = store.shiftCalibration,
-            manualShiftGroupId = store.manualShiftGroupId,
+            manualShiftTeam = store.manualShiftTeam,
+            manualShiftGroup = store.manualShiftGroup,
             shiftReportMarginMinutes = store.shiftReportMarginMinutes,
         )
     }
@@ -162,9 +165,11 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         }
         update { copy(warnings = result.warnings) }
         // 班次行只出现在整班工作日的表格里；解析不到时不动已保存的校准值。
+        // 二组的合成组号按共享成员对齐到上一份校准，设置里手动指定的班组才不会漂到别的组上。
         result.observedShiftGroups
             ?.let { ShiftCalibration(result.rosterDate, it) }
             ?.takeIf { it.isUsable }
+            ?.alignedWith(store.shiftCalibration)
             ?.let { calibration ->
                 store.shiftCalibration = calibration
                 update { copy(shiftCalibration = calibration) }
@@ -511,9 +516,14 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         ports.apiKeyTester.test(apiKey, candidate.first, candidate.second, callback)
     }
 
-    fun selectShiftGroup(groupId: Int?) {
-        store.manualShiftGroupId = groupId
-        update { copy(manualShiftGroupId = groupId) }
+    fun selectShiftGroup(group: ManualShiftGroup?) {
+        store.manualShiftGroup = group
+        update { copy(manualShiftGroup = group) }
+    }
+
+    fun selectShiftTeam(team: ShiftTeam?) {
+        store.manualShiftTeam = team
+        update { copy(manualShiftTeam = team) }
     }
 
     fun selectReportMargin(minutes: Int) {

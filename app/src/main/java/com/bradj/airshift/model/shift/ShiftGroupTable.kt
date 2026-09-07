@@ -48,14 +48,15 @@ data class ShiftGroupTable(
         val exact = cycleOrder.filter { id ->
             membersOf(id).any { normalize(it) == target }
         }
-        if (exact.isNotEmpty()) return exact.singleOrNull()
-        val containing = cycleOrder.filter { id ->
-            membersOf(id).any { member ->
-                val compact = normalize(member)
-                compact.length >= MIN_UNSPLIT_MEMBER_LENGTH && compact.contains(target)
+        val candidates = exact.ifEmpty {
+            cycleOrder.filter { id ->
+                membersOf(id).any { member ->
+                    val compact = normalize(member)
+                    compact.length >= MIN_UNSPLIT_MEMBER_LENGTH && compact.contains(target)
+                }
             }
         }
-        return containing.singleOrNull()
+        return candidates.singleOrNull()
     }
 
     companion object {

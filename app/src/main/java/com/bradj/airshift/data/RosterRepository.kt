@@ -4,7 +4,9 @@ import com.bradj.airshift.api.FlightInfo
 import com.bradj.airshift.api.FlightLookup
 import com.bradj.airshift.api.FlightRefreshScope
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftTeam
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -19,7 +21,10 @@ internal interface RosterRepository {
     fun clearVariFlightApiKey()
 
     var shiftReportMarginMinutes: Int
-    var manualShiftGroupId: Int?
+
+    /** 手动大组：只在没有任何校准表时决定日历按哪一大组计算。 */
+    var manualShiftTeam: ShiftTeam?
+    var manualShiftGroup: ManualShiftGroup?
     var shiftCalibration: ShiftCalibration?
 
     val currentDutyIndex: Int

@@ -6,10 +6,12 @@ import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ObservedShiftGroups
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftSchedule
+import com.bradj.airshift.model.shift.ShiftTeam
 import java.time.LocalDate
 import org.json.JSONArray
 import org.junit.After
@@ -172,15 +174,57 @@ class RosterStorePersistenceInstrumentedTest {
     }
 
     @Test
-    fun manualShiftGroupIsStoredAndCleared() {
+    fun manualShiftGroupIsStoredWithItsTeamAndCleared() {
         val store = RosterStore(isolatedContext)
-        assertEquals(null, store.manualShiftGroupId)
+        assertEquals(null, store.manualShiftGroup)
 
-        store.manualShiftGroupId = 8
-        assertEquals(8, RosterStore(isolatedContext).manualShiftGroupId)
+        store.manualShiftGroup = ManualShiftGroup(ShiftTeam.SECOND, 3)
+        assertEquals(ManualShiftGroup(ShiftTeam.SECOND, 3), RosterStore(isolatedContext).manualShiftGroup)
 
-        store.manualShiftGroupId = null
-        assertEquals(null, RosterStore(isolatedContext).manualShiftGroupId)
+        store.manualShiftGroup = null
+        assertEquals(null, RosterStore(isolatedContext).manualShiftGroup)
+    }
+
+    @Test
+    fun aLegacyManualGroupWithoutATeamBelongsToTheFirstTeam() {
+        // 0.13 之前只存组号，那时只有一组。
+        preferences.edit().putInt("shift_manual_group_id", 8).commit()
+
+        assertEquals(ManualShiftGroup(ShiftTeam.FIRST, 8), RosterStore(isolatedContext).manualShiftGroup)
+    }
+
+    @Test
+    fun manualShiftTeamIsStoredAndCleared() {
+        val store = RosterStore(isolatedContext)
+        assertEquals(null, store.manualShiftTeam)
+
+        store.manualShiftTeam = ShiftTeam.SECOND
+        assertEquals(ShiftTeam.SECOND, RosterStore(isolatedContext).manualShiftTeam)
+
+        store.manualShiftTeam = null
+        assertEquals(null, RosterStore(isolatedContext).manualShiftTeam)
+    }
+
+    @Test
+    fun syntheticGroupIdsSurviveTheCalibrationRoundTrip() {
+        val calibration = ShiftCalibration(
+            date = LocalDate.of(2026, 9, 7),
+            observed = ObservedShiftGroups(
+                early = listOf(1, 2, 3),
+                mid = listOf(4, 5, 6, 7),
+                night = listOf(8, 9, 10),
+                members = mapOf(1 to listOf("王甲子", "李乙丑")),
+                hasSyntheticIds = true,
+            ),
+        )
+
+        RosterStore(isolatedContext).shiftCalibration = calibration
+        val restored = RosterStore(isolatedContext).shiftCalibration
+
+        assertEquals(calibration, restored)
+        assertTrue(restored!!.observed.hasSyntheticIds)
+        assertEquals(ShiftTeam.SECOND, ShiftSchedule(restored).team)
+        assertEquals("王甲子组", ShiftSchedule(restored).labelOf(1))
     }
 
     private fun assignment() = RosterAssignment(

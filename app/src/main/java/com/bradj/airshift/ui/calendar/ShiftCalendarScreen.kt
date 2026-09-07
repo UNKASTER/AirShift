@@ -80,8 +80,12 @@ fun ShiftCalendarScreen(
     val rosterReportBy = remember(assignments) { ShiftRosterBridge.reportByMinutes(assignments) }
     val rosterLastTask = remember(assignments) { ShiftRosterBridge.lastTaskMinutes(assignments) }
 
-    val rows = remember(schedule, groupId, today, rosterDate, rosterReportBy, rosterLastTask, reportMarginMinutes) {
-        groupId?.let {
+    // 二组校准前没有班组表，谁都只能看到上班/休息的日型：用占位组号把日历算出来，不必先匹配班组。
+    val calendarGroupId = groupId ?: 0.takeIf { schedule.table.size == 0 }
+    val rows = remember(
+        schedule, calendarGroupId, today, rosterDate, rosterReportBy, rosterLastTask, reportMarginMinutes,
+    ) {
+        calendarGroupId?.let {
             ShiftCalendarRows.build(
                 schedule = schedule,
                 groupId = it,
@@ -100,18 +104,20 @@ fun ShiftCalendarScreen(
     Column(modifier = modifier.fillMaxSize()) {
         BoardHeader(
             title = "排班日历",
-            subtitle = if (groupId != null) "上三休三 · 第 $groupId 组" else "上三休三",
+            subtitle = listOfNotNull("上三休三", schedule.team.label, groupId?.let(schedule::labelOf)).joinToString(" · "),
             now = now,
             dateText = today.boardDateText(),
-            content = { TodayBlock(todayRow = todayRow, today = today, team = schedule.team, hasGroup = groupId != null) },
-            footer = { CalendarFooter(todayRow = todayRow, calibrated = schedule.isCalibrated) },
+            content = {
+                TodayBlock(todayRow = todayRow, today = today, team = schedule.team, hasGroup = calendarGroupId != null)
+            },
+            footer = { CalendarFooter(todayRow = todayRow, schedule = schedule) },
         )
-        if (groupId == null) {
+        if (calendarGroupId == null) {
             EmptyBay(
                 icon = LinearIcons.Alert,
                 title = "未匹配到班组",
                 hint = "姓名“$userName”不在已知的班组名单里，无法推算班次。" +
-                    "可在设置中核对姓名、手动指定班组，或导入一份带“候机早班/中班/夜班”的 Excel 让应用自动校正。",
+                    "可在设置中核对姓名、手动指定班组，或导入一份带“候机早班/中班/夜班（夜航）”的 Excel 让应用自动校正。",
                 actionText = "前往设置",
                 onAction = onGoToSettings,
             )
@@ -192,7 +198,7 @@ private fun TodayBlock(todayRow: ShiftCalendarRow?, today: LocalDate, team: Shif
 }
 
 @Composable
-private fun CalendarFooter(todayRow: ShiftCalendarRow?, calibrated: Boolean) {
+private fun CalendarFooter(todayRow: ShiftCalendarRow?, schedule: ShiftSchedule) {
     val c = AirShiftTokens.colors
     val offDuty = todayRow?.takeIf { it.day.attends }?.offDutyMinutes
     Text(
@@ -202,7 +208,13 @@ private fun CalendarFooter(todayRow: ShiftCalendarRow?, calibrated: Boolean) {
                 append(ShiftClock.format(offDuty))
                 append(" · ")
             }
-            append(if (calibrated) "已按排班表校正" else "内置班组表，导入带班次行的 Excel 后自动校正")
+            append(
+                when {
+                    schedule.isCalibrated -> "已按排班表校正"
+                    schedule.table.size == 0 -> "${schedule.team.label}没有内置班组表，导入带班次行的 Excel 后显示班次与班车"
+                    else -> "内置班组表，导入带班次行的 Excel 后自动校正"
+                },
+            )
         },
         style = MaterialTheme.typography.bodyMedium,
         color = c.onBoardSecondary,
@@ -251,18 +263,31 @@ private fun ShiftStrip(row: ShiftCalendarRow) {
         ) {
             DateColumn(row = row, dimmed = rest)
             Spacer(Modifier.width(10.dp))
+            // 到岗但不知道槽位（二组校准前）：没有班次也算不出班车，只提示导入。
+            val slotKnown = row.day.slot != null
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 ShiftLine(row = row, dimmed = rest)
                 if (row.day.attends) {
-                    BusDetail(row.bus)
+                    if (slotKnown) BusDetail(row.bus) else SlotUnknownHint()
                 }
             }
-            if (row.day.attends) {
+            if (row.day.attends && slotKnown) {
                 Spacer(Modifier.width(10.dp))
                 BusColumn(row)
             }
         }
     }
+}
+
+@Composable
+private fun SlotUnknownHint() {
+    Text(
+        "导入带班次行的排班表后显示班次与班车",
+        style = MaterialTheme.typography.bodySmall,
+        color = AirShiftTokens.colors.hint,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable

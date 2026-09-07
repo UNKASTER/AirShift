@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.model.shift.ShiftBusPlan
+import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.PinnedActionBar
@@ -83,11 +84,15 @@ fun SettingsScreen(
     notificationAccessGranted: Boolean,
     lastSuccessfulRecognitionEpochMillis: Long?,
     lastProcessingResult: String?,
+    shiftTeam: ShiftTeam,
+    shiftTeamAutoDetected: Boolean,
     shiftGroupId: Int?,
+    shiftGroupLabel: String?,
     shiftGroupAutoDetected: Boolean,
-    shiftGroupOptions: List<Int>,
+    shiftGroupOptions: List<ShiftGroupOption>,
     shiftReportMarginMinutes: Int,
     now: LocalDateTime,
+    onShiftTeamSelected: (ShiftTeam) -> Unit,
     onShiftGroupSelected: (Int?) -> Unit,
     onShiftReportMarginSelected: (Int) -> Unit,
     onOpenNotificationAccessSettings: () -> Unit,
@@ -105,7 +110,7 @@ fun SettingsScreen(
     Column(modifier = modifier.fillMaxSize()) {
         BoardHeader(
             title = "设置",
-            subtitle = listOfNotNull(currentName, shiftGroupId?.let { "第 $it 组" }).joinToString(" · "),
+            subtitle = listOfNotNull(currentName, shiftTeam.label, shiftGroupLabel).joinToString(" · "),
             now = now,
             dateText = now.toLocalDate().boardDateText(),
         )
@@ -129,10 +134,14 @@ fun SettingsScreen(
             }
             item(key = "calendar") {
                 ShiftCalendarSection(
+                    team = shiftTeam,
+                    teamAutoDetected = shiftTeamAutoDetected,
                     shiftGroupId = shiftGroupId,
+                    groupLabel = shiftGroupLabel,
                     autoDetected = shiftGroupAutoDetected,
                     options = shiftGroupOptions,
                     reportMarginMinutes = shiftReportMarginMinutes,
+                    onTeamSelected = onShiftTeamSelected,
                     onGroupSelected = onShiftGroupSelected,
                     onMarginSelected = onShiftReportMarginSelected,
                 )
@@ -290,40 +299,71 @@ private fun MucSection(
     }
 }
 
-/** 排班日历分区：班组与到位余量。到位要求本身是硬规定，这里只调富余量。 */
+/** 设置页里可点选的班组：一组是“第 N 组”，二组的小组没有编号，用首位成员命名。 */
+data class ShiftGroupOption(val id: Int, val label: String)
+
+/** 排班日历分区：大组、班组与到位余量。到位要求本身是硬规定，这里只调富余量。 */
 @Composable
 private fun ShiftCalendarSection(
+    team: ShiftTeam,
+    teamAutoDetected: Boolean,
     shiftGroupId: Int?,
+    groupLabel: String?,
     autoDetected: Boolean,
-    options: List<Int>,
+    options: List<ShiftGroupOption>,
     reportMarginMinutes: Int,
+    onTeamSelected: (ShiftTeam) -> Unit,
     onGroupSelected: (Int?) -> Unit,
     onMarginSelected: (Int) -> Unit,
 ) {
     SectionStrip(title = "排班日历") {
         SettingRow(
-            label = "我的班组",
-            value = when {
-                shiftGroupId == null -> "未匹配"
-                autoDetected -> "第 $shiftGroupId 组 · 按姓名自动识别"
-                else -> "第 $shiftGroupId 组 · 手动指定"
-            },
+            label = "大组",
+            value = if (teamAutoDetected) "${team.label} · 按排班表自动识别" else "${team.label} · 手动指定",
         )
-        if (!autoDetected) {
+        if (!teamAutoDetected) {
             FlowRow(
                 modifier = Modifier.padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                options.forEach { option ->
+                ShiftTeam.entries.forEach { option ->
                     SelectLamp(
-                        text = "第 $option 组",
-                        selected = option == shiftGroupId,
-                        onClick = { onGroupSelected(option.takeIf { it != shiftGroupId }) },
+                        text = option.label,
+                        selected = option == team,
+                        onClick = { if (option != team) onTeamSelected(option) },
                     )
                 }
             }
-            HintLine("导入一份带“候机早班/中班/夜班”的 Excel 后，应用会自动校正班组表。")
+            HintLine("两大组错开三天、交替上三休三。导入一份带班次行的 Excel 后，会按表格日期自动判定大组。")
+        }
+        SettingRow(
+            label = "我的班组",
+            value = when {
+                groupLabel == null -> "未匹配"
+                autoDetected -> "$groupLabel · 按姓名自动识别"
+                else -> "$groupLabel · 手动指定"
+            },
+        )
+        if (!autoDetected) {
+            if (options.isEmpty()) {
+                HintLine("${team.label}没有内置班组表。导入一份带“候机早班/中班/夜航”行的 Excel 后，会按姓名自动识别班组，也可在此手动指定。")
+            } else {
+                FlowRow(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    options.forEach { option ->
+                        SelectLamp(
+                            text = option.label,
+                            selected = option.id == shiftGroupId,
+                            onClick = { onGroupSelected(option.id.takeIf { it != shiftGroupId }) },
+                        )
+                    }
+                }
+                HintLine("导入一份带“候机早班/中班/夜班”的 Excel 后，应用会自动校正班组表。")
+            }
         }
         SettingRow(label = "到位余量")
         SegmentedLamps(

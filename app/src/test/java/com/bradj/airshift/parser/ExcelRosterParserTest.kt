@@ -302,8 +302,24 @@ class ExcelRosterParserTest {
     fun aThreeCharacterNameIsFoundInAFiveCharacterUnbrokenCell() {
         // 二组两人小组连写只有 5 个字；旧规则要求栏长至少是姓名两倍，会漏掉三字姓名的人。
         val sheet = secondTeamSheet(
-            row(3, text("A", "B8395"), text("B", "320"), text("F", "MU9977#&"), text("G", "合肥"), text("H", "1040"), text("I", "王甲李乙丑")),
-            row(4, text("A", "B8558"), text("B", "320"), text("F", "MU9835"), text("G", "南京"), text("H", "1045"), text("I", "周丙寅吴丁")),
+            row(
+                3,
+                text("A", "B8395"),
+                text("B", "320"),
+                text("F", "MU9977#&"),
+                text("G", "合肥"),
+                text("H", "1040"),
+                text("I", "王甲李乙丑"),
+            ),
+            row(
+                4,
+                text("A", "B8558"),
+                text("B", "320"),
+                text("F", "MU9835"),
+                text("G", "南京"),
+                text("H", "1045"),
+                text("I", "周丙寅吴丁"),
+            ),
         )
 
         val threeCharacters = ExcelRosterParser.parse(workbook(sheet, useSharedStrings = false), "李乙丑", secondTeamClock)
@@ -353,7 +369,15 @@ class ExcelRosterParserTest {
                         text("I", "王甲子李乙丑周丙寅"),
                         text("L", "要客：要客信息自查"),
                     ),
-                    row(4, text("A", "B8558"), text("B", "320"), text("C", "MU2448"), text("D", "南京"), text("E", "1345"), text("I", "王甲子李乙丑周丙寅")),
+                    row(
+                        4,
+                        text("A", "B8558"),
+                        text("B", "320"),
+                        text("C", "MU2448"),
+                        text("D", "南京"),
+                        text("E", "1345"),
+                        text("I", "王甲子李乙丑周丙寅"),
+                    ),
                     row(5, text("L", "MU6807 虹桥-兰州              王甲子")),
                     row(6, text("L", "MU2448 南京-兰州 CIP       李乙丑")),
                 ),

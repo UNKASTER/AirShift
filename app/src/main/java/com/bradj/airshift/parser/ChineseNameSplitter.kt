@@ -1,7 +1,7 @@
 package com.bradj.airshift.parser
 
 /**
- * 把无分隔的连写姓名切成单人姓名，如“甲乙丙丁戊己” 这样的 6 字串切成 3 + 3。
+ * 把无分隔的连写姓名切成单人姓名，如 6 字串切成 3 + 3。
  * 二组排班表的人员栏与班次行都这样连写；一组表以空格分隔，2–3 字的单名不经过这里。
  *
  * 规则：每个姓名 2–3 字（复姓 3–4 字），首字（复姓为首二字）必须在常见姓氏表内；
@@ -14,6 +14,7 @@ internal object ChineseNameSplitter {
     private const val MIN_NAME_LENGTH = 2
     private const val MAX_NAME_LENGTH = 3
     private const val COMPOUND_SURNAME_LENGTH = 2
+    private const val MIN_COMPOUND_NAME_LENGTH = 3
     private const val MAX_COMPOUND_NAME_LENGTH = 4
 
     /** 常见姓氏以外的百家姓：合法，但在歧义时让位于常见姓氏。 */
@@ -35,7 +36,10 @@ internal object ChineseNameSplitter {
     )
 
     private val OTHER_SURNAMES = (
-        "安敖巴柏班包鲍毕边卜岑柴昌常车成池迟储褚淳党狄刁窦樊房费丰封凤伏符傅甘郜戈耿宫巩勾苟辜古谷关管桂杭和洪花华滑桓惠霍姬嵇吉计纪季冀简焦靳荆井景居鞠康柯寇匡邝况赖蓝郎劳乐冷厉利励连廉练蔺凌柳隆娄楼芦鲁路栾骆麻买满茅梅米苗缪明牟母穆倪聂宁牛钮农庞裴皮平蒲濮浦戚祁齐强乔裘曲屈瞿全权冉饶荣阮芮萨赛桑沙单商尚佘申盛施时寿舒司松宿隋索汤滕铁佟童涂屠危卫温文闻翁邬巫伍郗奚席冼项萧辛邢幸宣荀闫阎颜晏燕易殷应尤游俞虞禹郁喻元岳云恽臧翟詹湛章招甄支诸竺祝庄卓宗祖左"
+        "安敖巴柏班包鲍毕边卜岑柴昌常车成池迟储褚淳党狄刁窦樊房费丰封凤伏符傅甘郜戈耿宫巩勾苟辜古谷关管桂杭和洪花华滑桓惠霍" +
+            "姬嵇吉计纪季冀简焦靳荆井景居鞠康柯寇匡邝况赖蓝郎劳乐冷厉利励连廉练蔺凌柳隆娄楼芦鲁路栾骆麻买满茅梅米苗缪明牟母穆" +
+            "倪聂宁牛钮农庞裴皮平蒲濮浦戚祁齐强乔裘曲屈瞿全权冉饶荣阮芮萨赛桑沙单商尚佘申盛施时寿舒司松宿隋索汤滕铁佟童涂屠" +
+            "危卫温文闻翁邬巫伍郗奚席冼项萧辛邢幸宣荀闫阎颜晏燕易殷应尤游俞虞禹郁喻元岳云恽臧翟詹湛章招甄支诸竺祝庄卓宗祖左"
         ).toSet()
 
     private val COMPOUND_SURNAMES = setOf(
@@ -55,23 +59,25 @@ internal object ChineseNameSplitter {
     fun split(raw: String): List<String> {
         val text = raw.trim()
         if (text.length < MIN_SPLITTABLE_LENGTH || !text.all(::isCjk)) return listOf(text)
+        return segment(text) ?: listOf(text)
+    }
+
+    /** 动态规划：best[i] 是前 i 个字的最小代价，cut[i] 是达到该代价时最后一个名字的起点。 */
+    private fun segment(text: String): List<String>? {
         val length = text.length
-        // best[i] = 前 i 个字的最小代价；cut[i] = 达到该代价时最后一个名字的起点。
         val best = IntArray(length + 1) { Int.MAX_VALUE }
         val cut = IntArray(length + 1) { -1 }
         best[0] = 0
         for (end in 1..length) {
             for (start in maxOf(0, end - MAX_COMPOUND_NAME_LENGTH) until end) {
-                if (best[start] == Int.MAX_VALUE) continue
-                val cost = nameCost(text, start, end) ?: continue
-                val total = best[start] + cost
-                if (total < best[end]) {
-                    best[end] = total
+                val cost = if (best[start] == Int.MAX_VALUE) null else nameCost(text, start, end)
+                if (cost != null && best[start] + cost < best[end]) {
+                    best[end] = best[start] + cost
                     cut[end] = start
                 }
             }
         }
-        if (best[length] == Int.MAX_VALUE) return listOf(text)
+        if (best[length] == Int.MAX_VALUE) return null
         val names = ArrayDeque<String>()
         var end = length
         while (end > 0) {
@@ -85,14 +91,14 @@ internal object ChineseNameSplitter {
     /** text[start, end) 作为一个姓名的代价；不合法返回 null。 */
     private fun nameCost(text: String, start: Int, end: Int): Int? {
         val size = end - start
-        if (size >= MIN_NAME_LENGTH + COMPOUND_SURNAME_LENGTH - 1 && size <= MAX_COMPOUND_NAME_LENGTH &&
+        val compound = size in MIN_COMPOUND_NAME_LENGTH..MAX_COMPOUND_NAME_LENGTH &&
             text.substring(start, start + COMPOUND_SURNAME_LENGTH) in COMPOUND_SURNAMES
-        ) {
-            return COMPOUND_COST
-        }
-        if (size < MIN_NAME_LENGTH || size > MAX_NAME_LENGTH) return null
         val surname = text[start]
-        return commonSurnameCost[surname] ?: if (surname in OTHER_SURNAMES) RARE_COST else null
+        return when {
+            compound -> COMPOUND_COST
+            size !in MIN_NAME_LENGTH..MAX_NAME_LENGTH -> null
+            else -> commonSurnameCost[surname] ?: RARE_COST.takeIf { surname in OTHER_SURNAMES }
+        }
     }
 
     private fun isCjk(character: Char): Boolean =

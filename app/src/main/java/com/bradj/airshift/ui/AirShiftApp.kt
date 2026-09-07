@@ -39,7 +39,9 @@ import com.bradj.airshift.duty.DutyUiState
 import com.bradj.airshift.duty.DutyViewModel
 import com.bradj.airshift.duty.ImportAttempt
 import com.bradj.airshift.duty.RosterSource
+import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftSchedule
+import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
@@ -56,6 +58,7 @@ import com.bradj.airshift.ui.components.LocalBoardBackdrop
 import com.bradj.airshift.ui.current.CurrentDutyScreen
 import com.bradj.airshift.ui.onboarding.OnboardingScreen
 import com.bradj.airshift.ui.settings.SettingsScreen
+import com.bradj.airshift.ui.settings.ShiftGroupOption
 import kotlinx.coroutines.delay
 
 private const val DUTY_STATE_TICK_MILLIS = 60 * 1000L
@@ -158,10 +161,14 @@ internal fun AirShiftApp(
         }
     }
 
-    // 排班日历：班组表与轮转相位随最近一次 Excel 班次行校正；解析不到时保持内置表。
-    val shiftSchedule = remember(state.shiftCalibration) { ShiftSchedule(state.shiftCalibration) }
+    // 排班日历：大组由最近一次校准表的日期决定，没有校准时用设置里的手动大组（缺省一组）；
+    // 班组表与轮转相位随最近一次 Excel 班次行校正，解析不到时保持内置表。
+    val shiftSchedule = remember(state.shiftCalibration, state.manualShiftTeam) {
+        ShiftSchedule(state.shiftCalibration, fallbackTeam = state.manualShiftTeam ?: ShiftTeam.FIRST)
+    }
     val autoShiftGroupId = remember(shiftSchedule, userName) { shiftSchedule.findGroupIdForName(userName) }
-    val shiftGroupId = autoShiftGroupId ?: state.manualShiftGroupId
+    // 手动指定的班组只对指定时所在的大组有效：一组是真实组号，二组是校准时的合成序号。
+    val shiftGroupId = autoShiftGroupId ?: state.manualShiftGroup?.takeIf { it.team == shiftSchedule.team }?.id
     // 当前执勤全部完成后，板面显示下一次到岗；只在日历相关状态变化时重算。
     val today = state.now.toLocalDate()
     val margin = state.shiftReportMarginMinutes
@@ -325,12 +332,20 @@ private fun SectionContent(
                 notificationAccessGranted = state.notificationAccessGranted,
                 lastSuccessfulRecognitionEpochMillis = specialServiceState.lastSuccessfulRecognitionEpochMillis,
                 lastProcessingResult = specialServiceState.lastProcessingResult,
+                shiftTeam = shiftSchedule.team,
+                shiftTeamAutoDetected = shiftSchedule.isCalibrated,
                 shiftGroupId = shiftGroupId,
+                shiftGroupLabel = shiftGroupId?.let(shiftSchedule::labelOf),
                 shiftGroupAutoDetected = autoShiftGroupId != null,
-                shiftGroupOptions = shiftSchedule.table.cycleOrder.sorted(),
+                shiftGroupOptions = remember(shiftSchedule) {
+                    shiftSchedule.table.cycleOrder.sorted().map { ShiftGroupOption(it, shiftSchedule.labelOf(it)) }
+                },
                 shiftReportMarginMinutes = state.shiftReportMarginMinutes,
                 now = state.now,
-                onShiftGroupSelected = viewModel::selectShiftGroup,
+                onShiftTeamSelected = viewModel::selectShiftTeam,
+                onShiftGroupSelected = { id ->
+                    viewModel.selectShiftGroup(id?.let { ManualShiftGroup(shiftSchedule.team, it) })
+                },
                 onShiftReportMarginSelected = viewModel::selectReportMargin,
                 onOpenNotificationAccessSettings = openNotificationAccessSettings,
                 onSave = viewModel::saveSettings,

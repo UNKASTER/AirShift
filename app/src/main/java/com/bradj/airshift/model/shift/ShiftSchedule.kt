@@ -22,9 +22,9 @@ data class ShiftCalibration(
      * 一组表带真实组号、没有上一份校准、或上一份属于另一大组时原样返回。
      */
     fun alignedWith(previous: ShiftCalibration?): ShiftCalibration {
-        if (!observed.hasSyntheticIds) return this
-        if (previous == null || !previous.isUsable || previous.team != team) return this
-        val old = previous.observed
+        val old = previous?.observed
+            ?.takeIf { observed.hasSyntheticIds && previous.isUsable && previous.team == team }
+            ?: return this
         val mapping = mutableMapOf<Int, Int>()
         val taken = old.orderedGroupIds.toMutableSet()
         val matchedOld = mutableSetOf<Int>()
