@@ -15,3 +15,6 @@ captures/
 # 本地计划与取证草稿，不入库
 plans/
 scratch/
+
+# 真实排班表夹具（含真实姓名），只供本机 XlsRosterParserRealFileTest 使用
+Test_Excel/
