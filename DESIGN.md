@@ -21,7 +21,7 @@
 | `ink` / `inkSecondary` / `hint` | `#14284B` / `#4A5568` / `#8A94A6` | `#EDF1F7` / `#9AA7BD` / `#6B7A94` | 文字三级；缺失值用 `hint` |
 | `departure` / `departureSoft` / `departureText` | `#C8102E` / `#FDECEE` / `#9C0B22` | `#C8102E` / 红 14% / `#FF8A98` | 出港夹条、主操作、出港灯 |
 | `arrival` / `arrivalSoft` / `arrivalText` | `#2B5EA7` / `#EAF1FB` / `#1D4B8A` | `#7FA6E6` / 蓝 14% / `#A8C4F0` | 进港夹条、进港灯、班次灯 |
-| `ok` / `okSoft` | `#0F7B5F` / 绿 10% | `#4CC38A` / 绿 14% | 已起飞 / 已到达 / 已完成 / 实际时间 |
+| `ok` / `okSoft` | `#0F7B5F` / 绿 10% | `#4CC38A` / 绿 14% | 已起飞 / 已落地 / 已完成 / 实际时间 |
 | `estimate` / `estimateSoft` | `#B45309` / 琥珀 10% | `#F5B233` / 琥珀 14% | 预计（晚点）时间、变更、交接班、通知条 |
 | `alert` / `alertSoft` | `#C8102E` / 红 10% | `#FF6B7A` / 红 14% | 已取消、未授权 |
 | `vipSoft` / `vipText` | `#FCEBC8` / `#6E4200` | 金 16% / `#F5CB7A` | VIP 灯 |
