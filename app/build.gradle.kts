@@ -22,8 +22,8 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 // release 当“相同版本”，`adb install -r` 只会失败，只能在手机弹框里手工点“重新安装”。因此 Debug 变体用
 // 更高的固定偏移与 -debug 后缀（见下方 androidComponents）：测试装 Debug 是升级；装回 release 用
 // `adb install -r -d`——对已装的可调试包允许降级——两个方向都不再撞“相同版本”。
-val appVersionCode = 54
-val appVersionName = "0.14.0"
+val appVersionCode = 55
+val appVersionName = "0.14.1"
 val debugVersionCodeOffset = 1_000_000
 
 android {
