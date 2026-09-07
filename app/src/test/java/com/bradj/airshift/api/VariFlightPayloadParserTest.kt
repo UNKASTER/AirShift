@@ -26,12 +26,14 @@ class VariFlightPayloadParserTest {
               'FlightArrtimeDate': datetime.datetime(2026, 8, 20, 12, 59, 49),
               'FlightOutgateTime': '2026-08-20 10:36:00',
               'BoardGate': 'D58', 'DepStandGate': '358', 'ArrStandGate': '105',
-              'EstimateBoardingEndTime': '2026-08-20 10:25:00', 'arr_bridge': '靠廊桥'}]
+              'EstimateBoardingEndTime': '2026-08-20 10:25:00', 'arr_bridge': '靠廊桥',
+              'FlightState': '到达'}]
         """.trimIndent()
 
         val flight = VariFlightPayloadParser.parseLegs(payload, "fallback").single()
 
         assertEquals("ZZ1001", flight.flightNumber)
+        assertEquals("到达", flight.flightState)
         assertEquals(LocalDateTime.of(2026, 8, 20, 10, 40), flight.plannedDeparture)
         assertEquals(LocalDateTime.of(2026, 8, 20, 10, 47), flight.estimatedDeparture)
         assertEquals(LocalDateTime.of(2026, 8, 20, 10, 48), flight.actualDeparture)

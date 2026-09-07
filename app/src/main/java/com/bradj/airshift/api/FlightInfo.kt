@@ -32,6 +32,8 @@ data class FlightInfo(
     val departureStand: String?,
     val arrivalStand: String?,
     val arrivalBridge: String?,
+    /** 飞常准 `FlightState` 原文；旧响应或字段缺失时为 null。 */
+    val flightState: String? = null,
 )
 
 internal data class FlightLookup(
@@ -106,6 +108,11 @@ internal fun RosterAssignment.withLiveInfo(
         outboundGateClosedObservedAt = outbound?.gateClosedObservedAt ?: outboundGateClosedObservedAt,
         inboundActualOffBlock = inbound?.actualOffBlock ?: inboundActualOffBlock,
         outboundActualOffBlock = outbound?.actualOffBlock ?: outboundActualOffBlock,
+        // 每段航班两端的实际时间都留下：进港段的前站起飞、出港段的后站落地各自驱动状态灯的"已起飞 / 已落地"。
+        inboundActualDeparture = inbound?.actualDeparture ?: inboundActualDeparture,
+        outboundActualArrival = outbound?.actualArrival ?: outboundActualArrival,
+        inboundFlightState = inbound?.flightState ?: inboundFlightState,
+        outboundFlightState = outbound?.flightState ?: outboundFlightState,
         outboundArrivalStand = outbound?.arrivalStand ?: outboundArrivalStand,
         arrivalBridge = inbound?.arrivalBridge ?: arrivalBridge,
     )

@@ -1,8 +1,11 @@
 package com.bradj.airshift.ui.components
 
 import com.bradj.airshift.model.DutyTimeline
+import com.bradj.airshift.model.FlightPhase
 import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.inboundPhase
+import com.bradj.airshift.model.outboundPhase
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
@@ -46,6 +49,8 @@ data class FlightLegUiModel(
     val aircraftRegistration: String?,
     val aircraftType: String?,
     val offBlock: LocalDateTime?,
+    /** 这段航班自己的进程（未起飞 / 已起飞 / 已落地），状态灯直接用它。 */
+    val phase: FlightPhase,
 ) {
     /** 实际优先、预计回退的实时时间。 */
     val live: LocalDateTime? get() = actual ?: estimated
@@ -108,6 +113,7 @@ private fun RosterAssignment.inboundLeg(
         aircraftRegistration = if (isLast) aircraftRegistration else null,
         aircraftType = if (isLast) aircraftType ?: "--" else null,
         offBlock = inboundActualOffBlock,
+        phase = inboundPhase(),
     )
 }
 
@@ -157,6 +163,7 @@ private fun RosterAssignment.outboundLeg(
         aircraftRegistration = aircraftRegistration,
         aircraftType = aircraftType ?: "--",
         offBlock = outboundActualOffBlock,
+        phase = outboundPhase(),
     )
 }
 

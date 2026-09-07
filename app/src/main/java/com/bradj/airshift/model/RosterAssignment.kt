@@ -26,6 +26,13 @@ data class RosterAssignment(
     val outboundGateClosedObservedAt: LocalDateTime? = null,
     val inboundActualOffBlock: LocalDateTime? = null,
     val outboundActualOffBlock: LocalDateTime? = null,
+    /** 进港航班在前站的实际起飞时间：它一起飞，进港段就该亮"已起飞"，而不是等到本站落地。 */
+    val inboundActualDeparture: LocalDateTime? = null,
+    /** 出港航班在后站的实际到达时间：出港段的"已落地"。 */
+    val outboundActualArrival: LocalDateTime? = null,
+    /** 飞常准 `FlightState` 原文（计划 / 起飞 / 到达 / 延误 / 取消…），实际时间缺失时的备用信号。 */
+    val inboundFlightState: String? = null,
+    val outboundFlightState: String? = null,
     val outboundArrivalStand: String? = null,
     val arrivalBridge: String? = null,
     val originCode: String? = null,

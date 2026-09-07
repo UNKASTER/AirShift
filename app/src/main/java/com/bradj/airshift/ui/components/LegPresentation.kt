@@ -1,6 +1,7 @@
 package com.bradj.airshift.ui.components
 
 import com.bradj.airshift.model.AssignmentKind
+import com.bradj.airshift.model.FlightPhase
 import com.bradj.airshift.model.LegDirection
 import java.time.Duration
 
@@ -26,14 +27,18 @@ internal fun DetailKind.shortLabel(): String = when (this) {
 
 internal data class LegStatus(val text: String, val kind: LampKind, val dot: Boolean)
 
-/** 航段状态灯：已完成 / 已取消 / 已到达 / 已起飞 / 晚 N 分 / 未起飞；完全没有时间信息时不给灯。 */
+/**
+ * 航段状态灯。同一个小方块走完一段航班的三步：未起飞 → 已起飞 → 已落地（[FlightPhase]，进港、出港段各自判定）。
+ * 已取消压过一切；已完成只在没有任何实际动态时兜底（人工完成、过点自动完成），有动态就照实亮起飞 / 落地；
+ * 晚 N 分只在起飞前有意义；完全没有时间信息时不给灯。
+ */
 internal fun legStatus(leg: FlightLegUiModel, completed: Boolean): LegStatus? {
     val delay = leg.delayMinutes()
     return when {
-        completed -> LegStatus("已完成", LampKind.Ok, dot = true)
         leg.flightCancellation != null -> LegStatus("已取消", LampKind.Alert, dot = true)
-        leg.direction == LegDirection.INBOUND && leg.actual != null -> LegStatus("已到达", LampKind.Ok, dot = true)
-        leg.actual != null || leg.offBlock != null -> LegStatus("已起飞", LampKind.Ok, dot = true)
+        leg.phase == FlightPhase.LANDED -> LegStatus("已落地", LampKind.Ok, dot = true)
+        leg.phase == FlightPhase.DEPARTED -> LegStatus("已起飞", LampKind.Ok, dot = true)
+        completed -> LegStatus("已完成", LampKind.Ok, dot = true)
         delay.isLate() -> LegStatus("晚 $delay 分", LampKind.Estimate, dot = true)
         leg.planned == null && leg.estimated == null -> null
         else -> LegStatus("未起飞", LampKind.Neutral, dot = false)

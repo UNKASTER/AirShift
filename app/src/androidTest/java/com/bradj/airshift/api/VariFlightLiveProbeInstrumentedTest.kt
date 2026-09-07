@@ -50,6 +50,7 @@ class VariFlightLiveProbeInstrumentedTest {
                         " plan ${leg.plannedDeparture}->${leg.plannedArrival}" +
                         " est ${leg.estimatedDeparture}->${leg.estimatedArrival}" +
                         " act ${leg.actualDeparture}->${leg.actualArrival}" +
+                        " offBlock ${leg.actualOffBlock} state ${leg.flightState}" +
                         " stands ${leg.departureStand}/${leg.arrivalStand}",
                 )
             }

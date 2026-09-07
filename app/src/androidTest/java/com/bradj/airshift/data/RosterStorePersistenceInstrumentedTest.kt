@@ -71,6 +71,9 @@ class RosterStorePersistenceInstrumentedTest {
         val encoded = JSONArray(preferences.getString("assignments", null)).getJSONObject(0)
         assertEquals("IN-DEP", encoded.getString("inboundDepartureStand"))
         assertEquals("OUT-ARR", encoded.getString("outboundArrivalStand"))
+        assertEquals("2026-08-30T21:58", encoded.getString("inboundActualDeparture"))
+        assertEquals("2026-08-31T03:20", encoded.getString("outboundActualArrival"))
+        assertEquals("起飞", encoded.getString("outboundFlightState"))
         assertEquals(listOf(original), RosterStore(isolatedContext).loadAssignments())
     }
 
@@ -91,6 +94,35 @@ class RosterStorePersistenceInstrumentedTest {
         assertFalse(legacy.getJSONObject(0).has("outboundArrivalStand"))
         assertEquals(
             listOf(original.copy(inboundDepartureStand = null, outboundArrivalStand = null)),
+            restored,
+        )
+    }
+
+    @Test
+    fun loadsLegacyJsonWithoutTheFlightPhaseFields() {
+        // 0.14.0 及更早的存储没有另一端的实际时间与 FlightState，读回来应为 null 而不是解析失败。
+        val original = assignment()
+        RosterStore(isolatedContext).saveAssignments(listOf(original))
+        val legacy = JSONArray(preferences.getString("assignments", null))
+        legacy.getJSONObject(0).apply {
+            remove("inboundActualDeparture")
+            remove("outboundActualArrival")
+            remove("inboundFlightState")
+            remove("outboundFlightState")
+        }
+        assertTrue(preferences.edit().putString("assignments", legacy.toString()).commit())
+
+        val restored = RosterStore(isolatedContext).loadAssignments()
+
+        assertEquals(
+            listOf(
+                original.copy(
+                    inboundActualDeparture = null,
+                    outboundActualArrival = null,
+                    inboundFlightState = null,
+                    outboundFlightState = null,
+                ),
+            ),
             restored,
         )
     }
@@ -314,6 +346,10 @@ class RosterStorePersistenceInstrumentedTest {
         outboundGateClosedObservedAt = LocalDateTime.of(2026, 8, 31, 0, 55),
         inboundActualOffBlock = LocalDateTime.of(2026, 8, 30, 21, 55),
         outboundActualOffBlock = LocalDateTime.of(2026, 8, 31, 1, 5),
+        inboundActualDeparture = LocalDateTime.of(2026, 8, 30, 21, 58),
+        outboundActualArrival = LocalDateTime.of(2026, 8, 31, 3, 20),
+        inboundFlightState = "到达",
+        outboundFlightState = "起飞",
         outboundArrivalStand = "OUT-ARR",
         arrivalBridge = "测试廊桥",
         originCode = "AAA",

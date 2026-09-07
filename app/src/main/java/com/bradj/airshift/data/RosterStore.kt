@@ -369,6 +369,10 @@ internal class RosterStore(
         putNullable("outboundGateClosedObservedAt", outboundGateClosedObservedAt?.toString())
         putNullable("inboundActualOffBlock", inboundActualOffBlock?.toString())
         putNullable("outboundActualOffBlock", outboundActualOffBlock?.toString())
+        putNullable("inboundActualDeparture", inboundActualDeparture?.toString())
+        putNullable("outboundActualArrival", outboundActualArrival?.toString())
+        putNullable("inboundFlightState", inboundFlightState)
+        putNullable("outboundFlightState", outboundFlightState)
         putNullable("outboundArrivalStand", outboundArrivalStand)
         putNullable("arrivalBridge", arrivalBridge)
         putNullable("originCode", originCode)
@@ -402,6 +406,10 @@ internal class RosterStore(
         outboundGateClosedObservedAt = nullableDateTime("outboundGateClosedObservedAt"),
         inboundActualOffBlock = nullableDateTime("inboundActualOffBlock"),
         outboundActualOffBlock = nullableDateTime("outboundActualOffBlock"),
+        inboundActualDeparture = nullableDateTime("inboundActualDeparture"),
+        outboundActualArrival = nullableDateTime("outboundActualArrival"),
+        inboundFlightState = nullableString("inboundFlightState"),
+        outboundFlightState = nullableString("outboundFlightState"),
         outboundArrivalStand = nullableString("outboundArrivalStand"),
         arrivalBridge = nullableString("arrivalBridge"),
         originCode = nullableString("originCode"),

@@ -216,6 +216,7 @@ internal object VariFlightPayloadParser {
         val departureStand = stringField(element, "DepStandGate")
         val arrivalStand = stringField(element, "ArrStandGate")
         val arrivalBridge = stringField(element, "arr_bridge") ?: stringField(element, "bridge")
+        val flightState = stringField(element, "FlightState")
         val origin = airport(
             code = stringField(element, "FlightDepcode"),
             name = stringField(element, "FlightDepAirport"),
@@ -242,6 +243,7 @@ internal object VariFlightPayloadParser {
             departureStand,
             arrivalStand,
             arrivalBridge,
+            flightState,
             origin,
             destination,
         ).any { it != null }
@@ -263,6 +265,7 @@ internal object VariFlightPayloadParser {
             departureStand = departureStand,
             arrivalStand = arrivalStand,
             arrivalBridge = arrivalBridge,
+            flightState = flightState,
         )
     }
 

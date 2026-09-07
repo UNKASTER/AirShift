@@ -1,5 +1,6 @@
 package com.bradj.airshift.ui.components
 
+import com.bradj.airshift.model.FlightPhase
 import com.bradj.airshift.model.LegDirection
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.specialservice.Confidence
@@ -70,6 +71,22 @@ class AssignmentLegsTest {
         assertEquals("XIY" to "CAN", outbound.fromCode to outbound.toCode)
         assertEquals(date.atTime(12, 20), outbound.estimated)
         assertEquals(date.atTime(12, 25), outbound.offBlock)
+    }
+
+    @Test
+    fun `each leg carries its own flight phase`() {
+        val flown = turnaround.copy(
+            inboundActualDeparture = date.atTime(8, 5),
+            outboundActualArrival = date.atTime(14, 30),
+        )
+
+        val legs = flown.legUiModels(MucContext(), DetailLevel.SUMMARY)
+
+        assertEquals(FlightPhase.DEPARTED, legs[0].phase)
+        // 出港段本就有 12:25 的实际离位，再加后站到达就是已落地。
+        assertEquals(FlightPhase.LANDED, legs[1].phase)
+        val grounded = turnaround.copy(outboundActualOffBlock = null).legUiModels(MucContext(), DetailLevel.SUMMARY)
+        assertEquals(listOf(FlightPhase.NOT_DEPARTED, FlightPhase.NOT_DEPARTED), grounded.map { it.phase })
     }
 
     @Test

@@ -70,7 +70,7 @@ private val MetaValueStyle = NumericSmall.copy(fontSize = 13.sp)
  *
  * - [expanded]：展开为 FULL 级别（航班号大字、航线全名、计划/预计、登机口关闭与实际离位、特服与 MUC 明细）；
  * - [emphasized]：当前任务，抬起（阴影、无边线）；
- * - [completed]：已完成，整条变暗，状态灯改为"已完成"；
+ * - [completed]：已完成，整条变暗；状态灯照实亮已起飞 / 已落地，没有任何实际动态时才改为"已完成"；
  * - [onClick]：点击切换展开。
  *
  * 展开 / 折叠：容器高度用 M3 fast spatial 弹簧（可中断），新内容稍后淡入、旧内容更快淡出；
