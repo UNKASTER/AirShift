@@ -1,6 +1,8 @@
 package com.bradj.airshift.model.shift
 
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.holiday.HolidayCalendar
+import com.bradj.airshift.model.holiday.PublicHoliday
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -85,6 +87,25 @@ class ShiftCalendarRowsTest {
         assertTrue(attending.day.attends)
         assertEquals(LocalTime.of(5, 25), attending.bus?.departure)
         assertEquals(ShiftClock.of(10, 0), attending.offDutyMinutes)
+    }
+
+    @Test
+    fun `rows carry the public holiday record without touching shifts or buses`() {
+        val around = rows(from = LocalDate.of(2026, 9, 19), to = LocalDate.of(2026, 10, 1))
+        assertNull(around[LocalDate.of(2026, 9, 19)]!!.holiday)
+        assertEquals(PublicHoliday.Kind.WORK, around[LocalDate.of(2026, 9, 20)]!!.holiday?.kind)
+        assertEquals("国庆节", around[LocalDate.of(2026, 9, 20)]!!.holiday?.name)
+        assertTrue(around[LocalDate.of(2026, 10, 1)]!!.holiday!!.isOff)
+        // 节假日不改班次：与不带节假日表算出的行只差 holiday 一个字段。
+        val plain = ShiftCalendarRows.build(
+            schedule = schedule,
+            groupId = 1,
+            from = LocalDate.of(2026, 9, 19),
+            toInclusive = LocalDate.of(2026, 10, 1),
+            today = today,
+            holidays = HolidayCalendar.NONE,
+        ).associateBy { it.day.date }
+        around.forEach { (date, row) -> assertEquals(plain[date], row.copy(holiday = null)) }
     }
 
     @Test

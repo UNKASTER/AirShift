@@ -10,13 +10,17 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.ui.theme.AirShiftTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,10 +36,7 @@ class ShiftCalendarScreenInstrumentedTest {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("shift_") == true
     }
 
-    @Test
-    fun theCalendarOpensWithTodayAsTheFirstVisibleRow() {
-        val now = LocalDateTime.of(2026, 9, 4, 16, 8)
-        val today = now.toLocalDate()
+    private fun setCalendar(now: LocalDateTime) {
         composeRule.setContent {
             AirShiftTheme {
                 ShiftCalendarScreen(
@@ -50,6 +51,27 @@ class ShiftCalendarScreenInstrumentedTest {
                 )
             }
         }
+    }
+
+    /** 国庆当天：板头日期带节日名，放假日的行写节日名，调休上班日的行写"补班"。 */
+    @Test
+    fun publicHolidaysAreMarkedOnTheBoardAndInTheRows() {
+        setCalendar(LocalDateTime.of(2026, 10, 1, 10, 0))
+
+        composeRule.onNodeWithText("10月1日 周四 · 国庆节").assertIsDisplayed()
+        composeRule.onNodeWithTag("shift_2026-10-01").assertIsDisplayed()
+        // 板头一处 + 首屏里 10/1 起的放假行，至少两处写着节日名。
+        assertTrue(composeRule.onAllNodesWithText("国庆节", substring = true).fetchSemanticsNodes().size >= 2)
+
+        composeRule.onNodeWithTag("calendar_list").performScrollToKey("2026-10-10")
+        composeRule.onNodeWithText("补班").assertIsDisplayed()
+    }
+
+    @Test
+    fun theCalendarOpensWithTodayAsTheFirstVisibleRow() {
+        val now = LocalDateTime.of(2026, 9, 4, 16, 8)
+        val today = now.toLocalDate()
+        setCalendar(now)
 
         composeRule.onNodeWithTag("shift_$today").assertIsDisplayed()
         val listTop = composeRule.onNodeWithTag("calendar_list").getBoundsInRoot().top

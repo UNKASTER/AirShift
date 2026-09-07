@@ -28,7 +28,7 @@
 | `neutralSoft` | 藏青 6% | 白 8% | 中性灯底、小按钮底 |
 | `nav` / `field` | `#FFFFFF` / `#F1F3F7` | `#0F1B31` / `#0B1526` | 底栏、输入框 |
 
-规则：色彩策略是 Restrained，板面是唯一的大面积色。东航红只给出港与主操作；琥珀与墨绿只做状态灯；没有渐变；阴影只有一级（`currentCardShadow`，当前条抬起）。M3 `colorScheme` 由同一套 palette 映射，`error` 系列已补齐，不会泄漏默认紫色。
+规则：色彩策略是 Restrained，板面是唯一的大面积色。东航红只给出港、主操作与日历日期列里的法定节假日名（`departureText`，日历的惯例：节日是红的）；琥珀与墨绿只做状态灯，另加日历里调休上班日的"补班"二字；没有渐变；阴影只有一级（`currentCardShadow`，当前条抬起）。M3 `colorScheme` 由同一套 palette 映射，`error` 系列已补齐，不会泄漏默认紫色。
 
 ## 字体与字阶
 

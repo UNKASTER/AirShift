@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bradj.airshift.ui.theme.AirShiftMotion
 import com.bradj.airshift.ui.theme.AirShiftSpacing
@@ -163,6 +164,7 @@ fun BoardHeader(
                             style = MaterialTheme.typography.bodyMedium,
                             color = c.onBoardSecondary,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

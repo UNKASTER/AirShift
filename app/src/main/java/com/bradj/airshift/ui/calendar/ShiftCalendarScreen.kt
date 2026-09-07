@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.holiday.ChinaHolidays
+import com.bradj.airshift.model.holiday.PublicHoliday
 import com.bradj.airshift.model.shift.BusRecommendation
 import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftCalendarRow
@@ -132,7 +134,9 @@ fun ShiftCalendarScreen(
             title = "排班日历",
             subtitle = listOfNotNull("上三休三", schedule.team.label, groupId?.let(schedule::labelOf)).joinToString(" · "),
             now = now,
-            dateText = today.boardDateText(),
+            // 今天是法定节假日 / 调休上班日时，板头日期带上它："10月1日 周四 · 国庆节"。
+            dateText = listOfNotNull(today.boardDateText(), ChinaHolidays.on(today)?.let(::holidayLabel))
+                .joinToString(" · "),
             content = {
                 TodayBlock(todayRow = todayRow, today = today, team = schedule.team, hasGroup = calendarGroupId != null)
             },
@@ -340,8 +344,21 @@ private fun DateColumn(row: ShiftCalendarRow, dimmed: Boolean) {
             style = MaterialTheme.typography.labelSmall,
             color = c.hint,
         )
+        // 法定节假日安排：放假日东航红写节日名，调休上班日琥珀写"补班"。休息日的日期列变灰，这一行不变灰——它就是要被看见的。
+        row.holiday?.let { holiday ->
+            Text(
+                holidayLabel(holiday),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (holiday.isOff) c.departureText else c.estimate,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
+
+/** 日期列与板头日期共用的节假日文案：放假日给节日名，调休上班日统一写"补班"。 */
+private fun holidayLabel(holiday: PublicHoliday): String = if (holiday.isOff) holiday.name else "补班"
 
 /** 班次灯 + 日型说明 + 今天灯。 */
 @Composable
