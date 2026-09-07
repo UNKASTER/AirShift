@@ -58,8 +58,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTimeHistory
 import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.PinnedActionBar
@@ -91,10 +93,12 @@ fun SettingsScreen(
     shiftGroupAutoDetected: Boolean,
     shiftGroupOptions: List<ShiftGroupOption>,
     shiftReportMarginMinutes: Int,
+    learnedTimes: LearnedTimes,
     now: LocalDateTime,
     onShiftTeamSelected: (ShiftTeam) -> Unit,
     onShiftGroupSelected: (Int?) -> Unit,
     onShiftReportMarginSelected: (Int) -> Unit,
+    onClearShiftTimeHistory: () -> Unit,
     onOpenNotificationAccessSettings: () -> Unit,
     onSave: (String, String) -> Unit,
     onClearApiKey: () -> Unit,
@@ -141,9 +145,11 @@ fun SettingsScreen(
                     autoDetected = shiftGroupAutoDetected,
                     options = shiftGroupOptions,
                     reportMarginMinutes = shiftReportMarginMinutes,
+                    learnedTimes = learnedTimes,
                     onTeamSelected = onShiftTeamSelected,
                     onGroupSelected = onShiftGroupSelected,
                     onMarginSelected = onShiftReportMarginSelected,
+                    onClearHistory = onClearShiftTimeHistory,
                 )
             }
             item(key = "profile") {
@@ -312,10 +318,13 @@ private fun ShiftCalendarSection(
     autoDetected: Boolean,
     options: List<ShiftGroupOption>,
     reportMarginMinutes: Int,
+    learnedTimes: LearnedTimes,
     onTeamSelected: (ShiftTeam) -> Unit,
     onGroupSelected: (Int?) -> Unit,
     onMarginSelected: (Int) -> Unit,
+    onClearHistory: () -> Unit,
 ) {
+    val c = AirShiftTokens.colors
     SectionStrip(title = "排班日历") {
         SettingRow(
             label = "大组",
@@ -373,6 +382,30 @@ private fun ShiftCalendarSection(
             onSelect = onMarginSelected,
         )
         HintLine("在“最晚到位时间”之前再留出的富余，越大则推荐更早一班班车。")
+        SettingRow(
+            label = "实测记录",
+            value = learnedTimes.latestDate
+                ?.let { "${learnedTimes.dateCount} 天 · 最近 ${it.monthValue}/${it.dayOfMonth}" }
+                ?: "尚无",
+        )
+        HintLine(
+            "每次导入排班表都会记下各班次当天的首末任务时间；同一班次累计 ${ShiftTimeHistory.MIN_SAMPLES} 天以上后，" +
+                "日历改用实测中位数推算到位与下班时间。",
+        )
+        if (!learnedTimes.isEmpty) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                val clearInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onClearHistory,
+                    interactionSource = clearInteraction,
+                    modifier = Modifier.indication(clearInteraction, LocalIndication.current),
+                    colors = ButtonDefaults.textButtonColors(contentColor = c.departureText),
+                ) { Text("清除实测记录", style = MaterialTheme.typography.labelLarge) }
+            }
+        }
     }
 }
 

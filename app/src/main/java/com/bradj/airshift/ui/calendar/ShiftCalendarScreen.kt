@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.shift.BusRecommendation
+import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftCalendarRow
 import com.bradj.airshift.model.shift.ShiftCalendarRows
 import com.bradj.airshift.model.shift.ShiftClock
@@ -62,7 +63,8 @@ private const val DAYS_AFTER_TODAY = 42L
 
 /**
  * 排班日历页：板面给今天的班次与班车，下面按月排信息条。
- * 全部由 [ShiftSchedule] 纯计算得出，只有与已导入排班同一天的那一行改用真实航班时间。
+ * 全部由 [ShiftSchedule] 纯计算得出，只有与已导入排班同一天的那一行改用真实航班时间；
+ * 其余行先看本机实测记录的聚合值（[learned]），没有再用内置表，来源在行内标出。
  */
 @Composable
 fun ShiftCalendarScreen(
@@ -71,6 +73,7 @@ fun ShiftCalendarScreen(
     groupId: Int?,
     assignments: List<RosterAssignment>,
     reportMarginMinutes: Int,
+    learned: LearnedTimes,
     now: LocalDateTime,
     onGoToSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -83,7 +86,7 @@ fun ShiftCalendarScreen(
     // 二组校准前没有班组表，谁都只能看到上班/休息的日型：用占位组号把日历算出来，不必先匹配班组。
     val calendarGroupId = groupId ?: 0.takeIf { schedule.table.size == 0 }
     val rows = remember(
-        schedule, calendarGroupId, today, rosterDate, rosterReportBy, rosterLastTask, reportMarginMinutes,
+        schedule, calendarGroupId, today, rosterDate, rosterReportBy, rosterLastTask, reportMarginMinutes, learned,
     ) {
         calendarGroupId?.let {
             ShiftCalendarRows.build(
@@ -96,6 +99,7 @@ fun ShiftCalendarScreen(
                 rosterReportByMinutes = rosterReportBy,
                 rosterLastTaskMinutes = rosterLastTask,
                 marginMinutes = reportMarginMinutes,
+                learned = learned,
             )
         }.orEmpty()
     }
@@ -110,7 +114,7 @@ fun ShiftCalendarScreen(
             content = {
                 TodayBlock(todayRow = todayRow, today = today, team = schedule.team, hasGroup = calendarGroupId != null)
             },
-            footer = { CalendarFooter(todayRow = todayRow, schedule = schedule) },
+            footer = { CalendarFooter(todayRow = todayRow, schedule = schedule, learned = learned) },
         )
         if (calendarGroupId == null) {
             EmptyBay(
@@ -198,7 +202,7 @@ private fun TodayBlock(todayRow: ShiftCalendarRow?, today: LocalDate, team: Shif
 }
 
 @Composable
-private fun CalendarFooter(todayRow: ShiftCalendarRow?, schedule: ShiftSchedule) {
+private fun CalendarFooter(todayRow: ShiftCalendarRow?, schedule: ShiftSchedule, learned: LearnedTimes) {
     val c = AirShiftTokens.colors
     val offDuty = todayRow?.takeIf { it.day.attends }?.offDutyMinutes
     Text(
@@ -210,6 +214,7 @@ private fun CalendarFooter(todayRow: ShiftCalendarRow?, schedule: ShiftSchedule)
             }
             append(
                 when {
+                    schedule.isCalibrated && !learned.isEmpty -> "已按排班表校正 · 实测 ${learned.dateCount} 天"
                     schedule.isCalibrated -> "已按排班表校正"
                     schedule.table.size == 0 -> "${schedule.team.label}没有内置班组表，导入带班次行的 Excel 后显示班次与班车"
                     else -> "内置班组表，导入带班次行的 Excel 后自动校正"
@@ -400,7 +405,13 @@ private fun BusDetail(bus: BusRecommendation?) {
             buildString {
                 append("富余 ${bus.spareMinutes} 分")
                 if (bus.isExtraHandoverBus) append(" · 加班车")
-                append(if (bus.source == ShiftEstimateSource.ROSTER) " · 按当日排班" else " · 预估")
+                append(
+                    when (bus.source) {
+                        ShiftEstimateSource.ROSTER -> " · 按当日排班"
+                        ShiftEstimateSource.LEARNED -> " · 实测 ${bus.sampleCount} 次"
+                        ShiftEstimateSource.ESTIMATE -> " · 预估"
+                    },
+                )
             },
             style = numeric,
             color = c.hint,

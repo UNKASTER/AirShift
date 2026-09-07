@@ -39,6 +39,7 @@ import com.bradj.airshift.duty.DutyUiState
 import com.bradj.airshift.duty.DutyViewModel
 import com.bradj.airshift.duty.ImportAttempt
 import com.bradj.airshift.duty.RosterSource
+import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.model.shift.ShiftTeam
@@ -167,13 +168,19 @@ internal fun AirShiftApp(
         ShiftSchedule(state.shiftCalibration, fallbackTeam = state.manualShiftTeam ?: ShiftTeam.FIRST)
     }
     val autoShiftGroupId = remember(shiftSchedule, userName) { shiftSchedule.findGroupIdForName(userName) }
-    // 手动指定的班组只对指定时所在的大组有效：一组是真实组号，二组是校准时的合成序号。
-    val shiftGroupId = autoShiftGroupId ?: state.manualShiftGroup?.takeIf { it.team == shiftSchedule.team }?.id
+    // 手动指定的班组只对指定时所在的大组有效：一组是真实组号，二组是校准时的合成序号；规则与导入时记实测共用。
+    val shiftGroupId = remember(shiftSchedule, userName, state.manualShiftGroup) {
+        shiftSchedule.resolveGroupId(userName, state.manualShiftGroup)
+    }
+    // 实测记录按当前大组聚合一次，日历各行、板脚与“下一班”共用。
+    val learnedTimes = remember(state.shiftTimeHistory, shiftSchedule.team) {
+        state.shiftTimeHistory.learnedTimes(shiftSchedule.team)
+    }
     // 当前执勤全部完成后，板面显示下一次到岗；只在日历相关状态变化时重算。
     val today = state.now.toLocalDate()
     val margin = state.shiftReportMarginMinutes
-    val nextShiftText = remember(shiftSchedule, shiftGroupId, state.assignments, margin, today) {
-        NextShift.text(shiftSchedule, shiftGroupId, state.assignments, margin, today)
+    val nextShiftText = remember(shiftSchedule, shiftGroupId, state.assignments, margin, today, learnedTimes) {
+        NextShift.text(shiftSchedule, shiftGroupId, state.assignments, margin, today, learnedTimes)
     }
 
     // 只在 MUC 状态或分钟 tick 变化时重新过滤：每次重组都产生新 List 会让全部任务卡跟着重组。
@@ -235,6 +242,7 @@ internal fun AirShiftApp(
                             shiftSchedule = shiftSchedule,
                             shiftGroupId = shiftGroupId,
                             autoShiftGroupId = autoShiftGroupId,
+                            learnedTimes = learnedTimes,
                             nextShiftText = nextShiftText,
                             visibleSpecialServiceRecords = visibleSpecialServiceRecords,
                             visibleGateChanges = visibleGateChanges,
@@ -268,6 +276,7 @@ private fun SectionContent(
     shiftSchedule: ShiftSchedule,
     shiftGroupId: Int?,
     autoShiftGroupId: Int?,
+    learnedTimes: LearnedTimes,
     nextShiftText: String?,
     visibleSpecialServiceRecords: List<FlightServiceRecord>,
     visibleGateChanges: List<GateChangeRecord>,
@@ -322,6 +331,7 @@ private fun SectionContent(
                 reportMarginMinutes = state.shiftReportMarginMinutes,
                 now = state.now,
                 onGoToSettings = { dutyNavigation.selectSection(DutySection.SETTINGS) },
+                learned = learnedTimes,
                 modifier = Modifier.padding(padding),
             )
             DutySection.SETTINGS -> SettingsScreen(
@@ -341,12 +351,14 @@ private fun SectionContent(
                     shiftSchedule.table.cycleOrder.sorted().map { ShiftGroupOption(it, shiftSchedule.labelOf(it)) }
                 },
                 shiftReportMarginMinutes = state.shiftReportMarginMinutes,
+                learnedTimes = learnedTimes,
                 now = state.now,
                 onShiftTeamSelected = viewModel::selectShiftTeam,
                 onShiftGroupSelected = { id ->
                     viewModel.selectShiftGroup(id?.let { ManualShiftGroup(shiftSchedule.team, it) })
                 },
                 onShiftReportMarginSelected = viewModel::selectReportMargin,
+                onClearShiftTimeHistory = viewModel::clearShiftTimeHistory,
                 onOpenNotificationAccessSettings = openNotificationAccessSettings,
                 onSave = viewModel::saveSettings,
                 onClearApiKey = viewModel::clearApiKey,

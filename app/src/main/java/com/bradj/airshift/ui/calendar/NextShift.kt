@@ -1,6 +1,7 @@
 package com.bradj.airshift.ui.calendar
 
 import com.bradj.airshift.model.RosterAssignment
+import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftCalendarRows
 import com.bradj.airshift.model.shift.ShiftClock
 import com.bradj.airshift.model.shift.ShiftRosterBridge
@@ -12,12 +13,15 @@ private val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
 
 /** 当前执勤全部完成（或还没有排班）时，板面仍要回答"接下来是什么"：给出下一次到岗的班次与班车。 */
 object NextShift {
+    // 与 ShiftCalendarRows.build 同一组输入，末位是可选的实测聚合值。
+    @Suppress("LongParameterList")
     fun text(
         schedule: ShiftSchedule,
         groupId: Int?,
         assignments: List<RosterAssignment>,
         marginMinutes: Int,
         today: LocalDate,
+        learned: LearnedTimes = LearnedTimes.NONE,
     ): String? = groupId
         ?.let { group ->
             ShiftCalendarRows.build(
@@ -30,6 +34,7 @@ object NextShift {
                 rosterReportByMinutes = ShiftRosterBridge.reportByMinutes(assignments),
                 rosterLastTaskMinutes = ShiftRosterBridge.lastTaskMinutes(assignments),
                 marginMinutes = marginMinutes,
+                learned = learned,
             ).firstOrNull { it.day.attends }
         }
         ?.let { next ->
