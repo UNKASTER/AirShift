@@ -91,35 +91,21 @@ internal object ExcelRosterParser {
         val warnings = mutableListOf<String>()
         if (workbookDate == null) warnings += "未识别到排班日期，暂按今天处理"
 
-        val parsedDates = mutableListOf<LocalDate>()
-        val assignments = recognizedSheets.flatMap { recognized ->
-            val rosterDate = findRosterDate(
-                rows = recognized.sheet.rows.filter { it.index <= recognized.header.rowIndex },
-                today = today,
-                uses1904DateSystem = uses1904DateSystem,
-            ) ?: workbookDate ?: today
-            parsedDates += rosterDate
-            val vipFlightNumbers = parseVipFlightNumbers(recognized.sheet.rows)
-            recognized.sheet.rows.asSequence()
-                .filter { it.index > recognized.header.rowIndex }
-                .mapNotNull { row ->
-                    parseAssignment(
-                        row = row,
-                        columns = recognized.header.columns,
-                        rosterDate = rosterDate,
-                        userName = userName,
-                        vipFlightNumbers = vipFlightNumbers,
-                        uses1904DateSystem = uses1904DateSystem,
-                    )
-                }
-                .toList()
-        }.distinctBy(RosterAssignment::stableId)
-            .sortedWith(compareBy { it.scheduledArrival ?: it.scheduledDeparture })
+        val parsedSheets = recognizedSheets.map { parseSheetRows(it, today, workbookDate, uses1904DateSystem) }
+        val byTime = compareBy<RosterAssignment> { it.scheduledArrival ?: it.scheduledDeparture }
+        // 整表全部任务行，供排班日历按班组成员学习各槽位的实测时间；同一架次拆给两组时两行都要留。
+        val staffAssignments = parsedSheets.flatMap { it.assignments }
+            .distinctBy { it.stableId + "|" + it.assignees }
+            .sortedWith(byTime)
+        val assignments = parsedSheets.flatMap { it.assignments }
+            .filter { containsAssignee(it.assignees, userName) }
+            .distinctBy(RosterAssignment::stableId)
+            .sortedWith(byTime)
 
         if (assignments.isEmpty()) {
             warnings += "表中没有找到姓名“${userName.trim()}”对应的航班"
         }
-        val rosterDate = parsedDates.firstOrNull() ?: workbookDate ?: today
+        val rosterDate = parsedSheets.firstOrNull()?.date ?: workbookDate ?: today
         val observedShiftGroups = recognizedSheets.asSequence()
             .mapNotNull { parseObservedShiftGroups(it.sheet.rows) }
             .firstOrNull()
@@ -131,7 +117,32 @@ internal object ExcelRosterParser {
             rosterDate = rosterDate,
             warnings = warnings,
             observedShiftGroups = observedShiftGroups,
+            staffAssignments = staffAssignments,
+            rosterDateRecognized = workbookDate != null,
         )
+    }
+
+    private data class ParsedSheet(val date: LocalDate, val assignments: List<RosterAssignment>)
+
+    /** 一张表的日期（表头之前找不到时回退到工作簿日期或今天）与表头之下的全部任务行。 */
+    private fun parseSheetRows(
+        recognized: RecognizedSheet,
+        today: LocalDate,
+        workbookDate: LocalDate?,
+        uses1904DateSystem: Boolean,
+    ): ParsedSheet {
+        val rosterDate = findRosterDate(
+            rows = recognized.sheet.rows.filter { it.index <= recognized.header.rowIndex },
+            today = today,
+            uses1904DateSystem = uses1904DateSystem,
+        ) ?: workbookDate ?: today
+        val vipFlightNumbers = parseVipFlightNumbers(recognized.sheet.rows)
+        val assignments = recognized.sheet.rows
+            .filter { it.index > recognized.header.rowIndex }
+            .mapNotNull { row ->
+                parseAssignment(row, recognized.header.columns, rosterDate, vipFlightNumbers, uses1904DateSystem)
+            }
+        return ParsedSheet(rosterDate, assignments)
     }
 
     /** 第一张能在表头之前找到日期的有效表的日期，作为整个工作簿的回退日期。 */
@@ -161,23 +172,20 @@ internal object ExcelRosterParser {
             "请核对表格日期"
     }
 
+    /** 一行任务，不区分是谁的：机号缺失或两个航班号都没有的行不算任务。 */
     private fun parseAssignment(
         row: ExcelRow,
         columns: Map<RosterColumn, Int>,
         rosterDate: LocalDate,
-        userName: String,
         vipFlightNumbers: Set<String>,
         uses1904DateSystem: Boolean,
     ): RosterAssignment? {
         val registration = cleanRegistration(row.cell(columns[RosterColumn.REGISTRATION])?.text.orEmpty())
-            ?: return null
-        val assignees = row.cell(columns[RosterColumn.ASSIGNEES])?.text.orEmpty().trim()
-        if (!containsAssignee(assignees, userName)) return null
-
         val inbound = cleanFlightNumber(row.cell(columns[RosterColumn.INBOUND_FLIGHT])?.text.orEmpty())
         val outbound = cleanFlightNumber(row.cell(columns[RosterColumn.OUTBOUND_FLIGHT])?.text.orEmpty())
-        if (inbound == null && outbound == null) return null
+        if (registration == null || (inbound == null && outbound == null)) return null
 
+        val assignees = row.cell(columns[RosterColumn.ASSIGNEES])?.text.orEmpty().trim()
         return RosterAssignment(
             aircraftRegistration = registration,
             aircraftType = row.cell(columns[RosterColumn.AIRCRAFT_TYPE])?.text?.trim()?.takeIf(String::isNotBlank),
@@ -450,24 +458,29 @@ internal object ExcelRosterParser {
         raw.replace(locationNoiseRegex, "").takeIf(String::isNotBlank)
 
     /**
-     * 人员栏是否含用户。有分隔符时逐项精确匹配；没有分隔符（二组连写）时先切成单人姓名再精确匹配，
-     * 切不开的串才按包含判断，且要求串里至少还容得下另一个两字姓名，避免把别人的长姓名误判为用户。
+     * 人员栏是否含某个人。有分隔符时逐项精确匹配；没有分隔符（二组连写）时先切成单人姓名再精确匹配，
+     * 切不开的串才按包含判断，且要求串里至少还容得下另一个两字姓名，避免把别人的长姓名误判为本人。
+     * 既用于挑出用户自己的行，也供排班日历把整表的行按班组成员归组（[RosterParseResult.staffAssignments]）。
      */
-    private fun containsAssignee(raw: String, userName: String): Boolean {
+    internal fun containsAssignee(raw: String, userName: String): Boolean {
         val compactUserName = normalizeName(userName)
         if (compactUserName.isBlank()) return false
         val withoutNotes = raw.replace(parentheticalNoteRegex, " ")
-        val hasDelimiter = assigneeDelimiterRegex.containsMatchIn(withoutNotes)
-        val names = withoutNotes.split(assigneeDelimiterRegex)
-            .map(::normalizeName)
-            .filter(String::isNotBlank)
-        if (hasDelimiter) return names.any { it == compactUserName }
         val compactAssignees = normalizeName(withoutNotes)
-        if (compactAssignees == compactUserName) return true
-        val split = ChineseNameSplitter.split(compactAssignees)
-        if (split.size > 1) return split.any { it == compactUserName }
-        return compactAssignees.length >= compactUserName.length + MIN_NAME_LENGTH &&
-            compactAssignees.contains(compactUserName)
+        return when {
+            assigneeDelimiterRegex.containsMatchIn(withoutNotes) ->
+                withoutNotes.split(assigneeDelimiterRegex).map(::normalizeName).any { it == compactUserName }
+            compactAssignees == compactUserName -> true
+            else -> {
+                val split = ChineseNameSplitter.split(compactAssignees)
+                if (split.size > 1) {
+                    split.any { it == compactUserName }
+                } else {
+                    compactAssignees.length >= compactUserName.length + MIN_NAME_LENGTH &&
+                        compactAssignees.contains(compactUserName)
+                }
+            }
+        }
     }
 
     private fun normalizeName(raw: String): String = raw.replace(nameNoiseRegex, "")

@@ -413,6 +413,102 @@ class ExcelRosterParserTest {
         assertTrue(result.warnings.any { it.contains("核对表格日期") && it.contains("二组") && it.contains("一组") })
     }
 
+    @Test
+    fun staffAssignmentsCarryEveryTaskRowWhileAssignmentsKeepOnlyTheUsers() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                rosterWithExtraRows(
+                    row(
+                        4,
+                        text("A", "B6802"),
+                        text("B", "320"),
+                        text("C", "MU9977"),
+                        text("D", "敦煌"),
+                        text("E", "0945"),
+                        text("G", "MU9977"),
+                        text("H", "合肥"),
+                        text("I", "1040"),
+                        text("J", "壬子 壬寅"),
+                    ),
+                    row(
+                        5,
+                        text("A", "B8392"),
+                        text("B", "320"),
+                        text("G", "MU2249"),
+                        text("H", "北京"),
+                        text("I", "0650"),
+                        text("J", "癸子（休） 癸丑"),
+                    ),
+                    // 同一架次拆给两组：与第 3 行同机号同航班，只是人员不同。
+                    row(
+                        6,
+                        text("A", "B6560"),
+                        text("B", "320"),
+                        text("G", "MU6771"),
+                        text("H", "大连"),
+                        text("I", "0710"),
+                        text("J", "壬子"),
+                    ),
+                    // 没有机号的行不是任务。
+                    row(7, text("G", "MU0000"), text("I", "0800"), text("J", "辛子")),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "辛子",
+        )
+
+        assertEquals(listOf("MU6771"), result.assignments.map { it.outboundFlight })
+        assertEquals(listOf("MU2249", "MU6771", "MU6771", "MU9977"), result.staffAssignments.map { it.outboundFlight })
+        assertEquals(
+            listOf("癸子（休） 癸丑", "辛子 辛丑 壬丑", "壬子", "壬子 壬寅"),
+            result.staffAssignments.map { it.assignees },
+        )
+        assertTrue(result.rosterDateRecognized)
+    }
+
+    @Test
+    fun containsAssigneeIsReusableForGroupMembers() {
+        // 分隔写法逐项整名比较。
+        assertTrue(ExcelRosterParser.containsAssignee("辛子 辛丑 壬丑", "辛丑"))
+        assertTrue(ExcelRosterParser.containsAssignee("辛子（休） 辛丑", "辛子"))
+        assertFalse(ExcelRosterParser.containsAssignee("辛子 辛丑 壬丑", "辛"))
+        assertFalse(ExcelRosterParser.containsAssignee("辛子 辛丑 壬丑", ""))
+        // 二组连写先切名再整名比较：王甲 不是 王甲子。
+        assertTrue(ExcelRosterParser.containsAssignee("王甲子李乙丑", "李乙丑"))
+        assertFalse(ExcelRosterParser.containsAssignee("王甲子李乙丑", "王甲"))
+        // 切不开的五字串按包含判断，但至少要容得下另一个两字姓名。
+        assertTrue(ExcelRosterParser.containsAssignee("王甲李乙丑", "李乙丑"))
+        assertFalse(ExcelRosterParser.containsAssignee("丁寅明", "丁寅"))
+    }
+
+    @Test
+    fun aSheetWithoutADateIsFlaggedAsUnrecognised() {
+        val result = ExcelRosterParser.parse(
+            input = workbook(
+                listOf(
+                    compactHeader(1),
+                    row(
+                        2,
+                        text("A", "B8392"),
+                        text("B", "320"),
+                        text("F", "MU6771"),
+                        text("G", "大连"),
+                        text("H", "0710"),
+                        text("I", "测试甲"),
+                    ),
+                ),
+                useSharedStrings = false,
+            ),
+            userName = "测试甲",
+            clock = Clock.fixed(Instant.parse("2026-08-26T00:00:00Z"), ZoneId.of("Asia/Shanghai")),
+        )
+
+        assertEquals(LocalDate.of(2026, 8, 26), result.rosterDate)
+        assertFalse(result.rosterDateRecognized)
+        assertTrue(result.warnings.any { it.contains("未识别到排班日期") })
+        assertEquals(1, result.staffAssignments.size)
+    }
+
     /** “9.7” 这种月日写法按离“今天”最近的一年解释，固定时钟让它落在 2026-09-07。 */
     private val secondTeamClock = Clock.fixed(Instant.parse("2026-09-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
 

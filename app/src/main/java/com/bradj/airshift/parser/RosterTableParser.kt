@@ -28,6 +28,13 @@ data class RosterParseResult(
      * 图片 OCR 导入以及没有该行的表格（如交接班日）为 null，此时排班日历继续使用内置表。
      */
     val observedShiftGroups: ObservedShiftGroups? = null,
+    /**
+     * 整张表的全部任务行（含各行原始人员栏），供排班日历按班组成员学习各槽位的实测首末任务时间。
+     * 只在导入过程中使用、不落库；图片 OCR 导入只有用户自己的行，留空。
+     */
+    val staffAssignments: List<RosterAssignment> = emptyList(),
+    /** 表里识别到了排班日期；为 false 时 [rosterDate] 只是按今天兜底，不能拿来记实测。 */
+    val rosterDateRecognized: Boolean = true,
 )
 
 object RosterTableParser {
