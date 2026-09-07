@@ -18,6 +18,7 @@ import com.bradj.airshift.model.shift.ObservedShiftGroups
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTimeHistory
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Clock
@@ -124,6 +125,24 @@ internal class RosterStore(
                     remove(KEY_SHIFT_CALIBRATION)
                 } else {
                     putString(KEY_SHIFT_CALIBRATION, encodeShiftCalibration(value))
+                }
+            }
+        }
+
+    /**
+     * 排班日历：本机积累的各槽位实测首末任务，每次导入排班时追加（[ShiftTimeHistory]）。
+     * JSON 损坏时按空历史处理，日历退回内置表；清空时直接删键。
+     */
+    override var shiftTimeHistory: ShiftTimeHistory
+        get() = preferences.getString(KEY_SHIFT_TIME_HISTORY, null)
+            ?.let(ShiftTimeHistoryCodec::decode)
+            ?: ShiftTimeHistory.EMPTY
+        set(value) {
+            preferences.edit {
+                if (value.isEmpty) {
+                    remove(KEY_SHIFT_TIME_HISTORY)
+                } else {
+                    putString(KEY_SHIFT_TIME_HISTORY, ShiftTimeHistoryCodec.encode(value))
                 }
             }
         }
@@ -407,6 +426,7 @@ internal class RosterStore(
         private const val KEY_SHIFT_MANUAL_GROUP_TEAM = "shift_manual_group_team"
         private const val KEY_SHIFT_MANUAL_TEAM = "shift_manual_team"
         private const val KEY_SHIFT_CALIBRATION = "shift_group_calibration"
+        private const val KEY_SHIFT_TIME_HISTORY = "shift_time_history"
         private const val MAX_SHIFT_REPORT_MARGIN = 120
     }
 }

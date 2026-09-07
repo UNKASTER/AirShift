@@ -10,8 +10,14 @@ import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ObservedShiftGroups
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftClock
+import com.bradj.airshift.model.shift.ShiftDayKind
 import com.bradj.airshift.model.shift.ShiftSchedule
+import com.bradj.airshift.model.shift.ShiftSlot
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTier
+import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.model.shift.ShiftTimeObservation
 import java.time.LocalDate
 import org.json.JSONArray
 import org.junit.After
@@ -225,6 +231,64 @@ class RosterStorePersistenceInstrumentedTest {
         assertTrue(restored!!.observed.hasSyntheticIds)
         assertEquals(ShiftTeam.SECOND, ShiftSchedule(restored).team)
         assertEquals("王甲子组", ShiftSchedule(restored).labelOf(1))
+    }
+
+    /** 一组第 2 天晚一：07:10 出港起、次日 00:40 止。 */
+    private val nightObservation = ShiftTimeObservation(
+        date = LocalDate.of(2026, 8, 24),
+        team = ShiftTeam.FIRST,
+        kind = ShiftDayKind.WORK_SECOND,
+        slot = ShiftSlot(ShiftTier.NIGHT, 1),
+        firstTaskMinutes = ShiftClock.of(7, 10),
+        inbound = false,
+        lastTaskMinutes = ShiftClock.of(0, 40, nextDay = true),
+    )
+
+    @Test
+    fun shiftTimeHistorySurvivesAJsonRoundTrip() {
+        val history = ShiftTimeHistory().record(
+            listOf(
+                nightObservation,
+                ShiftTimeObservation(
+                    date = LocalDate.of(2026, 9, 7),
+                    team = ShiftTeam.SECOND,
+                    kind = ShiftDayKind.WORK_FIRST,
+                    slot = ShiftSlot(ShiftTier.MID, 2),
+                    firstTaskMinutes = ShiftClock.of(12, 50),
+                    inbound = true,
+                    lastTaskMinutes = ShiftClock.of(21, 30),
+                ),
+            ),
+        )
+
+        RosterStore(isolatedContext).shiftTimeHistory = history
+        val restored = RosterStore(isolatedContext).shiftTimeHistory
+
+        assertEquals(history, restored)
+        // 夜班跨零点的末项必须原样回来，否则下班时间会算到当天。
+        assertEquals(ShiftClock.of(0, 40, nextDay = true), restored.observations.first().lastTaskMinutes)
+    }
+
+    @Test
+    fun shiftTimeHistoryDefaultsToEmptyAndCanBeCleared() {
+        val store = RosterStore(isolatedContext)
+        assertTrue(store.shiftTimeHistory.isEmpty)
+
+        store.shiftTimeHistory = ShiftTimeHistory().record(listOf(nightObservation))
+        assertFalse(RosterStore(isolatedContext).shiftTimeHistory.isEmpty)
+
+        store.shiftTimeHistory = ShiftTimeHistory.EMPTY
+        assertTrue(RosterStore(isolatedContext).shiftTimeHistory.isEmpty)
+        assertFalse(preferences.contains("shift_time_history"))
+    }
+
+    @Test
+    fun corruptShiftTimeHistoryJsonFallsBackToEmpty() {
+        preferences.edit().putString("shift_time_history", "{ not json").commit()
+
+        val history = RosterStore(isolatedContext).shiftTimeHistory
+        assertTrue(history.isEmpty)
+        assertTrue(history.learnedTimes(ShiftTeam.FIRST).isEmpty)
     }
 
     private fun assignment() = RosterAssignment(

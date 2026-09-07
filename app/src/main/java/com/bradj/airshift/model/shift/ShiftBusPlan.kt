@@ -3,8 +3,8 @@ package com.bradj.airshift.model.shift
 import com.bradj.airshift.model.DutyTimeline
 import java.time.LocalTime
 
-/** 班车推荐依据：ROSTER 用当天真实排班算出，ESTIMATE 用历史规律推算。 */
-enum class ShiftEstimateSource { ROSTER, ESTIMATE }
+/** 班车推荐依据：ROSTER 用当天真实排班算出，LEARNED 用本机实测记录的中位数，ESTIMATE 用内置表推算。 */
+enum class ShiftEstimateSource { ROSTER, LEARNED, ESTIMATE }
 
 /** 排班表中某槽位的典型首个任务，用于没有当日排班时推算到位时间。 */
 data class ExpectedFirstTask(val minutes: Int, val inbound: Boolean)
@@ -22,6 +22,8 @@ data class BusRecommendation(
     val isExtraHandoverBus: Boolean,
     /** true 表示按用户既定习惯固定乘坐，不是按到位时间算出来的。 */
     val isFixedByRule: Boolean,
+    /** 来源为 LEARNED 时参与聚合的实测次数，其余为 0。 */
+    val sampleCount: Int = 0,
 )
 
 /**
@@ -73,24 +75,29 @@ object ShiftBusPlan {
         else -> null
     }
 
-    /** 典型首个任务；六份实测排班表内各槽位的常见值。 */
+    /** 到位提前量：进港 15 分钟、出港 70 分钟。 */
+    fun reportLeadMinutes(inbound: Boolean): Int =
+        if (inbound) INBOUND_REPORT_LEAD_MINUTES else OUTBOUND_REPORT_LEAD_MINUTES
+
+    /** 首个任务对应的最晚到位时间。 */
+    fun reportByMinutes(task: ExpectedFirstTask): Int = task.minutes - reportLeadMinutes(task.inbound)
+
+    /** 内置表里的典型首个任务；六份实测排班表内各槽位的常见值。第 2、3 天共用一张表。 */
     fun expectedFirstTask(kind: ShiftDayKind, slot: ShiftSlot): ExpectedFirstTask? {
-        val table = when (kind) {
-            ShiftDayKind.WORK_FIRST -> FIRST_TASK_DAY_ONE
-            ShiftDayKind.WORK_SECOND, ShiftDayKind.WORK_THIRD -> FIRST_TASK_FULL_DAY
-            ShiftDayKind.HANDOVER -> FIRST_TASK_HANDOVER
-            ShiftDayKind.REST -> return null
+        val table = when (ShiftTimeBucket.of(kind)) {
+            ShiftTimeBucket.DAY_ONE -> FIRST_TASK_DAY_ONE
+            ShiftTimeBucket.FULL_DAY -> FIRST_TASK_FULL_DAY
+            ShiftTimeBucket.HANDOVER -> FIRST_TASK_HANDOVER
+            null -> return null
         }
         return table[slot.tier to slot.number]
     }
 
-    /** 典型到位时间：首个任务时间减去出港 70 / 进港 15 分钟。 */
-    fun expectedReportByMinutes(kind: ShiftDayKind, slot: ShiftSlot): Int? {
-        val task = expectedFirstTask(kind, slot) ?: return null
-        return task.minutes - if (task.inbound) INBOUND_REPORT_LEAD_MINUTES else OUTBOUND_REPORT_LEAD_MINUTES
-    }
+    /** 内置表的典型到位时间：首个任务时间减去出港 70 / 进港 15 分钟。 */
+    fun expectedReportByMinutes(kind: ShiftDayKind, slot: ShiftSlot): Int? =
+        expectedFirstTask(kind, slot)?.let(::reportByMinutes)
 
-    /** 典型下班时间；交接班日交班后即回家。 */
+    /** 内置表的典型下班时间；交接班日交班后即回家。 */
     fun expectedOffDutyMinutes(kind: ShiftDayKind, slot: ShiftSlot): Int? = when (kind) {
         ShiftDayKind.REST -> null
         ShiftDayKind.HANDOVER -> ShiftClock.of(10, 0)
@@ -98,32 +105,20 @@ object ShiftBusPlan {
     }
 
     /**
-     * 推荐班车。[rosterReportByMinutes] 非空表示当天已导入真实排班，据其首个任务算出的到位时间。
-     * 没有任何可乘班车（到位太早）时返回 null。
+     * 推荐班车。到位时间的来源按优先级取：[rosterReportByMinutes]（当天已导入的真实排班）>
+     * [learned]（本机实测记录的聚合值）> 内置表。没有任何可乘班车（到位太早）时返回 null。
      */
     fun recommend(
         kind: ShiftDayKind,
         slot: ShiftSlot,
         rosterReportByMinutes: Int? = null,
         marginMinutes: Int = DEFAULT_REPORT_MARGIN_MINUTES,
+        learned: LearnedSlotTimes? = null,
     ): BusRecommendation? {
-        if (kind.isRest) return null
-        val source = if (rosterReportByMinutes != null) ShiftEstimateSource.ROSTER else ShiftEstimateSource.ESTIMATE
-        val reportBy = rosterReportByMinutes ?: expectedReportByMinutes(kind, slot) ?: return null
+        val estimate = ReportByEstimate.of(kind, slot, rosterReportByMinutes, learned) ?: return null
         val fixed = fixedDeparture(kind, slot)
-        val departure = fixed
-            ?: latestDepartureBefore(kind, reportBy - marginMinutes.coerceAtLeast(0))
-            ?: return null
-        val arriveAt = ShiftClock.of(departure) + RIDE_MINUTES
-        return BusRecommendation(
-            departure = departure,
-            arriveAtMinutes = arriveAt,
-            reportByMinutes = reportBy,
-            spareMinutes = reportBy - arriveAt,
-            source = source,
-            isExtraHandoverBus = departure == EXTRA_HANDOVER_DEPARTURE && hasExtraHandoverBus(kind),
-            isFixedByRule = fixed != null,
-        )
+        val departure = fixed ?: latestDepartureBefore(kind, estimate.reportBy - marginMinutes.coerceAtLeast(0))
+        return departure?.let { estimate.recommendation(kind, it, isFixed = fixed != null) }
     }
 
     /** 满足「发车 + 车程 ≤ deadline」的最晚一班。 */
@@ -191,8 +186,43 @@ object ShiftBusPlan {
         (ShiftTier.NIGHT to 3) to ShiftClock.of(1, 35, nextDay = true),
         (ShiftTier.NIGHT to 4) to ShiftClock.of(1, 35, nextDay = true),
     )
+}
 
-    private fun outbound(hour: Int, minute: Int) = ExpectedFirstTask(ShiftClock.of(hour, minute), inbound = false)
+private fun outbound(hour: Int, minute: Int) = ExpectedFirstTask(ShiftClock.of(hour, minute), inbound = false)
 
-    private fun inbound(hour: Int, minute: Int) = ExpectedFirstTask(ShiftClock.of(hour, minute), inbound = true)
+private fun inbound(hour: Int, minute: Int) = ExpectedFirstTask(ShiftClock.of(hour, minute), inbound = true)
+
+/** 一次选车所依据的到位时间及其来源。 */
+private data class ReportByEstimate(val reportBy: Int, val source: ShiftEstimateSource, val sampleCount: Int) {
+    fun recommendation(kind: ShiftDayKind, departure: LocalTime, isFixed: Boolean): BusRecommendation {
+        val arriveAt = ShiftClock.of(departure) + ShiftBusPlan.RIDE_MINUTES
+        return BusRecommendation(
+            departure = departure,
+            arriveAtMinutes = arriveAt,
+            reportByMinutes = reportBy,
+            spareMinutes = reportBy - arriveAt,
+            source = source,
+            isExtraHandoverBus = departure == ShiftBusPlan.EXTRA_HANDOVER_DEPARTURE &&
+                ShiftBusPlan.hasExtraHandoverBus(kind),
+            isFixedByRule = isFixed,
+            sampleCount = sampleCount,
+        )
+    }
+
+    companion object {
+        /** 优先级：当天真实排班 > 实测聚合值 > 内置表；休息日没有到位时间。 */
+        fun of(
+            kind: ShiftDayKind,
+            slot: ShiftSlot,
+            rosterReportByMinutes: Int?,
+            learned: LearnedSlotTimes?,
+        ): ReportByEstimate? = when {
+            kind.isRest -> null
+            rosterReportByMinutes != null -> ReportByEstimate(rosterReportByMinutes, ShiftEstimateSource.ROSTER, 0)
+            learned != null ->
+                ReportByEstimate(learned.reportByMinutes, ShiftEstimateSource.LEARNED, learned.sampleCount)
+            else -> ShiftBusPlan.expectedReportByMinutes(kind, slot)
+                ?.let { ReportByEstimate(it, ShiftEstimateSource.ESTIMATE, 0) }
+        }
+    }
 }

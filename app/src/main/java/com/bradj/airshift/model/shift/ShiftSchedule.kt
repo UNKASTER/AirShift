@@ -96,6 +96,13 @@ class ShiftSchedule(calibration: ShiftCalibration? = null, fallbackTeam: ShiftTe
 
     fun findGroupIdForName(name: String): Int? = table.findGroupIdForName(name)
 
+    /**
+     * 用户的班组：姓名匹配优先；匹配不到时才用设置里手动指定的班组，且只接受指定时所在大组与当前大组相同的那一个
+     * （一组的组号是真实编号、二组的是合成序号，跨大组没有意义）。界面与导入时的实测记录共用这一规则。
+     */
+    fun resolveGroupId(userName: String, manual: ManualShiftGroup?): Int? =
+        findGroupIdForName(userName) ?: manual?.takeIf { it.team == team }?.id
+
     fun labelOf(groupId: Int): String = table.labelOf(groupId)
 
     fun dayKind(date: LocalDate): ShiftDayKind = ShiftCycle.dayKind(date, team)

@@ -183,6 +183,30 @@ class ShiftScheduleTest {
         assertFalse(schedule.dayFor(7, date(8, 30)).attends)
     }
 
+    @Test
+    fun `resolving the group prefers the name match and only honours a manual group of the same team`() {
+        val calibrated = ShiftSchedule(
+            ShiftCalibration(
+                date = date(8, 24),
+                observed = ObservedShiftGroups(
+                    early = listOf(1, 5, 11),
+                    mid = listOf(8, 9, 2, 6),
+                    night = listOf(4, 10, 3),
+                    members = mapOf(5 to listOf("乙子", "乙丑")),
+                ),
+            ),
+        )
+        // 姓名匹配得到组 5，手动指定被忽略。
+        assertEquals(5, calibrated.resolveGroupId("乙丑", ManualShiftGroup(ShiftTeam.FIRST, 8)))
+        // 匹配不到时用同大组的手动指定。
+        assertEquals(8, calibrated.resolveGroupId("辛子", ManualShiftGroup(ShiftTeam.FIRST, 8)))
+        // 另一大组的手动指定与没有指定都得不到班组。
+        assertNull(calibrated.resolveGroupId("辛子", ManualShiftGroup(ShiftTeam.SECOND, 8)))
+        assertNull(calibrated.resolveGroupId("辛子", null))
+        // 内置表没有成员，只能靠手动指定。
+        assertEquals(3, schedule.resolveGroupId("辛子", ManualShiftGroup(ShiftTeam.FIRST, 3)))
+    }
+
     private val septemberSeventh = ShiftCalibration(
         date = date(9, 7),
         observed = ObservedShiftGroups(

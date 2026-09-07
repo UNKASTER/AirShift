@@ -39,9 +39,11 @@ object ShiftRosterBridge {
         return minutesFrom(date, latest)
     }
 
-    private fun scheduledEnd(assignment: RosterAssignment): LocalDateTime? =
+    /** 一项任务的计划结束时刻：过站取出港，只进港取到达。[ShiftTimeObserver] 按同一口径取末项。 */
+    internal fun scheduledEnd(assignment: RosterAssignment): LocalDateTime? =
         listOfNotNull(assignment.scheduledArrival, assignment.scheduledDeparture).maxOrNull()
 
-    private fun minutesFrom(date: LocalDate, moment: LocalDateTime): Int =
+    /** 时刻换算为自 [date] 00:00 起的分钟数，跨零点为负或大于 1440。 */
+    internal fun minutesFrom(date: LocalDate, moment: LocalDateTime): Int =
         Duration.between(date.atStartOfDay(), moment).toMinutes().toInt()
 }

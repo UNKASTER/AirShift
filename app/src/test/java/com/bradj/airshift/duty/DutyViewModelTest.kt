@@ -21,8 +21,14 @@ import com.bradj.airshift.location.AirportMatch
 import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.dutyWindowIndices
 import com.bradj.airshift.model.shift.ManualShiftGroup
+import com.bradj.airshift.model.shift.ObservedShiftGroups
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftClock
+import com.bradj.airshift.model.shift.ShiftDayKind
+import com.bradj.airshift.model.shift.ShiftSlot
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTier
+import com.bradj.airshift.model.shift.ShiftTimeHistory
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ScheduleSummary
 import com.bradj.airshift.specialservice.SpecialServiceState
@@ -411,6 +417,131 @@ class DutyViewModelTest {
         assertEquals(lookups(roster), refresher.requests.single().targets)
     }
 
+    // ---------- 实测记录 ----------
+
+    /** 09-04 是一组接班日：早 [1,5,11] 中 [8,9,2,6] 晚 [4,10,3]，用户在组 1。 */
+    private val shiftLines = ObservedShiftGroups(
+        early = listOf(1, 5, 11),
+        mid = listOf(8, 9, 2, 6),
+        night = listOf(4, 10, 3),
+        members = mapOf(
+            1 to listOf(TEST_USER_NAME, "测试乙"),
+            5 to listOf("乙子"),
+            11 to listOf("丙子"),
+            8 to listOf("丁子"),
+            9 to listOf("戊子"),
+            2 to listOf("己子"),
+            6 to listOf("庚子"),
+            4 to listOf("辛子"),
+            10 to listOf("壬子"),
+            3 to listOf("癸子"),
+        ),
+    )
+
+    private fun staffRow(assignees: String, hour: Int, index: Int) = duties(1).single().copy(
+        aircraftRegistration = "B900$index",
+        outboundFlight = "ZZ300$index",
+        scheduledDeparture = baseTime.toLocalDate().atTime(hour, 0),
+        assignees = assignees,
+    )
+
+    private fun importRoster(result: RosterParseResult) {
+        val requestsBefore = refresher.requests.size
+        viewModel.importExcel(RosterSource { result })
+        runCurrent()
+        // 导入后若发起了实时刷新，让假刷新器完成，下一次导入才不会被 isWorking 挡住。
+        if (refresher.requests.size > requestsBefore) {
+            refresher.finish(refresher.requests.lastIndex)
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun importingASheetWithShiftLinesRecordsOneObservationPerMatchedGroup() {
+        val roster = duties(2)
+        val staff = roster + listOf(staffRow("乙子", 14, 1), staffRow("辛子（休） 辛丑", 15, 2), staffRow("癸子", 8, 3))
+        importRoster(
+            RosterParseResult(
+                assignments = roster,
+                rosterDate = baseTime.toLocalDate(),
+                warnings = emptyList(),
+                observedShiftGroups = shiftLines,
+                staffAssignments = staff,
+            ),
+        )
+
+        val history = store.shiftTimeHistory
+        assertEquals(viewModel.uiState.value.shiftTimeHistory, history)
+        // 组 1（用户自己的行）、组 5、组 4、组 3 各一条；其余组没有行。
+        assertEquals(4, history.observations.size)
+        assertTrue(history.observations.all { it.date == baseTime.toLocalDate() })
+        assertTrue(history.observations.all { it.kind == ShiftDayKind.WORK_FIRST && it.team == ShiftTeam.FIRST })
+        val bySlot = history.observations.associateBy { it.slot }
+        // 组 1 早一：用户自己的两项任务，13:00 出港起、14:00 止。
+        assertEquals(ShiftClock.of(13, 0), bySlot.getValue(ShiftSlot(ShiftTier.EARLY, 1)).firstTaskMinutes)
+        assertEquals(ShiftClock.of(14, 0), bySlot.getValue(ShiftSlot(ShiftTier.EARLY, 1)).lastTaskMinutes)
+        assertEquals(ShiftClock.of(14, 0), bySlot.getValue(ShiftSlot(ShiftTier.EARLY, 2)).firstTaskMinutes)
+        assertEquals(ShiftClock.of(15, 0), bySlot.getValue(ShiftSlot(ShiftTier.NIGHT, 1)).firstTaskMinutes)
+        // 癸子 那行 08:00 出港，到位 06:50，合理；晚三也记上。
+        assertEquals(ShiftClock.of(8, 0), bySlot.getValue(ShiftSlot(ShiftTier.NIGHT, 3)).firstTaskMinutes)
+        // 导入本身照常完成（随后的实时刷新会补上机位，故只比任务本身）。
+        assertEquals(roster.map { it.stableId }, store.loadSnapshot().assignments.map { it.stableId })
+    }
+
+    @Test
+    fun importingWithoutStaffRowsFallsBackToTheUsersOwnSlot() {
+        // 没有班次行、没有整表行（图片导入）：内置表下组 8 在 09-04 是晚二。
+        store.manualShiftGroup = ManualShiftGroup(ShiftTeam.FIRST, 8)
+        val roster = duties(2)
+        importRoster(RosterParseResult(roster, baseTime.toLocalDate(), emptyList()))
+
+        val observation = store.shiftTimeHistory.observations.single()
+        assertEquals(ShiftSlot(ShiftTier.NIGHT, 2), observation.slot)
+        assertEquals(ShiftDayKind.WORK_FIRST, observation.kind)
+        assertEquals(ShiftClock.of(13, 0), observation.firstTaskMinutes)
+        assertFalse(observation.inbound)
+        assertEquals(ShiftClock.of(14, 0), observation.lastTaskMinutes)
+    }
+
+    @Test
+    fun reimportingTheSameDateReplacesItsObservations() {
+        store.manualShiftGroup = ManualShiftGroup(ShiftTeam.FIRST, 8)
+        importRoster(RosterParseResult(duties(2), baseTime.toLocalDate(), emptyList()))
+        val later = duties(1).map { it.copy(scheduledDeparture = baseTime.toLocalDate().atTime(16, 30)) }
+        importRoster(RosterParseResult(later, baseTime.toLocalDate(), emptyList()))
+
+        val observation = store.shiftTimeHistory.observations.single()
+        assertEquals(ShiftClock.of(16, 30), observation.firstTaskMinutes)
+        assertEquals(ShiftClock.of(16, 30), observation.lastTaskMinutes)
+    }
+
+    @Test
+    fun importsOnARestDayOrWithoutARecognisedDateRecordNothing() {
+        store.manualShiftGroup = ManualShiftGroup(ShiftTeam.FIRST, 8)
+        val restDay = baseTime.toLocalDate().minusDays(2)
+        val restRoster = duties(1).map { it.copy(scheduledDeparture = restDay.atTime(13, 0)) }
+        importRoster(RosterParseResult(restRoster, restDay, emptyList()))
+        assertTrue(store.shiftTimeHistory.isEmpty)
+
+        importRoster(RosterParseResult(duties(2), baseTime.toLocalDate(), emptyList(), rosterDateRecognized = false))
+        assertTrue(store.shiftTimeHistory.isEmpty)
+        assertTrue(viewModel.uiState.value.shiftTimeHistory.isEmpty)
+    }
+
+    @Test
+    fun clearingTheHistoryEmptiesTheStoreAndTheState() {
+        store.manualShiftGroup = ManualShiftGroup(ShiftTeam.FIRST, 8)
+        importRoster(RosterParseResult(duties(2), baseTime.toLocalDate(), emptyList()))
+        assertFalse(store.shiftTimeHistory.isEmpty)
+
+        viewModel.clearShiftTimeHistory()
+        runCurrent()
+
+        assertTrue(store.shiftTimeHistory.isEmpty)
+        assertTrue(viewModel.uiState.value.shiftTimeHistory.isEmpty)
+        assertEquals("实测记录已清除", viewModel.uiState.value.statusMessage)
+    }
+
     private fun runCurrent() = dispatcher.scheduler.runCurrent()
 
     private fun ports() = DutyPorts(
@@ -472,6 +603,7 @@ private class FakeRosterRepository(private val clock: Clock) : RosterRepository 
     override var manualShiftTeam: ShiftTeam? = null
     override var manualShiftGroup: ManualShiftGroup? = null
     override var shiftCalibration: ShiftCalibration? = null
+    override var shiftTimeHistory: ShiftTimeHistory = ShiftTimeHistory.EMPTY
 
     override val currentDutyIndex: Int get() = dutyIndex
     override val rosterGeneration: Long get() = generation

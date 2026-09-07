@@ -259,6 +259,92 @@ class ShiftBusPlanTest {
         assertTrue(recommendation.isFixedByRule)
     }
 
+    // ---------- 实测记录 ----------
+
+    private fun learned(hour: Int, minute: Int, inbound: Boolean = false, samples: Int = 4) = LearnedSlotTimes(
+        firstTask = ExpectedFirstTask(ShiftClock.of(hour, minute), inbound),
+        offDutyMinutes = null,
+        sampleCount = samples,
+    )
+
+    @Test
+    fun `a learned first task overrides the built-in table and reports its sample count`() {
+        // 实测首个任务 09:50 出港 → 最晚 08:40 到位 → 留 15 分钟余量 → 08:00 班车。
+        val recommendation = ShiftBusPlan.recommend(ShiftDayKind.WORK_SECOND, early1, learned = learned(9, 50))!!
+        assertEquals(bus(8, 0), recommendation.departure)
+        assertEquals(ShiftClock.of(8, 40), recommendation.reportByMinutes)
+        assertEquals(ShiftEstimateSource.LEARNED, recommendation.source)
+        assertEquals(4, recommendation.sampleCount)
+        assertFalse(recommendation.isFixedByRule)
+    }
+
+    @Test
+    fun `a real roster report time still beats the learned estimate`() {
+        val recommendation = ShiftBusPlan.recommend(
+            ShiftDayKind.WORK_SECOND,
+            early1,
+            rosterReportByMinutes = ShiftClock.of(6, 10),
+            learned = learned(9, 50),
+        )!!
+        assertEquals(ShiftClock.of(6, 10), recommendation.reportByMinutes)
+        assertEquals(ShiftEstimateSource.ROSTER, recommendation.source)
+        assertEquals(0, recommendation.sampleCount)
+    }
+
+    @Test
+    fun `the fixed noon run keeps applying with learned data`() {
+        // 实测中三 11:50 进港 → 11:35 到位，固定 12:00 班车 12:05 到场，晚 30 分钟；由界面提示，不改习惯。
+        val recommendation = ShiftBusPlan.recommend(
+            ShiftDayKind.WORK_SECOND,
+            mid3,
+            learned = learned(11, 50, inbound = true),
+        )!!
+        assertEquals(bus(12, 0), recommendation.departure)
+        assertTrue(recommendation.isFixedByRule)
+        assertEquals(ShiftEstimateSource.LEARNED, recommendation.source)
+        assertEquals(-30, recommendation.spareMinutes)
+    }
+
+    @Test
+    fun `learned estimates only arrive late when a fixed habit bus applies`() {
+        val kinds = listOf(
+            ShiftDayKind.WORK_FIRST,
+            ShiftDayKind.WORK_SECOND,
+            ShiftDayKind.WORK_THIRD,
+            ShiftDayKind.HANDOVER,
+        )
+        val slots = ShiftTier.entries.flatMap { tier -> (1..4).map { ShiftSlot(tier, it) } }
+        val cases = kinds.flatMap { kind -> slots.map { slot -> kind to slot } }
+        val variants = listOf(-20, 40).flatMap { delta -> ShiftBusPlan.REPORT_MARGIN_OPTIONS.map { delta to it } }
+        var checked = 0
+        cases.forEach { (kind, slot) ->
+            val builtIn = ShiftBusPlan.expectedFirstTask(kind, slot) ?: return@forEach
+            variants.forEach { (delta, margin) ->
+                val learned = LearnedSlotTimes(ExpectedFirstTask(builtIn.minutes + delta, builtIn.inbound), null, 3)
+                val recommendation = ShiftBusPlan.recommend(kind, slot, marginMinutes = margin, learned = learned)
+                requireNotNull(recommendation) { "$kind ${slot.label} 偏移 $delta 余量 $margin 没有班车" }
+                assertEquals(ShiftEstimateSource.LEARNED, recommendation.source)
+                assertTrue(
+                    "$kind ${slot.label} 偏移 $delta 余量 $margin 的到场时间晚于到位时间",
+                    recommendation.spareMinutes >= 0 || recommendation.isFixedByRule,
+                )
+                checked++
+            }
+        }
+        assertTrue(checked > 120)
+    }
+
+    @Test
+    fun `the report lead helpers agree with the expected report time`() {
+        assertEquals(ShiftBusPlan.OUTBOUND_REPORT_LEAD_MINUTES, ShiftBusPlan.reportLeadMinutes(inbound = false))
+        assertEquals(ShiftBusPlan.INBOUND_REPORT_LEAD_MINUTES, ShiftBusPlan.reportLeadMinutes(inbound = true))
+        val task = ShiftBusPlan.expectedFirstTask(ShiftDayKind.WORK_FIRST, mid1)!!
+        assertEquals(
+            ShiftBusPlan.expectedReportByMinutes(ShiftDayKind.WORK_FIRST, mid1),
+            ShiftBusPlan.reportByMinutes(task),
+        )
+    }
+
     @Test
     fun `the roster bridge derives the report time from the earliest task`() {
         val day = LocalDate.of(2026, 8, 30)

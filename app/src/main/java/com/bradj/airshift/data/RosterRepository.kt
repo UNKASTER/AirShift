@@ -7,6 +7,7 @@ import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTimeHistory
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -26,6 +27,9 @@ internal interface RosterRepository {
     var manualShiftTeam: ShiftTeam?
     var manualShiftGroup: ManualShiftGroup?
     var shiftCalibration: ShiftCalibration?
+
+    /** 本机积累的各槽位实测首末任务；没有记录时为 [ShiftTimeHistory.EMPTY]。 */
+    var shiftTimeHistory: ShiftTimeHistory
 
     val currentDutyIndex: Int
     val rosterGeneration: Long

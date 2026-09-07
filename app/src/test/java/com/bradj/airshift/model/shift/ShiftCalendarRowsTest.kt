@@ -182,4 +182,95 @@ class ShiftCalendarRowsTest {
         assertEquals(LocalTime.of(8, 0), row.bus?.departure)
         assertEquals(ShiftEstimateSource.ROSTER, row.bus?.source)
     }
+
+    // ---------- 实测记录 ----------
+
+    private fun learnedTimes(
+        bucket: ShiftTimeBucket,
+        slot: ShiftSlot,
+        firstTask: ExpectedFirstTask,
+        offDuty: Int?,
+    ) = LearnedTimes(
+        entries = mapOf((bucket to slot) to LearnedSlotTimes(firstTask, offDuty, sampleCount = 3)),
+        dateCount = 3,
+        latestDate = LocalDate.of(2026, 8, 31),
+    )
+
+    private fun rowOn(date: LocalDate, groupId: Int, learned: LearnedTimes, rosterDate: LocalDate? = null) =
+        ShiftCalendarRows.build(
+            schedule = schedule,
+            groupId = groupId,
+            from = date,
+            toInclusive = date,
+            today = today,
+            rosterDate = rosterDate,
+            rosterReportByMinutes = ShiftClock.of(10, 0),
+            rosterLastTaskMinutes = ShiftClock.of(18, 5),
+            learned = learned,
+        ).single()
+
+    @Test
+    fun `a learned slot replaces the estimate and is labelled learned`() {
+        // 组 1 在 8-30 是早二；实测首个任务 09:50 出港、下班 18:20。
+        val learned = learnedTimes(
+            ShiftTimeBucket.FULL_DAY,
+            ShiftSlot(ShiftTier.EARLY, 2),
+            ExpectedFirstTask(ShiftClock.of(9, 50), inbound = false),
+            ShiftClock.of(18, 20),
+        )
+        val row = rowOn(LocalDate.of(2026, 8, 30), groupId = 1, learned = learned)
+        assertEquals(LocalTime.of(8, 0), row.bus?.departure)
+        assertEquals(ShiftEstimateSource.LEARNED, row.bus?.source)
+        assertEquals(3, row.bus?.sampleCount)
+        assertEquals(ShiftClock.of(18, 20), row.offDutyMinutes)
+        assertEquals(ShiftEstimateSource.LEARNED, row.offDutySource)
+    }
+
+    @Test
+    fun `the same day roster still beats the learned slot`() {
+        val learned = learnedTimes(
+            ShiftTimeBucket.FULL_DAY,
+            ShiftSlot(ShiftTier.EARLY, 2),
+            ExpectedFirstTask(ShiftClock.of(9, 50), inbound = false),
+            ShiftClock.of(18, 20),
+        )
+        val date = LocalDate.of(2026, 8, 30)
+        val row = rowOn(date, groupId = 1, learned = learned, rosterDate = date)
+        assertEquals(ShiftClock.of(10, 0), row.bus?.reportByMinutes)
+        assertEquals(ShiftEstimateSource.ROSTER, row.bus?.source)
+        assertEquals(ShiftClock.of(18, 5), row.offDutyMinutes)
+        assertEquals(ShiftEstimateSource.ROSTER, row.offDutySource)
+    }
+
+    @Test
+    fun `the handover row keeps the ten o clock handover with learned data`() {
+        // 组 11 在 9-1 交接班日按早一到岗；实测首个任务 08:30 出港 → 07:20 到位 → 05:55 班车；交班仍固定 10:00。
+        val learned = learnedTimes(
+            ShiftTimeBucket.HANDOVER,
+            ShiftSlot(ShiftTier.EARLY, 1),
+            ExpectedFirstTask(ShiftClock.of(8, 30), inbound = false),
+            offDuty = null,
+        )
+        val row = rowOn(LocalDate.of(2026, 9, 1), groupId = 11, learned = learned)
+        assertEquals(ShiftDayKind.HANDOVER, row.day.kind)
+        assertEquals(LocalTime.of(5, 55), row.bus?.departure)
+        assertEquals(ShiftEstimateSource.LEARNED, row.bus?.source)
+        assertEquals(ShiftClock.of(10, 0), row.offDutyMinutes)
+        assertEquals(ShiftEstimateSource.ESTIMATE, row.offDutySource)
+    }
+
+    @Test
+    fun `a learned entry for another bucket leaves the row on the estimate`() {
+        val learned = learnedTimes(
+            ShiftTimeBucket.DAY_ONE,
+            ShiftSlot(ShiftTier.EARLY, 2),
+            ExpectedFirstTask(ShiftClock.of(9, 50), inbound = false),
+            ShiftClock.of(18, 20),
+        )
+        val row = rowOn(LocalDate.of(2026, 8, 30), groupId = 1, learned = learned)
+        assertEquals(LocalTime.of(5, 55), row.bus?.departure)
+        assertEquals(ShiftEstimateSource.ESTIMATE, row.bus?.source)
+        assertEquals(ShiftClock.of(17, 30), row.offDutyMinutes)
+        assertEquals(ShiftEstimateSource.ESTIMATE, row.offDutySource)
+    }
 }

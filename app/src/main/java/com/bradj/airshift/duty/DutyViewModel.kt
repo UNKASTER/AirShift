@@ -16,7 +16,11 @@ import com.bradj.airshift.model.RosterTracking
 import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
+import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.model.shift.ShiftTimeObserver
+import com.bradj.airshift.parser.ExcelRosterParser
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.specialservice.SpecialServiceState
 import kotlinx.coroutines.CancellationException
@@ -73,6 +77,7 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
             manualShiftTeam = store.manualShiftTeam,
             manualShiftGroup = store.manualShiftGroup,
             shiftReportMarginMinutes = store.shiftReportMarginMinutes,
+            shiftTimeHistory = store.shiftTimeHistory,
         )
     }
 
@@ -174,6 +179,7 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
                 store.shiftCalibration = calibration
                 update { copy(shiftCalibration = calibration) }
             }
+        recordShiftTimes(result)
         val previousAssignments = store.loadSnapshot().assignments
         val importGeneration = store.replaceAssignments(result.assignments)
         pendingRefresh = null
@@ -203,6 +209,36 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         update { copy(isWorking = false) }
         if (applied) requestPermissionsAndLocate()
         drainPendingRefresh()
+    }
+
+    /**
+     * 从整张表学习各槽位当天的实测首末任务（[ShiftTimeObserver]）并累积到本机历史；整表按成员归不出任何组时
+     * （图片导入、一组未校准）退回用户自己的槽位。表格日期没识别出来就不记，免得整天记到错误的日型上。
+     * 这是非关键路径：纯计算出错只记日志，绝不影响导入。
+     */
+    private fun recordShiftTimes(result: RosterParseResult) {
+        if (!result.rosterDateRecognized) return
+        runCatching {
+            val fallbackTeam = store.manualShiftTeam ?: ShiftTeam.FIRST
+            val schedule = ShiftSchedule(store.shiftCalibration, fallbackTeam = fallbackTeam)
+            val matches = ExcelRosterParser::containsAssignee
+            val observations = ShiftTimeObserver
+                .observeGroups(schedule, result.rosterDate, result.staffAssignments, matches)
+                .ifEmpty {
+                    val groupId = schedule.resolveGroupId(store.userName.orEmpty(), store.manualShiftGroup)
+                    ShiftTimeObserver.observeOwn(schedule, result.rosterDate, result.assignments, groupId)
+                }
+            if (observations.isNotEmpty()) {
+                val history = store.shiftTimeHistory.record(observations)
+                store.shiftTimeHistory = history
+                update { copy(shiftTimeHistory = history) }
+            }
+        }.onFailure { ports.logWarning("实测记录未更新", it) }
+    }
+
+    fun clearShiftTimeHistory() {
+        store.shiftTimeHistory = ShiftTimeHistory.EMPTY
+        update { copy(shiftTimeHistory = ShiftTimeHistory.EMPTY, statusMessage = "实测记录已清除") }
     }
 
     /** 提前导入的排班要到排班日首个任务前 3 小时才开始自动跟踪（[RosterTracking]），把起点告诉用户。 */

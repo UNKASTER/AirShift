@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.bradj.airshift.api.AirportPoint
 import com.bradj.airshift.api.FlightRefreshScheduler
@@ -64,6 +65,8 @@ internal data class DutyPorts(
     val configureBackgroundRefresh: (Boolean) -> Unit,
     val notifyWidget: () -> Unit,
     val clearFlightCache: () -> Unit = {},
+    /** 非关键路径的失败只记日志（如实测记录未更新）；JVM 测试里缺省不做任何事。 */
+    val logWarning: (message: String, error: Throwable) -> Unit = { _, _ -> },
     val isNotificationAccessGranted: () -> Boolean,
     val hasPermission: (String) -> Boolean,
     val refreshClock: () -> Long,
@@ -71,6 +74,8 @@ internal data class DutyPorts(
 )
 
 internal object AppDutyPorts {
+    private const val LOG_TAG = "AirShift"
+
     fun create(context: Context, clock: Clock = Clock.systemDefaultZone()): DutyPorts {
         val appContext = context.applicationContext
         val specialServices = SpecialServiceRepository.get(appContext)
@@ -98,6 +103,7 @@ internal object AppDutyPorts {
             configureBackgroundRefresh = { FlightRefreshScheduler.configure(appContext, it) },
             notifyWidget = { DutyWidgetUpdater.notifyRosterChanged(appContext) },
             clearFlightCache = VariFlightClient::clearCachedFlights,
+            logWarning = { message, error -> Log.w(LOG_TAG, message, error) },
             isNotificationAccessGranted = { NotificationAccess.isGranted(appContext) },
             hasPermission = { permission ->
                 ContextCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
