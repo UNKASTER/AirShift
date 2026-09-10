@@ -245,6 +245,10 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 固定习惯优先于推算：`WORK_FIRST` 早班/晚班坐 `09:00`、`WORK_FIRST` 中班坐 `12:00`；整班工作日的中二至中四坐 `12:00`。
 - 首个任务的时间与进出港方向都取自实测，方向在样本内完全一致：清晨上岗的槽位首个任务是出港，下午上岗的中二至中四以及接班日的早班/中班是过站进港。把它们误标为出港会让推荐班车晚于到位时间，`ShiftBusPlanTest` 有对应不变量断言。
 
+#### 班车闹铃序列
+
+`ShuttleAlarmPlan.alarmTimes(departure)`（`model/shift/ShuttleAlarmPlan.kt`，2026-09-09 用户拍板）：发车 < 07:00 走早档（发车前 30 分钟起每 5 分钟一响），07:00 起走晚档（发车前 60 分钟起每 10 分钟一响）；发车前一格即止，发车时刻本身不响；早于 `EARLIEST = 05:00` 的时刻丢弃，`04:50` 班车因此整段为空（"无闹铃"）。用分钟数计算，发车最早 04:50、提前最多 60 分钟，闹铃永远落在班车同一天。`fromRow(row)` 只给到岗且有班车的行出序列。时钟里的名称恒为 `LABEL = "航勤智排·班车"`——vivo 时钟按 小时 + 分钟 + 重复星期 + 名称 匹配已有条目并重新启用，名称带日期会让条目每天新建。决策与写入见 §8.3。
+
 #### 校准
 
 `ShiftCalibration` 承载一次真实观测（日期 + 有序分组），`team` 由日期推导。有校准数据时以观测当天的顺序为相位基准，其余日期相对它旋转；成员按“观测优先、未被任何观测行认领的基表成员保留”合并（`ShiftGroupTable.from(observed, base)`，基表为所属大组的内置表 `builtIn(team)`），因此病假缺席的人不会丢失归属，真正换组的人也不会留在旧组。只有整班工作日的表格带班次行，故只有这类日期能作为校准点。
@@ -400,12 +404,14 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - "保存"钉在底部（`PinnedActionBar`），姓名去空格后不足 2 字或测试中禁用。
 - 修改姓名只影响后续导入，不重新解析旧排班。API Key 文本状态不使用 `rememberSaveable`，明文不进入 saved-instance-state。测试连接从现有排班中选择首个带航班号的任务；无候选时直接失败。保存非空 API Key 后清缓存并重配刷新；空文本不会隐式清除已有 Key，必须点击"清除 API Key"。
 - 到位余量分段器的选中填充是一个物体，按 fast spatial 弹簧在格间横移；班组小灯选中态用 effects 弹簧过渡。
+- 班车闹铃分区（排班日历分区之后）：标题右侧状态点 + "已开启 / 已关闭"；开关复用两格分段选择器（关 / 开），系统时钟不接标准设闹钟意图时禁用并提示；一句规则说明（含时钟里的固定名称）；"下一组"一行（`ShuttleAlarmText.statusLine`：「明天 05:25–05:50 · 6 响 · 已设」「明天 班车 04:50 · 无闹铃（早于 05:00）」「近几天没有到岗日」「—」）；"上次写入"一行（已核对 / 未核对 / 被拦截 · M/D HH:mm）；vivo「后台弹出界面」的路径提示；东航红文字按钮「应用信息」（系统应用详情页）、「立即重设」（无视记录重写今明两天并核对，结果进状态栏文案），Debug 包多一枚「60 秒后后台重设」用于验证后台路径。
 
 ### 6.6 排班日历
 
 - 板头：分区名 + "上三休三 · 一组 · 第 N 组"（二组为"上三休三 · 二组 · 某某组"）；板面主体是今天的班次大字（"晚二" / "休息" / "不到岗"；二组校准前为"上班"）+ 日型说明 + 右侧班车时间；板脚给预计下班（交接班日为交班）时间与校正来源（二组校准前提示"没有内置班组表"；已校准且本机有实测记录时为"已按排班表校正 · 实测 N 天"）。
 - 二组校准前没有班组表：不必匹配到班组就用占位组号算出日型，整班日与交接班日的行仍渲染，班次灯与班车列留空、中间给一句"导入带班次行的排班表后显示班次与班车"。
 - 每次进入日历，列表第一条就是今天：`ui/calendar/ShiftCalendarItem.kt` 先把行按月插入标题扁平化并算出今天的下标，`LazyListState` 以该下标为初始项、并多滚"顶部内边距 − 条间距"（4dp），使今天的条离板面正好一个条间距（8dp）、上一条一像素不露；往上划仍能看到前 7 天。状态用 `rememberSaveable(todayIndex, LazyListState.Saver)`：跨零点后重建、回到新的今天，同一天内的旋转等配置变化保留滚动位置；切页会重新组合本页，所以每次切过来都从今天开始。行带 testTag `shift_<日期>`，列表带 `calendar_list`。
+- 班车闹铃打开时（`ShiftCalendarScreen` 的可选参数，缺省关闭，仪器测试的旧调用不变）：到岗行在到位/到场行之下多一行「闹铃 05:25 起 · 6 响」（hint 色、tnum），今明两天再带状态灯（已设 = 中性灯；待设 / 未核对 / 后台被拦 = 琥珀灯）；班车早于下限时只亮一盏琥珀灯「无闹铃 · 班车早于 05:00」。板头与列表之间（列表之外，不影响"今天是首项"）按需给 `NoticeStrip`：有要手动关的旧闹铃（按 今天 / 明天 分组列时刻，动作「打开时钟」直接进系统时钟的闹钟列表）；最近一次后台写入被拦且还有未到点的时刻（动作「现在设置」= 立即重设）；今明两天的班车早于闹铃下限（只提示）。
 - 国家法定节假日：`model/holiday/ChinaHolidays.kt` 逐年照抄国务院办公厅《关于 XXXX 年部分节假日安排的通知》（放假段 + 为它调休的上班日；2026 年按国办发明电〔2025〕7 号，共 33 个放假日、6 个调休上班日），只收录已正式发布的年份，未收录的年份查不到、日历不标。`ShiftCalendarRows.build` 把每天的记录放进 `ShiftCalendarRow.holiday`（缺省表 `ChinaHolidays`，可注入 `HolidayCalendar.NONE`），只作标注、不改班次与班车。UI：日期列在"周几"下再给一行，放假日东航红写节日名（"国庆节"），调休上班日琥珀写"补班"，休息日的日期列变灰时这一行不变灰；今天是节假日 / 调休上班日时板头日期带上它（"10月1日 周四 · 国庆节"）。
 - 范围为今天前 7 天至后 42 天，按月给 `BayTitle`；每天一条：日期列（M/D + 周几）| 班次灯（整班藏青蓝、交接班琥珀）+ 日型说明 + "今天"灯 | 到位 / 到场 / 富余 / 来源（"按当日排班"、"实测 N 次"或"预估"）| 右侧班车时刻与下班/交班时间（下班同样按当日排班 > 实测 > 内置表取值，只标注在到位一行）。夹条：今天藏青、整班东航红、交接班琥珀、休息与不到岗灰。
 - 休息日与交接班日不到岗时无底无边，只显示日期与说明。到场晚于到位时间（`spareMinutes < 0`）时班车时刻变琥珀并加灯"晚 N 分 · 建议提前一班"；没有合适班车时给琥珀文字。
@@ -524,7 +530,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 每次重排用 `stableId.hashCode()` 创建 PendingIntent，先取消同 ID 的旧闹钟。获得精确闹钟特殊访问时使用 `setExactAndAllowWhileIdle`，否则使用 `setAndAllowWhileIdle`。通知频道为高重要性，点击通知打开 `MainActivity`。
 
-`BootReceiver` 只监听标准 `BOOT_COMPLETED`，负责创建频道、从排班重排提醒并重绘小组件；没有监听时区变化、系统时间变化或应用升级广播。
+`BootReceiver` 监听标准 `BOOT_COMPLETED` 与 `MY_PACKAGE_REPLACED`（0.15.0 起，升级后 AlarmManager 里的闹钟同样会被清），负责创建频道、从排班重排提醒、重绘小组件并重排班车闹铃的唤醒（§8.3）；没有监听时区变化或系统时间变化广播。
 
 当前人工完成状态不参与 `ReminderPolicy`。提前人工完成的任务若提醒时间未到，App/Widget 完成后的全排班重排以及开机重排仍可能再次安排它。
 
@@ -536,6 +542,21 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 - 候选机场只来自本次成功实时刷新结果的航班两端，并要求经纬度，按机场代码去重。
 - 计算设备到所有候选机场的球面距离，最近值不超过 15 km 才返回匹配。
 - 当前机场只存在 `DutyViewModel` 状态；设备原始位置不写入 `RosterStore`，应用自身不把它发送给飞常准。
+
+### 8.3 班车闹铃（写进系统时钟）
+
+0.15.0 新增，与 §8.1 的本地提醒是两套东西：本地提醒由应用自己定时、自己发通知；班车闹铃是用标准 `AlarmClock.ACTION_SET_ALARM` 写进系统时钟的一次性闹钟，由时钟响铃。依据 2026-09-09 的可行性报告（vivo V2505A / OriginOS 6 / `com.android.BBKClock` 8.0.3.12 实测）：`EXTRA_SKIP_UI` 能建"仅一次"闹钟并正常响铃；关闭后条目保留、不删；时钟按 小时 + 分钟 + 重复星期 + 名称 匹配已有条目并重新启用；`ACTION_DISMISS_ALARM` 在这台时钟上会拉起时钟界面、行为未知，不用；闹钟 Provider 受签名权限保护，不直写。
+
+- 序列规则见 §4.5「班车闹铃序列」；来源 `reminder/ShuttleAlarmSource.kt` 与排班日历同一套输入（`ShiftCalendarRows.build` 今天起 8 天），界面从状态取、后台从 `RosterStore` 取，两边序列一致。
+- 决策（`reminder/ShuttleAlarmPolicy.kt`，纯函数）：系统时钟没有日期参数，某时刻 T 只能被设成"下一次出现"，所以某天 D 的序列只有在 D−1 的同一时刻过去之后才能写：`readyAt(D) = max over T of ((D−1)@T + 宽限)`，宽限 1 分钟；若 T 在 D−1 也响过（D−1 的推荐序列或实际写过的记录里有它），宽限 45 分钟——同一条目今天刚响过，可能还在稍后提醒，立刻重新启用会被时钟的"响后停用"清掉（`ShuttleAlarmWakes`）。只写今天与明天，且只写 D 上还没到（留 1 分钟安全边）的时刻；今天的序列一旦开始响就冻结，进行中的实时刷新 / 晚导入不再改它。写过且核对成功（CONFIRMED）的时刻不再写；被拦（BLOCKED）的下次前台或后台都重试；无法核对（UNCONFIRMED）的只在前台重试；同一序列最多 3 次尝试；「立即重设」与蹦床走 `force` 无视记录。更远的日子只用来算下一次唤醒：所有未写全序列的 `readyAt` 与待核对时刻取最早者，始终只有一个精确闹钟（`ShuttleAlarmWake`，`setExactAndAllowWhileIdle`，无权限时退化为非精确）。
+- 旧闹铃：记录里写过、新序列里没有、还没到点的时刻转为 `stale`（推荐变了、班次变休息、变 04:50、班组解析不到、关掉功能都会产生）；时钟没有可靠的程序化关闭接口，只能通知用户手动关（高优先级通知列出时刻，点击 `ACTION_SHOW_ALARMS` 直接打开时钟的闹钟列表，动作按钮「已关掉」清提示），日历顶部同步给提示条；到点后自动从列表消失。
+- **写入必须由 Activity 发起**（`reminder/ShuttleAlarmSetActivity.kt` 是唯一的写入口）：时钟的入口 `HandleApiCalls` 是 standard 启动模式，**不带** `FLAG_ACTIVITY_NEW_TASK` 时它落在本应用的任务里、写完 finish 立刻还回前台，本应用因此全程可见，整段序列都是前台启动；带 `NEW_TASK` 则第一响就把整个时钟任务拉到前台，本应用随即变成后台，第 2 响起被系统拦掉。这是 2026-09-09 真机取证出来的：5 响里只有 05:00 写进时钟，StrictMode 报后台启动被拦，记录判 BLOCKED。因此 `ShuttleAlarmClock.intentFor` 只在上下文不是 Activity 时才加 `NEW_TASK`，而 `ShuttleAlarmSync` 无论前台后台都只负责决策与调度，把写入交给蹦床。
+- 写入细节（`reminder/ShuttleAlarmClock.kt`）：逐个 `startActivity`（`EXTRA_HOUR / EXTRA_MINUTES / EXTRA_MESSAGE = 固定名称 / EXTRA_SKIP_UI = true`，不带 `EXTRA_DAYS`），每条隔 250 ms，全部发出后等 1.5 s 让时钟落库；Android 16 起临时给 VmPolicy 加 `detectBlockedBackgroundActivityLaunch()`，系统明确拦下后台启动时判 BLOCKED。
+- 核对（`ShuttleAlarmVerification.judge`）：读 `AlarmManager.getNextAlarmClock()`。下一闹钟落在本次第一响 ±60 s → CONFIRMED；为空或晚于第一响 → BLOCKED（`CLOCK_REPORTS_NEXT_ALARM = true` 时；Step 0 探针若发现这台时钟不上报，改为 false，则只给 UNCONFIRMED）；早于第一响 → 前面挡着别的闹钟或本 App 今天还没响完的序列，记 `pendingVerifyAt` = 那个闹钟（若是本 App 记录里某天的序列则跳到那天最后一响）+ 2 分钟再核一次，最多 8 跳，仍无结论记 UNCONFIRMED。**只能确认第一响存在，不能证明后面几响。**
+- 编排（`reminder/ShuttleAlarmSync.kt`，主线程，同一时间只跑一轮、后到的合并补跑）：读存储 → 算序列 → 决策 → 落盘剪枝后的状态与 stale、定唤醒、发旧闹铃通知 → 启动蹦床（`dispatch`，启动后等 400 ms 看 StrictMode 是否报拦截）；蹦床里 `ShuttleAlarmSync.write` 重新决策（带同一个 `force`）→ 逐个写时钟 → 核对 → 按整段推荐序列合并记录（`ShuttleAlarmVerification.merged`：仍在序列里的旧时刻保留，换了班车整体重来）→ 落盘 → 重定唤醒 → 通知。结果用通知说话：BLOCKED 发「班车闹铃还没设好」（高优先级，点击进蹦床）；UNCONFIRMED 且不再核对时发静默的「已设置（未核对）」；CONFIRMED 撤掉上述通知；蹦床对用户主动触发（「立即重设」、点通知）另给一条 Toast。界面不等写入回调：蹦床是透明 Activity，只让主界面 pause / resume，因此 `AirShiftApp` 在 `ON_RESUME` 调 `DutyViewModel.refreshShuttleAlarmState()` 把落盘的记录读回来。
+- 触发点：`DutyViewModel.onForegrounded`（前台）、导入完成（挂在 `finishImport` 而不是 `syncSavedRoster`——后者也跑在实时刷新之后，会让今天的推荐随预计时间反复变动）、大组 / 班组 / 到位余量 / 姓名 / 清除实测记录、开关、「立即重设」；后台：`ShuttleAlarmReceiver` 收唤醒、`BootReceiver` 开机与升级。ViewModel 按当前是否可见决定前台 / 后台语义（导入协程可能在 ON_STOP 之后才结束）。
+- 后台启动限制：系统只允许可见应用、通知 PendingIntent 等豁免情形启动 Activity；vivo 另有「后台弹出界面」权限，程序读不到状态。不声明 `SYSTEM_ALERT_WINDOW`；设置页给「应用信息」入口与路径提示。真机实测（未授予该权限）：后台唤醒启动蹦床被系统拦下 → 记 BLOCKED、发通知 → 点通知即在前台写完整段并转 CONFIRMED、通知自动撤掉。通知的 PendingIntent 由系统发出，蹦床（透明、不进最近任务、`taskAffinity=""`；**不能加 `noHistory`**，否则它启动时钟时会被当成"离开"而提前销毁，序列写不完）进到前台后再启动时钟就是前台启动；Android 12 的"通知蹦床"禁令只针对 Receiver / Service。
+- 状态持久化见 §11.1；界面见 §6.5 / §6.6；已知限制见 §13 第 32–35 条。
 
 ## 9. MUC 通知识别
 
@@ -609,7 +630,7 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 | 存储 | 内容 | 兼容/保护 |
 |---|---|---|
-| `air_shift` | `user_name`、`last_live_refresh`、`duty_progress_date`、`duty_index`、`roster_generation`、`assignments`、`shift_report_margin_minutes`、`shift_manual_group_id`、`shift_manual_group_team`、`shift_manual_team`、`shift_group_calibration`、`shift_time_history`、`migration_version` | 应用私有 JSON/标量 |
+| `air_shift` | `user_name`、`last_live_refresh`、`duty_progress_date`、`duty_index`、`roster_generation`、`assignments`、`shift_report_margin_minutes`、`shift_manual_group_id`、`shift_manual_group_team`、`shift_manual_team`、`shift_group_calibration`、`shift_time_history`、`shuttle_alarm_enabled`、`shuttle_alarm_state`、`migration_version` | 应用私有 JSON/标量 |
 | `air_shift_secrets` | API Key IV 与密文 | Android Keystore AES-GCM、128-bit tag、AAD |
 | `air_shift_special_services` | version 1–3 结构化 MUC 状态、随机 HMAC key | 应用私有，不含正文 |
 | `SavedStateHandle` | 分享 FIFO、URI 字符串、错误、ID、attempt token | 临时尽力恢复，不是永久业务存储 |
@@ -623,6 +644,8 @@ App/Widget 完成 → generation+index 原子校验 → 进度推进 → 新窗�
 
 排班日历的键独立于 generation 与 `rosterLock` 不变量：`shift_report_margin_minutes` 写入时收敛到 0–120；`shift_group_calibration` 解析失败时返回 null 并回退内置班组表，不抛错，JSON 新增 `syntheticIds` 布尔（缺省 false）；`shift_manual_group_id` 只在姓名匹配不到班组时参与判定，且只对 `shift_manual_group_team`（缺省一组，兼容 0.13 之前的旧值）记录的大组有效；`shift_manual_team` 只在没有任何校准表时决定大组；`shift_time_history` 是实测记录数组（`ShiftTimeHistoryCodec`），每条 `{"date","team","kind","tier","number","firstTask","inbound","lastTask"}`、枚举存名字、不含姓名，任一条解析失败整体回空历史（日历退回内置表），清空时直接删键。
 
+班车闹铃：`shuttle_alarm_enabled` 布尔开关；`shuttle_alarm_state` 是 `ShuttleAlarmCodec` 的 JSON 对象 `{"records":[{date, departure, times[], setAt, outcome, background, attempts}], "stale":[{date, time}], "pendingVerifyAt", "verifyHops", "lastAttempt":{reason, at, outcome, background, summary}}`，时刻用 ISO 文本、枚举存名字、不含姓名；记录只留 今天−1 起（前一天的用来判断"今天响过"），任一处解析失败整体回空状态（下次同步重写），空态直接删键。
+
 API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败由 `ApiKeyDecryptFailure` 分类：GCM 标签不符、密钥失效/不可恢复（含 `KeyPermanentlyInvalidatedException`）、密文 Base64 损坏为永久失败，清除密文和对应 key；Keystore 服务暂不可用、Provider 或 I/O 错误为瞬时失败，保留密文、本次返回 null。任何情况下都不返回不可信明文。`hasVariFlightApiKey` 只检查密文是否存在，不解密、不访问 Keystore，因此瞬时故障不会让后台刷新被取消。
 
 旧 gateway URL、supplement 和旧 gateway 凭据由 `LegacyMigrations.runOnce` 在 `MainActivity.onCreate` 一次性清理，并以 `migration_version = 1` 记录；`RosterStore` 的构造不再触发这段清理，其 API Key 存储按需惰性创建，小组件重绘、MUC 通知、后台 Worker 构造 `RosterStore` 时不会访问 Keystore。
@@ -635,14 +658,18 @@ API Key 读写使用随机 IV、AES/GCM/NoPadding 和固定 AAD。解密失败�
 | `ACCESS_COARSE_LOCATION` / `ACCESS_FINE_LOCATION` | Fused Location 机场匹配 |
 | `POST_NOTIFICATIONS` | 保障通知 |
 | `SCHEDULE_EXACT_ALARM` | 精确提醒特殊访问 |
-| `RECEIVE_BOOT_COMPLETED` | 开机重排提醒和重绘小组件 |
+| `RECEIVE_BOOT_COMPLETED` | 开机重排提醒和重绘小组件；`BootReceiver` 同时接 `MY_PACKAGE_REPLACED` |
+| `com.android.alarm.permission.SET_ALARM` | 系统时钟的标准入口 Activity 要求调用方持有（普通权限） |
+| `<queries>`：`SET_ALARM`、`SHOW_ALARMS` | Android 11 起查询哪个应用接收设闹钟 / 看闹钟意图（`resolveActivity`） |
 | 通知监听特殊访问 | 系统授权 `MucNotificationListenerService` |
+| vivo「后台弹出界面」（应用信息 → 权限，程序不可读） | 班车闹铃在后台自动写时钟；未允许时靠通知点一下 |
 
 组件边界：
 
 - `MainActivity` 导出，既是 launcher 入口，也是经过严格校验的 Excel `ACTION_SEND` 入口；
+- `ShuttleAlarmSetActivity` 不导出，透明主题 `Theme.AirShift.Invisible`、`excludeFromRecents`、`noHistory`、`taskAffinity=""`，只由本应用通知的 PendingIntent 启动；
 - `MucNotificationListenerService` 不导出并受 `BIND_NOTIFICATION_LISTENER_SERVICE` 保护；
-- `ReminderReceiver`、`BootReceiver`、`DutyWidgetActionReceiver` 不导出；
+- `ReminderReceiver`、`ShuttleAlarmReceiver`、`BootReceiver`、`DutyWidgetActionReceiver` 不导出；
 - `DutyWidgetProvider` 为 launcher 绑定 AppWidget 而导出，只注册 `APPWIDGET_UPDATE`。
 
 ### 11.3 隐私
@@ -685,7 +712,9 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 ### 12.2 本轮验证
 
-本轮（0.14.3，`main`）给排班日历加国家法定节假日标注。数据先核对官方原文：网上检索到国办发明电〔2025〕7 号《国务院办公厅关于 2026 年部分节假日安排的通知》（2025-11-04 发布，人民网 / 新华网 / 央视网转载一致），逐条录入 7 个节日的放假段与 6 个调休上班日；2027 年的通知尚未发布，不收录、不预估。设计：日期列第三行（放假日东航红节日名、调休上班日琥珀"补班"），今天是节假日时板头日期带上；因板头右列变宽，副标题改为省略号截断而不是硬裁。先写测试再改实现：新增 `ChinaHolidaysTest` 4 项（国庆 10/1–10/7 与 9/20、10/10 补班、春节 2/15–2/23 共 9 天、普通日与未收录年份为空、全年 33 放假 + 6 补班且补班全在周末、无重叠），`ShiftCalendarRowsTest` 追加 1 项（行带节假日记录，且与注入 `HolidayCalendar.NONE` 算出的行只差 `holiday` 字段）；androidTest 的 `ShiftCalendarScreenInstrumentedTest` 追加 1 项（2026-10-01：板头"10月1日 周四 · 国庆节"、放假行写节日名、滚到 10/10 见"补班"）。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：一次通过——JVM 393 项通过、0 失败、5 项条件跳过，detekt 0 发现（节假日表以文件级 `@Suppress("MagicNumber")` 说明日期就是内容），Lint 基线外零新增。随后确认三星 SM-S918W 空闲后执行标准单批次 `connectedDebugAndroidTest`：72 项执行、0 失败、0 错误、1 项跳过（未开启的付费探针），用时 53 秒，节假日用例 0.85 s 通过。随后 `:app:assembleRelease`（R8，228.0 MB）并 `adb install -r -d` 装回三星：`57 / 0.14.3`、不再 `DEBUGGABLE`，Success，拉起 186 ms，排班与数据保留。真机目视（深色主题）：日历滚到 9 月下旬，9/20 周日下方琥珀"补班"、9/25 周五下方红字"中秋节"，工作日行高不变；10 月第一屏 10/1–10/5 每行都有红字"国庆节"，10/5 的休息日行因多一行略高、不突兀。
+本轮（0.15.0，`main`）给排班日历加班车闹铃：按每天的推荐班车把一次性叫醒序列写进系统时钟。起因是用户 2026-09-09 的需求与同日的可行性报告（vivo V2505A / OriginOS 6 / `com.android.BBKClock` 8.0.3.12：标准 `ACTION_SET_ALARM` + `EXTRA_SKIP_UI` 能建"仅一次"闹钟并响铃，关闭后条目保留，时钟按时分 + 重复星期 + 名称复用条目；`ACTION_DISMISS_ALARM` 会拉起时钟界面且行为未知；Provider 受签名权限保护；后台启动 Activity 受限未验证），报告按用户要求直接采用、不再验证；本轮补查了时钟 `HandleApiCalls` 的动作分发（`SHOW_ALARMS` 可直接开闹钟列表，`DISMISS_ALARM` 走 `AsyncTask` 且先起 Timer 界面）与官方后台启动豁免清单。四项产品规则由用户拍板：发车前一格即止、04:50 班车严格 5 点下限不设并在日历标"无闹铃"、一旦可设就设（不设固定时刻门槛）、推荐变了写新序列并通知手动关旧闹铃。设计上把决策做成纯函数（`ShuttleAlarmPolicy` / `Wakes` / `Verification`），核心约束是系统时钟没有日期参数、某时刻只能设成"下一次出现"：某天的序列在前一天同一时刻过去 1 分钟后才写，前一天也响过的同一时刻等 45 分钟（时钟"响后停用"会清掉刚重新启用的条目），今天开始响后冻结；设计代理审查补了三处：导入的同步挂在 `finishImport` 而不是 `syncSavedRoster`（后者也跑在实时刷新之后）、ViewModel 按当前是否可见决定前台 / 后台语义、核对的"预期第一响"只取本次写入的、前面挡着本 App 自己序列时直接跳到那天最后一响之后再核。先写测试再改实现：`ShuttleAlarmPlanTest` 7、`ShuttleAlarmPolicyTest` 21、`ShuttleAlarmSourceTest` 3、`ShuttleAlarmTextTest` 4、`ShuttleAlarmCodecTest` 3、`DutyViewModelTest` +3（假端口 `FakeShuttleAlarms`），仪器测试 `RosterStorePersistenceInstrumentedTest` +1、新 `ShuttleAlarmClockInstrumentedTest` 2、`ShiftCalendarScreenInstrumentedTest` +1。`.\gradlew.bat :app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug :app:assembleRelease`：JVM 434 项、0 失败、5 条件跳过；detekt 第一遍报 `LongParameterList` ×3（`decide` / `merged` / 测试辅助函数，改为 `ShuttleAlarmRequest` / `ShuttleAlarmWrite` 参数对象）、`TooManyFunctions`（策略对象 14 个函数，拆出 `ShuttleAlarmWakes` 与 `ShuttleAlarmVerification`）、`LoopWithTooManyJumpStatements`（循环体抽成 `dayDecision`）、`ReturnCount` ×5（文案与核对函数改成表达式）、`MaxLineLength` 若干，第二遍 Kotlin 报"成员与扩展同名 `copy`"改用 data class 自带的 `copy`，第三遍 Lint 报 `ModifierParameter`（日历新加的可选参数移到 `modifier` 之后），之后 Lint 无新问题（baseline 仍滤 7 条）；Debug 约 265 MB、release 约 228 MB 均已产出。**真机验证（vivo V2505A，2026-09-09 23:20–2026-09-10 00:20，手机空闲）暴露并修掉了一个设计缺陷。** 第一版把 5 响逐个 `startActivity(FLAG_ACTIVITY_NEW_TASK)` 发给时钟，结果时钟里只多出 05:00 一条、记录判 BLOCKED。取证：`dumpsys alarm` 显示系统"下一闹钟"确实变成 05:00（写入本身成功），时钟列表只有第一响带我们的名称，StrictMode 报后台启动被拦；对照实验用 adb shell 连发 4 条（shell 不受后台启动限制）全部写入成功，证明时钟本身接得住连发。原因：带 `NEW_TASK` 时第一响把整个时钟任务拉到前台，本应用随即变成后台，第 2 响起被系统拦掉。改法见 §8.3——写入统一交给蹦床 Activity，从 Activity 启动且不带 `NEW_TASK`，时钟入口便落在本任务里、写完立刻还回前台。改后复测：前台「立即重设」→ 5 响全部写入、`outcome = CONFIRMED`；把时钟里的 05:05 手动关掉再重设 → 同一条目被重新启用（没有新建重复条目），用户自己的 05:00 / 05:20 / 05:30 闹钟不受影响（名称不同不参与复用）；调试用的「60 秒后后台重设」在未授予「后台弹出界面」时被系统拦下 → 记 BLOCKED、通知栏出现「班车闹铃还没设好 / 明天 05:00–05:20 共 5 响，点这里一键设置」→ 点一下即在前台写完整段、转 CONFIRMED、通知自动撤掉，先前手动关掉的 05:10 也被重新启用。Step 0 探针的动态半边同时拿到了结论：写入后 `dumpsys alarm` 报出 "Next alarm clock information: 2026-09-10 05:00"，与静态半边（BBKClock 8.0.3.12 的 `classes.dex` 含 `setAlarmClock` / `AlarmClockInfo` 符号）一致，`CLOCK_REPORTS_NEXT_ALARM = true` 成立。仪器测试：Gradle 的 `connectedDebugAndroidTest` 在这台机器上两次卡在安装测试包（`ShellCommandUnresponsiveException`／`Failed to install split APK(s)`），手工 `adb install -r -t` 装上后直接 `am instrument -w` 跑完 **76 项全过（39.8 s）**，含新增的 `ShuttleAlarmClockInstrumentedTest` 2 项、日历闹铃行 1 项、存储往返 1 项。最后 `adb install -r -d` 装回 release 58（`versionCode=58`、无 `DEBUGGABLE`），设置页读到"今天 05:00–05:20 · 5 响 · 已设"。**仍未做**：隔天真正响铃与"第二天不重复"、就绪时刻自动重排明天的序列、推荐变化后的旧闹铃通知、重启 / 升级后唤醒重排（清单见 §12.4）。
+
+上一轮（0.14.3，`main`）给排班日历加国家法定节假日标注。数据先核对官方原文：网上检索到国办发明电〔2025〕7 号《国务院办公厅关于 2026 年部分节假日安排的通知》（2025-11-04 发布，人民网 / 新华网 / 央视网转载一致），逐条录入 7 个节日的放假段与 6 个调休上班日；2027 年的通知尚未发布，不收录、不预估。设计：日期列第三行（放假日东航红节日名、调休上班日琥珀"补班"），今天是节假日时板头日期带上；因板头右列变宽，副标题改为省略号截断而不是硬裁。先写测试再改实现：新增 `ChinaHolidaysTest` 4 项（国庆 10/1–10/7 与 9/20、10/10 补班、春节 2/15–2/23 共 9 天、普通日与未收录年份为空、全年 33 放假 + 6 补班且补班全在周末、无重叠），`ShiftCalendarRowsTest` 追加 1 项（行带节假日记录，且与注入 `HolidayCalendar.NONE` 算出的行只差 `holiday` 字段）；androidTest 的 `ShiftCalendarScreenInstrumentedTest` 追加 1 项（2026-10-01：板头"10月1日 周四 · 国庆节"、放假行写节日名、滚到 10/10 见"补班"）。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：一次通过——JVM 393 项通过、0 失败、5 项条件跳过，detekt 0 发现（节假日表以文件级 `@Suppress("MagicNumber")` 说明日期就是内容），Lint 基线外零新增。随后确认三星 SM-S918W 空闲后执行标准单批次 `connectedDebugAndroidTest`：72 项执行、0 失败、0 错误、1 项跳过（未开启的付费探针），用时 53 秒，节假日用例 0.85 s 通过。随后 `:app:assembleRelease`（R8，228.0 MB）并 `adb install -r -d` 装回三星：`57 / 0.14.3`、不再 `DEBUGGABLE`，Success，拉起 186 ms，排班与数据保留。真机目视（深色主题）：日历滚到 9 月下旬，9/20 周日下方琥珀"补班"、9/25 周五下方红字"中秋节"，工作日行高不变；10 月第一屏 10/1–10/5 每行都有红字"国庆节"，10/5 的休息日行因多一行略高、不突兀。
 
 上一轮（0.14.2，`main`）只改两处列表行为，起因是用户的两条反馈："每次切到排班日历，首项都是当天"；"全部执勤里最后一个任务点开后自动顶上去，再点一下最小化后再拉回来，而不是点开以后直接拉下去、还得再往下划一下"。先核对事实：`AnimatedContent` 不带 `SaveableStateHolder`（javap 反查 animation 1.12.0 的 `AnimatedContentKt`），切页会重新组合页面，所以日历每次进入都是新的 `LazyListState`，用初始下标定位即可；LazyColumn 把第 n 项放在顶部内边距之下时，上一条会在内边距里露出"内边距 − 条间距"的 4dp 一线，故初始滚动再多滚这 4dp。做法见 §6.2 展开跟随与 §6.6 首行定位：不新起滚动动画，跟随逐帧读上一帧布局、`scrollBy` 补差，速度就是条的弹簧速度。先写纯函数测试再改实现：新增 `ShiftCalendarItemsTest` 3 项（换月插标题、今天下标计入标题、无今天时为 0）、`ListRevealTest` 4 项（完全可见不推、推超出量、高于视口的条止于条顶离视口顶一个条间距、已在上限之上不再推）；androidTest 新增 `ShiftCalendarScreenInstrumentedTest` 1 项（今天离列表顶 8dp ± 1dp、最靠上的可见行是今天、昨天不可见）与 `AllDutyScreenRevealInstrumentedTest` 1 项（20 条任务滚到末尾点开最后一条：变高、底边不超出视口、条顶上移；再点收起后条顶回到原位 ± 1dp）。在 JDK 21 守护进程下执行 `:app:testDebugUnitTest :app:detekt :app:lintDebug :app:compileDebugAndroidTestKotlin :app:assembleDebug`：首轮 detekt 拦下 3 条（`MatchingDeclarationName`：文件名 `ShiftCalendarItems` 与唯一顶层声明 `ShiftCalendarItem` 不符，改文件名；两个跟随循环各有两个 `break` 触发 `LoopWithTooManyJumpStatements`，合并为一个条件），仪器测试编译拦下 `DpRect.height` 缺 import 与把 `onAllNodes` 误写成顶层导入；第二轮 JVM 388 项通过、0 失败、5 项条件跳过，detekt 0 发现，Lint 基线外零新增（仍提示基线中 22 条记录已不存在），Debug APK 264.9 MB（`1000056 / 0.14.2-debug`）。随后确认三星 SM-S918W 前台为本应用（release 0.14.1 / 55，空闲）后执行标准单批次 `connectedDebugAndroidTest`：71 项执行、0 失败、0 错误、1 项跳过（未开启的付费探针），用时 48 秒；两项新用例分别以 1.25 s / 0.97 s 通过，这也在真机上证实了 `LazyListLayoutInfo` 的坐标约定（`viewportStartOffset = −顶部内边距`，`viewportEndOffset = 容器高 − 顶部内边距`，项的 offset 以内边距之下为 0）。随后 `:app:assembleRelease`（R8，228.0 MB）并 `adb install -r -d` 装回三星：`56 / 0.14.2`、不再 `DEBUGGABLE`，Success；`am start` 拉起 206 ms，排班与数据保留。真机目视（三星的真实排班 7 项）：切到排班日历，9/7 这一条紧贴板面之下、上面不露前一天；全部执勤滚到底点开"已完成"栏位的最后一条，展开后含机号行的整条都在视口内、上方内容随之顶出屏幕，再点收起后画面与展开前一致。
 
@@ -752,17 +781,18 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 |---|---:|---|
 | JVM `api` | 59 | 两项窗口（含跟踪起点前为空、旧排班隔天不重开、无计划时间按排班日、跨零点到达按出发日）、batch、字段/多经停映射（含 `FlightState`）、两端实际时间与状态按段合并 2 项、同一班归属过滤与 lookup 日期 9 项、Worker 首轮延迟 3 项、JSON-RPC/SSE、脱敏错误、缓存/限流/并发（含同桶航班不互相阻塞） |
 | JVM `model` | 34 | 时间线、自动完成（含别的日子的预计时间不阻止完成）、人工前缀和窗口、执勤日 06:00 边界、同一班归属 4 项、排班日跟踪时段 5 项 |
-| JVM `data` | 10 | API Key 解密失败的永久/瞬时分类、实测记录 JSON 编解码 5 项（往返、扁平数组不含姓名、空数组、损坏、未知枚举整体失败） |
-| JVM `duty` | 19 | 编排层：两项窗口自动/手动刷新、完成后补查、忙碌时排队、全部完成停止、导入后首刷、提前导入只保存并提示起点、起点前自动刷新无请求、旧 generation 忽略、清理后不落库、设置保存；实测记录 5 项（整表按组各一条、无整表行退回自身槽位、同日重导替换、休息日与未识别日期不记、清除） |
-| JVM `reminder` | 4 | 提醒只信同一班的预计时间，别的日子的预计退回计划时间 |
+| JVM `data` | 13 | API Key 解密失败的永久/瞬时分类、实测记录 JSON 编解码 5 项（往返、扁平数组不含姓名、空数组、损坏、未知枚举整体失败）、班车闹铃状态 JSON 3 项（全字段往返、空态、损坏 / 缺键 / 未知枚举回空） |
+| JVM `duty` | 22 | 编排层：两项窗口自动/手动刷新、完成后补查、忙碌时排队、全部完成停止、导入后首刷、提前导入只保存并提示起点、起点前自动刷新无请求、旧 generation 忽略、清理后不落库、设置保存；实测记录 5 项（整表按组各一条、无整表行退回自身槽位、同日重导替换、休息日与未识别日期不记、清除）；班车闹铃 3 项（前台 / 导入 / 日历设置触发同步且开关落盘、同步后读回状态与后台不可见、「立即重设」强制并回写文案） |
+| JVM `reminder` | 32 | 提醒只信同一班的预计时间 4 项；班车闹铃决策 21 项（凌晨整段可写、序列中只补剩余、1 分钟安全边、今天冻结、第一响前改班车出旧闹铃 + 新序列、明天就绪、共享条目 45 分钟宽限、昨天记录算响过、22:00 班车 21:51 就绪、CONFIRMED 不重写、BLOCKED 前后台重试到上限、UNCONFIRMED 只前台重试、`force`、变休息 / 变 04:50 出旧闹铃、旧闹铃只留未到点且不重复、关开关全转旧闹铃并取消唤醒、剪枝与待核对成唤醒、跨零点、班组解析不到、核对三态与跳转、记录合并）；来源 3 项（与日历行一致、班组解析不到全 null、按存储装配）；文案 4 项 |
 | JVM `parser` | 30 | XLSX/XLS、模板变体、姓名隔离、班次行解析（两种写法）、连写姓名切分 7 项、整表行与 `containsAssignee` 复用、未识别日期标志；含 5 个条件式真实 fixture（六份表班次行回归、整表归组逐槽位对照内置表、二组表） |
-| JVM `model/shift` | 135 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配；实测自学习：历史聚合 12 项（门槛、中位数、方向平手、合档、替换、窗口、不合理项、按大组隔离）、整表归组 9 项（整班日各组、进港首行、跨零点、一行两组、跳过、交接班继承、休息日、自身兜底）、班车接入 5 项、日历行 4 项、`resolveGroupId` 1 项 |
+| JVM `model/shift` | 143 | 周期与日型、轮转回归锁、槽位与交接班到岗、班车与余量、班组表合并（内置表无成员、合成姓名基表）、日历行装配；班车闹铃序列 7 项（早档 / 晚档、05:00 下限、04:50 为空、07:00 边界、发车前一格即止、全时刻表不变量、行→序列）；实测自学习：历史聚合 12 项（门槛、中位数、方向平手、合档、替换、窗口、不合理项、按大组隔离）、整表归组 9 项（整班日各组、进港首行、跨零点、一行两组、跳过、交接班继承、休息日、自身兜底）、班车接入 5 项、日历行 4 项、`resolveGroupId` 1 项 |
 | JVM `specialservice` | 29 | MUC 解析、匹配、顺序、取消、去重、过期和 JSON 兼容 |
 | JVM `ui/components` | 28 | 航段模型（进出港顺序与本站机场、SUMMARY 只打角标、FULL 展开原值 → 新值/登机时刻/特服、取消归属、机号机型落在末段、日期不符不采用、`liveKind` 预计/实际、每段各自的 `phase`）、状态灯规则 10 项（未起飞 / 前站起飞或离位即已起飞 / 本站到达即已落地 / 出港段本站起飞与后站落地 / `FlightState` 备用信号 / 晚 N 分只在起飞前 / 已完成只兜底 / 已取消压过一切 / 无时间不给灯）、特服角标文案 6 项、栏位分栏 3 项、翻牌槽位 2 项 |
 | JVM `widget` | 11 | 当前页选择、空/完成/倒计时、VIP、机场和机位 |
 | JVM `ui` | 8 | 默认页、前后台恢复、配置变化和排班日历页选中 |
 | JVM smoke | 9 | OCR 表格、姓名、VIP、提醒基础 |
-| Android 数据层 | 23 | generation、进度、执勤日跨零点、scope 合并、旧 JSON（含缺两端实际时间与 `FlightState` 的 0.14.0 存储）、扩展机位、班组校准 JSON 往返与余量收敛、实测记录往返（含跨零点末项）/ 默认空与清除 / 损坏 JSON 回空 |
+| Android 数据层 | 27 | generation、进度、执勤日跨零点、scope 合并、旧 JSON（含缺两端实际时间与 `FlightState` 的 0.14.0 存储）、扩展机位、班组校准 JSON 往返与余量收敛、实测记录往返（含跨零点末项）/ 默认空与清除 / 损坏 JSON 回空、班车闹铃开关与状态往返 / 空态删键 / 损坏回空 |
+| Android 班车闹铃意图 | 2 | 发给系统时钟的意图（时、分、固定名称、skip_ui、无重复星期、NEW_TASK）；本机时钟接 `SET_ALARM` / `SHOW_ALARMS`（`<queries>` 生效） |
 | Android 迁移 | 3 | 遗留键一次性清理、已完成迁移不重跑、构造 `RosterStore` 不触碰遗留键 |
 | Android 刷新编排 | 14 | duty-window 9 项、foreground effect 5 项 |
 | Android WorkManager | 5 | KEEP、generation、停止、旧任务迁移和明天排班的首轮延迟；不再因已配置 Key 而跳过 |
@@ -770,6 +800,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | Android Excel 分享 | 11 | Manifest/Intent/FIFO/恢复 10 项、owner 隔离 1 项 |
 | Android 当前页 Compose | 2 | 点击完成、自动跳过和新排班恢复 |
 | Android 全部执勤页 Compose | 1 | 三个栏位与点条展开 |
+| Android 排班日历页 Compose | 3 | 节假日标注、今天是首项、班车闹铃打开时的闹铃行 / 状态灯 / 旧闹铃提示条且今天仍是首项 |
 | Android 字体 | 2 | Barlow / Barlow Semi Condensed 开启 tnum 后"1"向"0"的宽度靠拢（比例 >0.9） |
 | Android 小组件 | 3 | 单卡布局与 RemoteViews 渲染 |
 | Android OCR | 1 | PP-OCRv6 合成图片端到端 |
@@ -784,6 +815,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 真实 `MainActivity` ActivityScenario 生命周期、进程强杀和多窗口；
 - `FlightRefreshWorker.doWork()` 的真实网络、系统重试/backoff 与系统延迟；
 - AlarmManager 实际触发、BootReceiver、通知权限、锁屏展示和时区/改时；
+- 班车闹铃剩余的真机项（前台写入、复用、后台被拦 + 通知补写、Step 0 已在 §12.2 完成）：隔天按时响且第二天不重复、就绪时刻到了自动重排明天的序列、推荐变化后的旧闹铃通知与「已关掉」动作、重启 / 升级后唤醒重排、授予「后台弹出界面」后后台能否直接写入；除本机 vivo 外的时钟只有"意图可解析"的仪器断言；
 - Android Keystore API Key 真机往返和密钥失效；
 - AirportLocator 自动化与真实 Fused Location；
 - NotificationListenerService、真实 MUC 样式和企业设备策略；
@@ -835,6 +867,10 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 29. **二组姓名切分与组号是启发式**：连写姓名按姓氏表切分，生僻姓氏或两种切法都合法时可能切错（切不开的串退回包含匹配，切错的串会漏掉本人航班或让班组匹配落空，需手动指定）；二组小组的序号是校准时按位次给的，只靠共享成员对齐，整组换人会得到新序号。大组自动跟随最近一次带班次行的导入，误导入另一大组的表会切换大组，重新导入自己的表即恢复。
 30. **实测自学习是启发式**：整表按成员姓名归组，依赖校准表的成员名单与 `containsAssignee` 的匹配规则（切错的连写姓名会让该组少算或多算一行）；表格日期写错但被识别的那一天会整天记到错误的日型与槽位上，只能靠 8 个日期的窗口稀释或在设置里清除全部实测记录，没有按日期删除的入口；误导入另一大组的表只记到那个大组的键下，不串到本组。学习的只是各槽位的时间，轮转规律本身的漂移仍要靠班次行校准（第 21 条）。
 31. **节假日表逐年内置**：法定节假日只收录已正式发布的年份（目前 2026），不联网更新；国务院办公厅通常在 11 月发布下一年的通知，在此之前下一年的日期不标任何节假日，需要随通知更新 `ChinaHolidays` 并发版。地方性、临时调整的放假通知不在范围内。
+32. **班车闹铃只能核对第一响**：`getNextAlarmClock()` 只给系统里最近的一个闹钟，后面几响是否进了时钟无法程序确认；稍后提醒超过 45 分钟、用户在时钟里改名 / 改时间、时钟版本升级改变匹配规则，都可能让某一响丢失或重复。日历与设置页的状态灯是应用的记录，不是时钟实况。若 Step 0 探针发现时钟不上报下一闹钟，后台写入永远只能"未核对"，只有 Android 16 的 StrictMode 能给出"被拦截"。
+33. **班车闹铃的后台写入依赖厂商权限**：vivo「后台弹出界面」程序读不到状态；本机未授予时，后台唤醒启动蹦床会被系统拦下（真机实测），每天需要点一次通知才写入。`force-stop` 会清掉唤醒（`BootReceiver` 只在开机与升级时重排）。
+34. **旧闹铃无法程序关闭**：推荐变了只能提示手动关；时钟列表会累积"已关闭"的条目（按不同时刻计，约 30 条以内）。
+35. **班车闹铃只在本机验证**：写入与复用规则来自 vivo V2505A / BBKClock 8.0.3.12 的实测与静态核查；其他品牌的时钟只保证意图能解析，"仅一次"与响后停用、按名称复用都未验证。
 
 ## 14. 当前验收标准
 
@@ -862,6 +898,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 
 - 进港/过站只建到达前 15 分钟提醒，纯出港只建出发前 1 小时 10 分钟提醒。
 - 提醒只落在排班日：时间只来自任务的计划时间与同一班（相差 ≤ 12 小时）的预计时间。
+- 班车闹铃：05:55 → 05:25…05:50 六响、05:25 → 05:00…05:20 五响、08:00 → 07:00…07:50 六响、04:50 无闹铃；某天的序列只在前一天同一时刻过去（共享条目再等 45 分钟）后才写，写的都是还没到的时刻；写过且核对成功的不再写；推荐变了把还没到点的旧时刻列为旧闹铃并发通知；每次同步只留一个精确唤醒；发给时钟的意图带固定名称、skip_ui、无重复星期。
 - 无权限时功能按第 2.2 节降级，不阻断排班查看。
 - 只有 MUC 白名单包的新通知可进入解析；持久化 JSON 不含原文和个人敏感字段。
 - 更晚变更/取消按时序生效，旧摘要不能恢复已取消状态。
@@ -880,6 +917,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 解析不到班次行、姓名匹配不到班组、校准 JSON 或实测记录 JSON 损坏时，一律回退内置班组表 / 内置时间表，不影响其他页面。
 - 每次进入日历，第一条可见行是今天（离列表顶一个条间距），昨天一像素不露；月份标题的存在不改变这一点。全部执勤里列表末尾的条点开后整条留在视口内、条顶上移，再点一下收起后回到原位。
 - 2026 年国庆当天：板头日期为"10月1日 周四 · 国庆节"，10/1–10/7 的行写"国庆节"，10/10 的行写"补班"；节假日表 2026 年合计 33 个放假日、6 个调休上班日（均为周末），带表与不带表算出的行只差 `holiday` 一个字段。
+- 班车闹铃打开时，到岗行多一行「闹铃 HH:mm 起 · N 响」与今明两天的状态灯，班车早于 05:00 的行亮「无闹铃」灯；旧闹铃提示条在列表之外，今天仍是首项。
 
 ## 15. 源码追踪索引
 
@@ -908,10 +946,11 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 | 排班/进度存储 | `data/RosterStore.kt` |
 | API Key | `data/VariFlightApiKeyStore.kt` |
 | MUC 全链路 | `specialservice/` |
-| 提醒/定位 | `reminder/`、`location/AirportLocator.kt` |
+| 提醒/定位 | `reminder/`（`ReminderPolicy` / `ReminderScheduler` / `ReminderReceiver` / `BootReceiver`）、`location/AirportLocator.kt` |
+| 班车闹铃 | `model/shift/ShuttleAlarmPlan.kt`（序列规则）、`reminder/ShuttleAlarmSource.kt`（与日历同源）、`ShuttleAlarmState.kt`（记录 / 旧闹铃 / 待核对）、`ShuttleAlarmPolicy.kt`（决策）、`ShuttleAlarmWakes.kt`（就绪与唤醒时刻）、`ShuttleAlarmVerification.kt`（核对与记录合并）、`ShuttleAlarmText.kt`（文案）、`ShuttleAlarmClock.kt`（发给时钟的意图、非 Activity 才加 `NEW_TASK`、StrictMode 检测、读下一闹钟）、`ShuttleAlarmSync.kt`（决策与调度，`write` 供蹦床调用）、`ShuttleAlarmSetActivity.kt`（唯一的写入口）、`ShuttleAlarmWake.kt`（唯一的精确唤醒）、`ShuttleAlarmNotifications.kt`（三条通知）、`ShuttleAlarmReceiver.kt`、`data/ShuttleAlarmCodec.kt`、`duty/DutyPorts.kt` 的 `ShuttleAlarmPort`、`res/values/themes.xml` 的 `Theme.AirShift.Invisible` |
 | 四页 UI 与底栏 | `ui/AirShiftRoot.kt`、`ui/all/`、`ui/calendar/`（`ShiftCalendarItem.kt`：月份标题扁平化与今天下标）、`ui/current/`、`ui/settings/`、`ui/onboarding/` |
 | 列表动效 | `ui/components/ListItemMotion.kt`（`animateListItem`）、`ui/components/ListReveal.kt`（展开 / 折叠时的逐帧跟随） |
-| 排班周期与班车 | `model/shift/ShiftCycle.kt`、`ShiftGroupTable.kt`、`ShiftSlot.kt`、`ShiftSchedule.kt`、`ShiftBusPlan.kt`、`ShiftCalendarRows.kt`、`ShiftRosterBridge.kt` |
+| 排班周期与班车 | `model/shift/ShiftCycle.kt`、`ShiftGroupTable.kt`、`ShiftSlot.kt`、`ShiftSchedule.kt`、`ShiftBusPlan.kt`、`ShiftCalendarRows.kt`、`ShiftRosterBridge.kt`、`ShuttleAlarmPlan.kt` |
 | 法定节假日 | `model/holiday/ChinaHolidays.kt`（逐年照抄国办通知的表）、`PublicHoliday.kt`、`HolidayCalendar.kt` |
 | 实测自学习 | `model/shift/ShiftTimeHistory.kt`（记录、三档键、聚合）、`ShiftTimeObserver.kt`（整表归组 / 自身兜底）、`data/ShiftTimeHistoryCodec.kt`（`shift_time_history` JSON）、`duty/DutyViewModel.kt` 的 `recordShiftTimes` / `clearShiftTimeHistory` |
 | 小组件 | `widget/`、`res/layout/widget_duty_item.xml`、`res/xml/duty_widget_info.xml` |
@@ -933,6 +972,7 @@ Android 仪器测试需要 API 33+ 设备或模拟器。`XlsRosterParserRealFile
 - 0.11.0 界面重设计"航显板 × 进程单"：新增 Barlow 字体与 `AirShiftPalette` 双主题 token；每页顶部改为贯通状态栏的藏青板面（实时钟逐位翻牌），任务统一为带方向夹条的信息条（折叠一航段一行、点开展开），全部执勤按"当前 / 接下来 / 已完成"分栏，当前执勤的"执勤完成"钉在底部并带触感，底栏改四等分红灯指示、分区切换 fade-through，状态改为小矩形灯、缺失值显示"—"；设置与日历改为板头 + 信息条，Onboarding 改整屏板面；小组件改为藏青板面并删除装饰层；`enableEdgeToEdge` 显式指定系统栏样式并新增 `values-night` 主题；`app/detekt.yml` 对 Composable 放开规则。业务、数据与 MUC 逻辑不变，已有测试契约（底栏文字、"执勤完成"、单一滚动节点、小组件 view id）保留。
 - 0.11.1 动效调整：分区切换由 fade-through 改为 shared-axis（新页 16dp 位移滑入 180 ms、旧页 70 ms 淡出、无空档）；信息条展开 / 折叠改为 `AnimatedContent` + `SizeTransform`，容器高度、条的位移与底栏红灯横移共用无回弹弹簧 `AirShiftMotion.snap`（约 200 ms 内静止），内容 120 / 70 ms 淡入淡出；底栏红灯改为在标签间横移；"执勤完成"按下缩放反馈；翻牌 220 ms；夹条改为绘制并去掉 `IntrinsicSize.Min`；`AllDutyScreen` 每条只接收自身展开布尔值。设计、文案、业务与测试契约不变。
 - 0.14.3 排班日历标出国家法定节假日：新增 `model/holiday/`（`ChinaHolidays` 逐年照抄国务院办公厅通知，2026 年按国办发明电〔2025〕7 号；`PublicHoliday` / `HolidayCalendar`），`ShiftCalendarRow.holiday` 只作标注不改班次；日期列第三行放假日红写节日名、调休上班日琥珀写"补班"，今天是节假日时板头日期带上；板头副标题改为省略号截断。下一年通知发布后需在表里加一段并发版。
+- 0.15.0 班车闹铃：按排班日历的推荐班车把一次性叫醒序列写进系统时钟。新增 `model/shift/ShuttleAlarmPlan.kt`（7 点前发车前 30 分钟起每 5 分钟、7 点起前 60 分钟起每 10 分钟、发车前一格止、最早 05:00、04:50 班车无闹铃、名称恒为「航勤智排·班车」）与 `reminder/` 下的 `ShuttleAlarmSource` / `State` / `Policy` / `Wakes` / `Verification` / `Text`（纯函数：只写今天与明天、某天的序列在前一天同一时刻过去后才写、共享条目等 45 分钟、今天开始响后冻结、CONFIRMED 不重写、旧闹铃差集、唯一唤醒、核对三态与记录合并）与 `ShuttleAlarmClock` / `Sync` / `Wake` / `Notifications` / `Receiver` / `SetActivity`（标准 `ACTION_SET_ALARM` + skip_ui、`getNextAlarmClock` 核对、Android 16 StrictMode 拦截检测、精确唤醒、被拦 / 未核对 / 旧闹铃三条通知；写入统一由透明蹦床 Activity 发起且不带 `NEW_TASK`，否则第一响就把时钟任务拉到前台、其余被当成后台启动拦掉——真机取证见 §12.2），`data/ShuttleAlarmCodec` 与 `shuttle_alarm_enabled` / `shuttle_alarm_state` 两键，`DutyPorts.ShuttleAlarmPort` 与 ViewModel 触发（前台、导入、日历设置、开关、立即重设）；Manifest 加 `SET_ALARM` 权限、`<queries>`、receiver、蹦床 activity（`Theme.AirShift.Invisible`，不加 `noHistory`），`BootReceiver` 兼收 `MY_PACKAGE_REPLACED`。UI：设置页新增"班车闹铃"分区（分段开关、规则、下一组、上次写入、应用信息 / 立即重设，Debug 包多一枚 60 秒后台重设），日历到岗行多一行闹铃序列与状态灯、顶部提示旧闹铃 / 后台被拦 / 早于下限。旧闹铃无法程序关闭只提示手动关；只能核对第一响；后台写入依赖 vivo「后台弹出界面」；真机验证发现并修掉一个设计缺陷：写入必须由 Activity 不带 `NEW_TASK` 发起，否则只有第一响进得了时钟；改后前台写入、按名称复用、后台被拦 + 点通知补写均已实测通过（§12.2），隔天响铃与旧闹铃通知仍待观察（§12.4）。
 - 0.14.2 两处列表小改：排班日历每次进入都以今天为第一条（今天离板面一个条间距，上一条不露，往上划仍见前 7 天；`ShiftCalendarItem.kt` 扁平化 + `rememberSaveable(todayIndex, LazyListState.Saver)`）；全部执勤里条展开后伸出视口时列表逐帧跟着尺寸弹簧顶上去、收起时落回（`ListReveal.kt` 的 `followExpansion` / `followCollapse`）。业务、数据与其余页面不变。
 - 0.14.1 状态灯三态：修正"无论是否起飞都显示未起飞"——原先进港航班在前站的实际起飞、出港航班在后站的实际到达在合并实时数据时被丢弃，灯只认本站一端。新增 `FlightPhase`（未起飞 / 已起飞 / 已落地，进港、出港段各自判定，飞常准 `FlightState` 作备用信号），`RosterAssignment` 增 `inboundActualDeparture` / `outboundActualArrival` / `inboundFlightState` / `outboundFlightState` 并持久化，解析器新增 `FlightState`；同一个状态灯走完三态，"已到达"并入"已落地"，已完成栏位有实际动态时照实亮灯、无动态才显示"已完成"。
 - 0.14.0 实测自学习：排班日历的到位 / 下班时间从写死的内置表改为“当日真实排班 > 本机实测中位数 > 内置表”。解析器交出整张表的全部任务行（`RosterParseResult.staffAssignments`）与日期识别标志，导入时 `ShiftTimeObserver` 按校准表成员把行归到各班组、由 `ShiftSchedule` 得出各组当天的槽位，一份整班日表记全部槽位各一条（交接班半天表继承槽位，图片导入退回自己的槽位）；`ShiftTimeHistory` 按（大组, 三档日型, 槽位）保留最近 8 个日期，攒够 3 次后按到位时间取下中位数、方向取多数；新键 `shift_time_history`，日历行标注“实测 N 次”、板脚“实测 N 天”，设置页新增“实测记录”一行与清除按钮。`ShiftSchedule.resolveGroupId` 收敛界面与导入共用的“我的班组”规则。既有班次行校准、内置表与六份表的回归锁不变。
