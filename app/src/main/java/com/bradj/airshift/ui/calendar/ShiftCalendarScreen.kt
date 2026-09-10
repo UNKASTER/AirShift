@@ -46,12 +46,17 @@ import com.bradj.airshift.model.shift.ShiftEstimateSource
 import com.bradj.airshift.model.shift.ShiftRosterBridge
 import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShuttleAlarmPlan
+import com.bradj.airshift.reminder.ShuttleAlarmOutcome
+import com.bradj.airshift.reminder.ShuttleAlarmState
+import com.bradj.airshift.reminder.ShuttleAlarmText
 import com.bradj.airshift.ui.components.BayTitle
 import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.EmptyBay
 import com.bradj.airshift.ui.components.HolderBar
 import com.bradj.airshift.ui.components.LampKind
 import com.bradj.airshift.ui.components.LinearIcons
+import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.StatusLamp
 import com.bradj.airshift.ui.components.boardDateText
 import com.bradj.airshift.ui.theme.AirShiftRadius
@@ -87,8 +92,13 @@ fun ShiftCalendarScreen(
     now: LocalDateTime,
     onGoToSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    shuttleAlarmEnabled: Boolean = false,
+    shuttleAlarmState: ShuttleAlarmState = ShuttleAlarmState.EMPTY,
+    onOpenClockAlarms: () -> Unit = {},
+    onResyncShuttleAlarms: () -> Unit = {},
 ) {
     val today = now.toLocalDate()
+    val shuttleView = if (shuttleAlarmEnabled) ShuttleAlarmView(shuttleAlarmState, now) else null
     val rosterDate = remember(assignments) { ShiftRosterBridge.rosterDate(assignments) }
     val rosterReportBy = remember(assignments) { ShiftRosterBridge.reportByMinutes(assignments) }
     val rosterLastTask = remember(assignments) { ShiftRosterBridge.lastTaskMinutes(assignments) }
@@ -142,6 +152,14 @@ fun ShiftCalendarScreen(
             },
             footer = { CalendarFooter(todayRow = todayRow, schedule = schedule, learned = learned) },
         )
+        if (shuttleView != null && calendarGroupId != null) {
+            ShuttleAlarmNotices(
+                rows = rows,
+                view = shuttleView,
+                onOpenClockAlarms = onOpenClockAlarms,
+                onResync = onResyncShuttleAlarms,
+            )
+        }
         if (calendarGroupId == null) {
             EmptyBay(
                 icon = LinearIcons.Alert,
@@ -166,7 +184,7 @@ fun ShiftCalendarScreen(
                 items(items, key = { it.key }, contentType = { it::class }) { item ->
                     when (item) {
                         is ShiftCalendarItem.Month -> BayTitle("${item.month}月")
-                        is ShiftCalendarItem.Day -> ShiftStrip(item.row)
+                        is ShiftCalendarItem.Day -> ShiftStrip(item.row, shuttleView)
                     }
                 }
             }
@@ -266,9 +284,94 @@ private fun dayKindShort(row: ShiftCalendarRow): String = when {
     else -> "整班"
 }
 
+/** 班车闹铃打开时日历行需要的上下文：写入记录与"现在"。 */
+private class ShuttleAlarmView(val state: ShuttleAlarmState, val now: LocalDateTime)
+
+/**
+ * 日历顶部的班车闹铃提示（列表之外，不影响"今天是首项"）：要手动关的旧闹铃、后台被拦没写进时钟的、
+ * 以及今明两天班车早于闹铃下限的。
+ */
+@Composable
+private fun ShuttleAlarmNotices(
+    rows: List<ShiftCalendarRow>,
+    view: ShuttleAlarmView,
+    onOpenClockAlarms: () -> Unit,
+    onResync: () -> Unit,
+) {
+    val today = view.now.toLocalDate()
+    val staleLines = ShuttleAlarmText.staleLines(view.state.stale, view.now)
+    val blocked = view.state.records.any { record ->
+        record.outcome == ShuttleAlarmOutcome.BLOCKED && record.alarms().any { it.at > view.now }
+    }
+    val tooEarly = rows
+        .filter { it.day.date == today || it.day.date == today.plusDays(1) }
+        .mapNotNull(ShuttleAlarmPlan::fromRow)
+        .filter { it.isEmpty }
+    if (staleLines.isEmpty() && !blocked && tooEarly.isEmpty()) return
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = AirShiftSpacing.M, end = AirShiftSpacing.M, top = ListTopPadding),
+        verticalArrangement = Arrangement.spacedBy(AirShiftSpacing.S),
+    ) {
+        if (staleLines.isNotEmpty()) {
+            NoticeStrip(
+                title = "班车时间变了，请在时钟里关掉旧闹铃",
+                lines = staleLines,
+                actionText = "打开时钟",
+                onAction = onOpenClockAlarms,
+            )
+        }
+        if (blocked) {
+            NoticeStrip(
+                lines = listOf("班车闹铃在后台被系统拦下，还没写进时钟"),
+                actionText = "现在设置",
+                onAction = onResync,
+            )
+        }
+        tooEarly.forEach { day ->
+            NoticeStrip(
+                lines = listOf(
+                    "${ShuttleAlarmText.dayWord(day.date, today)}班车 ${ShuttleAlarmText.time(day.departure)} 早于闹铃下限 " +
+                        "${ShuttleAlarmText.time(ShuttleAlarmPlan.EARLIEST)}，不设闹铃，请自行安排",
+                ),
+            )
+        }
+    }
+}
+
+/** 到岗行第三行：「闹铃 05:25 起 · 6 响」+ 今明两天的状态灯；班车早于下限时只亮一盏「无闹铃」琥珀灯。 */
+@Composable
+private fun ShuttleAlarmLine(row: ShiftCalendarRow, view: ShuttleAlarmView) {
+    val c = AirShiftTokens.colors
+    val day = ShuttleAlarmPlan.fromRow(row) ?: return
+    if (day.isEmpty) {
+        StatusLamp(text = ShuttleAlarmText.baseLine(day).orEmpty(), kind = LampKind.Estimate)
+        return
+    }
+    val status = ShuttleAlarmText.statusWord(day, view.state.record(day.date), view.now.toLocalDate())
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            ShuttleAlarmText.baseLine(day).orEmpty(),
+            modifier = Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = NumericSmall.fontFamily,
+                fontFeatureSettings = "tnum",
+            ),
+            color = c.hint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (status != null) {
+            Spacer(Modifier.width(8.dp))
+            StatusLamp(text = status, kind = if (status == "已设") LampKind.Neutral else LampKind.Estimate)
+        }
+    }
+}
+
 /** 一天一条：日期列 | 班次灯 + 说明 + 到位/到场 | 班车与下班。休息日无底、无边。 */
 @Composable
-private fun ShiftStrip(row: ShiftCalendarRow) {
+private fun ShiftStrip(row: ShiftCalendarRow, shuttle: ShuttleAlarmView?) {
     val c = AirShiftTokens.colors
     val rest = row.day.kind.isRest || !row.day.attends
     val shape = RoundedCornerShape(AirShiftRadius.Strip)
@@ -298,6 +401,7 @@ private fun ShiftStrip(row: ShiftCalendarRow) {
                 ShiftLine(row = row, dimmed = rest)
                 if (row.day.attends) {
                     if (slotKnown) BusDetail(row.bus) else SlotUnknownHint()
+                    if (slotKnown && shuttle != null) ShuttleAlarmLine(row, shuttle)
                 }
             }
             if (row.day.attends && slotKnown) {

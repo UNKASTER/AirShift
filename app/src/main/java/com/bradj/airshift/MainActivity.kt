@@ -1,8 +1,11 @@
 package com.bradj.airshift
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
+import android.provider.AlarmClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -20,6 +23,7 @@ import com.bradj.airshift.model.allDutiesComplete
 import com.bradj.airshift.parser.ExcelRosterReader
 import com.bradj.airshift.parser.OcrRosterReader
 import com.bradj.airshift.reminder.ReminderReceiver
+import com.bradj.airshift.reminder.ShuttleAlarmNotifications
 import com.bradj.airshift.specialservice.NotificationAccess
 import com.bradj.airshift.ui.AirShiftApp
 import com.bradj.airshift.ui.DutyNavigationViewModel
@@ -67,6 +71,7 @@ class MainActivity : ComponentActivity() {
         )
         requestHighRefreshRate()
         ReminderReceiver.createChannel(this)
+        ShuttleAlarmNotifications.createChannels(this)
         LegacyMigrations.runOnce(this)
         val store = RosterStore(this)
         val roster = store.loadSnapshot()
@@ -87,6 +92,8 @@ class MainActivity : ComponentActivity() {
                     pendingSharedExcelImport = pendingSharedExcelImports.firstOrNull(),
                     sharedExcelImportQueue = sharedExcelImportQueue,
                     dutyNavigation = dutyNavigation,
+                    openAppDetailsSettings = ::openAppDetailsSettings,
+                    openClockAlarms = ::openClockAlarms,
                 )
             }
         }
@@ -114,6 +121,24 @@ class MainActivity : ComponentActivity() {
                 data = "package:$packageName".toUri()
             },
         )
+    }
+
+    /** 班车闹铃要后台写时钟：vivo 的「后台弹出界面」在应用信息的权限页里，系统没有直达它的意图。 */
+    private fun openAppDetailsSettings() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = "package:$packageName".toUri()
+            },
+        )
+    }
+
+    /** 直接打开系统时钟的闹钟列表，让用户关掉旧的班车闹铃。 */
+    private fun openClockAlarms() {
+        try {
+            startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "没有找到系统时钟", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private companion object {

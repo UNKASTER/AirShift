@@ -43,7 +43,10 @@ import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftSchedule
 import com.bradj.airshift.model.shift.ShiftTeam
+import com.bradj.airshift.model.shift.ShuttleAlarmDay
 import com.bradj.airshift.parser.RosterParseResult
+import com.bradj.airshift.reminder.ShuttleAlarmInputs
+import com.bradj.airshift.reminder.ShuttleAlarmSource
 import com.bradj.airshift.specialservice.FlightCancellationRecord
 import com.bradj.airshift.specialservice.FlightServiceRecord
 import com.bradj.airshift.specialservice.GateChangeRecord
@@ -78,6 +81,8 @@ internal fun AirShiftApp(
     pendingSharedExcelImport: PendingSharedExcelImport?,
     sharedExcelImportQueue: SharedExcelImportQueueViewModel,
     dutyNavigation: DutyNavigationViewModel,
+    openAppDetailsSettings: () -> Unit = {},
+    openClockAlarms: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val userName = state.userName
@@ -105,6 +110,8 @@ internal fun AirShiftApp(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> viewModel.onForegrounded()
+                // 班车闹铃由透明的蹦床 Activity 写入，它只让本页 pause / resume，不会走 ON_START。
+                Lifecycle.Event.ON_RESUME -> viewModel.refreshShuttleAlarmState()
                 Lifecycle.Event.ON_STOP -> viewModel.onBackgrounded()
                 else -> Unit
             }
@@ -182,6 +189,13 @@ internal fun AirShiftApp(
     val nextShiftText = remember(shiftSchedule, shiftGroupId, state.assignments, margin, today, learnedTimes) {
         NextShift.text(shiftSchedule, shiftGroupId, state.assignments, margin, today, learnedTimes)
     }
+    // 班车闹铃：今天起 8 天的序列，与后台同步器同一套输入；设置页看它，日历行按各自的行算。
+    val shuttleWindow = remember(shiftSchedule, shiftGroupId, state.assignments, margin, today, learnedTimes) {
+        ShuttleAlarmSource.window(
+            ShuttleAlarmInputs(shiftSchedule, shiftGroupId, state.assignments, margin, learnedTimes),
+            today,
+        )
+    }
 
     // 只在 MUC 状态或分钟 tick 变化时重新过滤：每次重组都产生新 List 会让全部任务卡跟着重组。
     val visibleSpecialServiceRecords = remember(specialServiceState, state.now) { specialServiceState.activeRecords() }
@@ -252,6 +266,9 @@ internal fun AirShiftApp(
                             dutyNavigation = dutyNavigation,
                             openExactAlarmSettings = openExactAlarmSettings,
                             openNotificationAccessSettings = openNotificationAccessSettings,
+                            shuttleWindow = shuttleWindow,
+                            openAppDetailsSettings = openAppDetailsSettings,
+                            openClockAlarms = openClockAlarms,
                             onImportImage = {
                                 photoPicker.launch(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -286,6 +303,9 @@ private fun SectionContent(
     dutyNavigation: DutyNavigationViewModel,
     openExactAlarmSettings: () -> Unit,
     openNotificationAccessSettings: () -> Unit,
+    shuttleWindow: List<ShuttleAlarmDay?>,
+    openAppDetailsSettings: () -> Unit,
+    openClockAlarms: () -> Unit,
     onImportImage: () -> Unit,
     onImportExcel: () -> Unit,
 ) {
@@ -332,6 +352,10 @@ private fun SectionContent(
                 now = state.now,
                 onGoToSettings = { dutyNavigation.selectSection(DutySection.SETTINGS) },
                 learned = learnedTimes,
+                shuttleAlarmEnabled = state.shuttleAlarmEnabled,
+                shuttleAlarmState = state.shuttleAlarmState,
+                onOpenClockAlarms = openClockAlarms,
+                onResyncShuttleAlarms = viewModel::resyncShuttleAlarmsNow,
                 modifier = Modifier.padding(padding),
             )
             DutySection.SETTINGS -> SettingsScreen(
@@ -363,6 +387,14 @@ private fun SectionContent(
                 onSave = viewModel::saveSettings,
                 onClearApiKey = viewModel::clearApiKey,
                 onTestConnection = viewModel::testApiKey,
+                shuttleAlarmEnabled = state.shuttleAlarmEnabled,
+                shuttleAlarmState = state.shuttleAlarmState,
+                shuttleWindow = shuttleWindow,
+                shuttleClockAvailable = state.shuttleClockAvailable,
+                onShuttleAlarmsEnabled = viewModel::setShuttleAlarmsEnabled,
+                onResyncShuttleAlarms = viewModel::resyncShuttleAlarmsNow,
+                onScheduleShuttleTestWake = viewModel::scheduleShuttleTestWake,
+                onOpenAppDetailsSettings = openAppDetailsSettings,
                 modifier = Modifier.padding(padding),
             )
         }

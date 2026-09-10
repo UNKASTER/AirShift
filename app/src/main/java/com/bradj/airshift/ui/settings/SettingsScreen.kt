@@ -58,10 +58,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.bradj.airshift.BuildConfig
 import com.bradj.airshift.model.shift.LearnedTimes
 import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.model.shift.ShuttleAlarmDay
+import com.bradj.airshift.model.shift.ShuttleAlarmPlan
+import com.bradj.airshift.reminder.ShuttleAlarmState
+import com.bradj.airshift.reminder.ShuttleAlarmText
 import com.bradj.airshift.ui.components.BoardHeader
 import com.bradj.airshift.ui.components.NoticeStrip
 import com.bradj.airshift.ui.components.PinnedActionBar
@@ -103,6 +108,14 @@ fun SettingsScreen(
     onSave: (String, String) -> Unit,
     onClearApiKey: () -> Unit,
     onTestConnection: (String, (Result<Unit>) -> Unit) -> Unit,
+    shuttleAlarmEnabled: Boolean,
+    shuttleAlarmState: ShuttleAlarmState,
+    shuttleWindow: List<ShuttleAlarmDay?>,
+    shuttleClockAvailable: Boolean,
+    onShuttleAlarmsEnabled: (Boolean) -> Unit,
+    onResyncShuttleAlarms: () -> Unit,
+    onScheduleShuttleTestWake: () -> Unit,
+    onOpenAppDetailsSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var name by rememberSaveable { mutableStateOf(currentName) }
@@ -150,6 +163,19 @@ fun SettingsScreen(
                     onGroupSelected = onShiftGroupSelected,
                     onMarginSelected = onShiftReportMarginSelected,
                     onClearHistory = onClearShiftTimeHistory,
+                )
+            }
+            item(key = "shuttle_alarm") {
+                ShuttleAlarmSection(
+                    enabled = shuttleAlarmEnabled,
+                    state = shuttleAlarmState,
+                    window = shuttleWindow,
+                    clockAvailable = shuttleClockAvailable,
+                    now = now,
+                    onEnabledChange = onShuttleAlarmsEnabled,
+                    onResync = onResyncShuttleAlarms,
+                    onScheduleTestWake = onScheduleShuttleTestWake,
+                    onOpenAppDetails = onOpenAppDetailsSettings,
                 )
             }
             item(key = "profile") {
@@ -407,6 +433,80 @@ private fun ShiftCalendarSection(
             }
         }
     }
+}
+
+/**
+ * 班车闹铃分区：开关、规则一句话、下一组序列与状态、上次写入结果、后台权限入口。
+ * 开关复用 [SegmentedLamps]（0 = 关，1 = 开），不另造 Switch。
+ */
+@Composable
+private fun ShuttleAlarmSection(
+    enabled: Boolean,
+    state: ShuttleAlarmState,
+    window: List<ShuttleAlarmDay?>,
+    clockAvailable: Boolean,
+    now: LocalDateTime,
+    onEnabledChange: (Boolean) -> Unit,
+    onResync: () -> Unit,
+    onScheduleTestWake: () -> Unit,
+    onOpenAppDetails: () -> Unit,
+) {
+    val c = AirShiftTokens.colors
+    SectionStrip(
+        title = "班车闹铃",
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusDot(
+                    color = if (enabled) c.ok else c.ruleStrong,
+                    modifier = Modifier.width(8.dp).height(8.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (enabled) "已开启" else "已关闭",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (enabled) c.ok else c.hint,
+                )
+            }
+        },
+    ) {
+        SegmentedLamps(
+            options = listOf(0, 1),
+            selected = if (enabled) 1 else 0,
+            label = { option -> if (option == 1) "开" else "关" },
+            onSelect = { option -> if (clockAvailable) onEnabledChange(option == 1) },
+        )
+        HintLine(
+            "按排班日历的推荐班车在系统时钟里设仅响一次的闹铃：7 点前发车的从发车前 30 分钟起每 5 分钟一响，" +
+                "7 点起的从发车前 1 小时起每 10 分钟一响，最早 05:00、发车前一格即止；响过即停，第二天自动重设。" +
+                "时钟里名称固定为「${ShuttleAlarmPlan.LABEL}」，改名会重复建条目。",
+        )
+        if (!clockAvailable) HintLine("系统时钟不接标准的设闹钟请求，本功能无法工作。")
+        SettingRow(label = "下一组", value = ShuttleAlarmText.statusLine(window, state, now))
+        SettingRow(label = "上次写入", value = ShuttleAlarmText.attemptLine(state.lastAttempt))
+        HintLine("vivo 需在「应用信息 → 权限 → 后台弹出界面」允许，才能在后台自动写入；否则每天由通知提醒你点一下。")
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            SettingsTextButton(text = "应用信息", onClick = onOpenAppDetails)
+            SettingsTextButton(text = "立即重设", onClick = onResync, enabled = enabled && clockAvailable)
+            if (BuildConfig.DEBUG) {
+                SettingsTextButton(text = "60 秒后后台重设", onClick = onScheduleTestWake, enabled = enabled)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsTextButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    val interaction = remember { MutableInteractionSource() }
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interaction,
+        modifier = Modifier.indication(interaction, LocalIndication.current),
+        colors = ButtonDefaults.textButtonColors(contentColor = AirShiftTokens.colors.departureText),
+    ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
 /** 分段选择器：一条边框里的等宽格；选中格的填充是一个物体，在格间按 fast spatial 弹簧横移，文字色随之过渡。 */
