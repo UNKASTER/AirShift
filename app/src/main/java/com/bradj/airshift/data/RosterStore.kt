@@ -19,6 +19,7 @@ import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.reminder.ShuttleAlarmState
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Clock
@@ -143,6 +144,27 @@ internal class RosterStore(
                     remove(KEY_SHIFT_TIME_HISTORY)
                 } else {
                     putString(KEY_SHIFT_TIME_HISTORY, ShiftTimeHistoryCodec.encode(value))
+                }
+            }
+        }
+
+    override var shuttleAlarmEnabled: Boolean
+        get() = preferences.getBoolean(KEY_SHUTTLE_ALARM_ENABLED, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_SHUTTLE_ALARM_ENABLED, value) }
+        }
+
+    /** 班车闹铃的写入记录与旧闹铃；JSON 损坏时按空状态处理（下次同步会重写），空态直接删键。 */
+    override var shuttleAlarmState: ShuttleAlarmState
+        get() = preferences.getString(KEY_SHUTTLE_ALARM_STATE, null)
+            ?.let(ShuttleAlarmCodec::decode)
+            ?: ShuttleAlarmState.EMPTY
+        set(value) {
+            preferences.edit {
+                if (value.isEmpty) {
+                    remove(KEY_SHUTTLE_ALARM_STATE)
+                } else {
+                    putString(KEY_SHUTTLE_ALARM_STATE, ShuttleAlarmCodec.encode(value))
                 }
             }
         }
@@ -435,6 +457,8 @@ internal class RosterStore(
         private const val KEY_SHIFT_MANUAL_TEAM = "shift_manual_team"
         private const val KEY_SHIFT_CALIBRATION = "shift_group_calibration"
         private const val KEY_SHIFT_TIME_HISTORY = "shift_time_history"
+        private const val KEY_SHUTTLE_ALARM_ENABLED = "shuttle_alarm_enabled"
+        private const val KEY_SHUTTLE_ALARM_STATE = "shuttle_alarm_state"
         private const val MAX_SHIFT_REPORT_MARGIN = 120
     }
 }

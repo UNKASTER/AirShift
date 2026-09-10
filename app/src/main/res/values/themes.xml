@@ -5,4 +5,12 @@
         <item name="android:windowBackground">@color/ground_light</item>
         <item name="android:colorAccent">@color/cea_red</item>
     </style>
+
+    <!-- 班车闹铃蹦床：透明、无动画，只借一个可见窗口向时钟写闹钟。 -->
+    <style name="Theme.AirShift.Invisible">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

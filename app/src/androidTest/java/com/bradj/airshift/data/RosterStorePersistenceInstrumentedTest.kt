@@ -18,7 +18,14 @@ import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.model.shift.ShiftTier
 import com.bradj.airshift.model.shift.ShiftTimeHistory
 import com.bradj.airshift.model.shift.ShiftTimeObservation
+import com.bradj.airshift.reminder.ShuttleAlarm
+import com.bradj.airshift.reminder.ShuttleAlarmAttempt
+import com.bradj.airshift.reminder.ShuttleAlarmOutcome
+import com.bradj.airshift.reminder.ShuttleAlarmReason
+import com.bradj.airshift.reminder.ShuttleAlarmRecord
+import com.bradj.airshift.reminder.ShuttleAlarmState
 import java.time.LocalDate
+import java.time.LocalTime
 import org.json.JSONArray
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -221,6 +228,50 @@ class RosterStorePersistenceInstrumentedTest {
 
         store.manualShiftGroup = null
         assertEquals(null, RosterStore(isolatedContext).manualShiftGroup)
+    }
+
+    @Test
+    fun shuttleAlarmSettingsAndStateSurviveARoundTripAndClearTheirKeys() {
+        val store = RosterStore(isolatedContext)
+        assertFalse(store.shuttleAlarmEnabled)
+        assertEquals(ShuttleAlarmState.EMPTY, store.shuttleAlarmState)
+
+        val date = LocalDate.of(2026, 9, 10)
+        val state = ShuttleAlarmState(
+            records = listOf(
+                ShuttleAlarmRecord(
+                    date = date,
+                    departure = LocalTime.of(5, 55),
+                    times = listOf(LocalTime.of(5, 25), LocalTime.of(5, 30)),
+                    setAt = LocalDateTime.of(2026, 9, 9, 6, 35),
+                    outcome = ShuttleAlarmOutcome.CONFIRMED,
+                    background = true,
+                    attempts = 1,
+                ),
+            ),
+            stale = listOf(ShuttleAlarm(date, LocalTime.of(5, 0))),
+            pendingVerifyAt = LocalDateTime.of(2026, 9, 9, 11, 52),
+            verifyHops = 1,
+            lastAttempt = ShuttleAlarmAttempt(
+                reason = ShuttleAlarmReason.WAKE,
+                at = LocalDateTime.of(2026, 9, 9, 6, 35),
+                outcome = ShuttleAlarmOutcome.CONFIRMED,
+                background = true,
+                summary = "明天 05:25–05:50 共 6 响",
+            ),
+        )
+        store.shuttleAlarmEnabled = true
+        store.shuttleAlarmState = state
+
+        assertTrue(RosterStore(isolatedContext).shuttleAlarmEnabled)
+        assertEquals(state, RosterStore(isolatedContext).shuttleAlarmState)
+        assertTrue(preferences.contains("shuttle_alarm_state"))
+
+        store.shuttleAlarmState = ShuttleAlarmState.EMPTY
+        assertFalse(preferences.contains("shuttle_alarm_state"))
+
+        preferences.edit().putString("shuttle_alarm_state", "{broken").commit()
+        assertEquals(ShuttleAlarmState.EMPTY, RosterStore(isolatedContext).shuttleAlarmState)
     }
 
     @Test

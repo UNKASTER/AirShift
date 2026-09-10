@@ -3,6 +3,10 @@
     <string name="app_name">航勤智排</string>
     <string name="notification_channel_name">航班保障提醒</string>
     <string name="notification_channel_description">根据排班与实时航班动态发送保障提醒</string>
+    <string name="shuttle_alarm_channel_name">班车闹铃</string>
+    <string name="shuttle_alarm_channel_description">班车闹铃需要你点一下设置，或提醒关掉旧闹铃</string>
+    <string name="shuttle_alarm_status_channel_name">班车闹铃状态</string>
+    <string name="shuttle_alarm_status_channel_description">后台设置班车闹铃后的核对结果</string>
     <string name="muc_notification_listener_name">MUC 特服消息识别</string>
     <string name="duty_widget_name">当前执勤</string>
     <string name="duty_widget_description">显示当前执勤的航班、机位、倒计时与完成按钮</string>

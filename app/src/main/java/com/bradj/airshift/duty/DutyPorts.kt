@@ -19,6 +19,10 @@ import com.bradj.airshift.model.RosterAssignment
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ReminderScheduler
 import com.bradj.airshift.reminder.ScheduleSummary
+import com.bradj.airshift.reminder.ShuttleAlarmClock
+import com.bradj.airshift.reminder.ShuttleAlarmReason
+import com.bradj.airshift.reminder.ShuttleAlarmSync
+import com.bradj.airshift.reminder.ShuttleAlarmWake
 import com.bradj.airshift.specialservice.NotificationAccess
 import com.bradj.airshift.specialservice.SpecialServiceRepository
 import com.bradj.airshift.specialservice.SpecialServiceState
@@ -26,6 +30,7 @@ import com.bradj.airshift.widget.DutyWidgetUpdater
 import kotlinx.coroutines.flow.StateFlow
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /** 一份可读取的排班来源（图片或 Excel）；由 UI 从 Uri 构造，编排层只负责读取与落库。 */
 internal fun interface RosterSource {
@@ -36,6 +41,22 @@ internal interface ReminderPort {
     fun canScheduleExactAlarms(): Boolean
     fun scheduleAll(assignments: List<RosterAssignment>): ScheduleSummary
     fun cancelAll(assignments: List<RosterAssignment>)
+}
+
+/** 班车闹铃：同步（前台 / 后台语义由 [sync] 的 visible 决定）、时钟是否可用、调试用的定时唤醒。 */
+internal interface ShuttleAlarmPort {
+    fun sync(visible: Boolean, reason: ShuttleAlarmReason, force: Boolean = false, onFinished: () -> Unit = {})
+    fun isClockAvailable(): Boolean
+    fun scheduleWakeIn(delaySeconds: Long)
+}
+
+/** 没接系统时钟时的占位（仪器测试的端口装配）：什么也不做、立即回调。 */
+internal object NoShuttleAlarms : ShuttleAlarmPort {
+    override fun sync(visible: Boolean, reason: ShuttleAlarmReason, force: Boolean, onFinished: () -> Unit) =
+        onFinished()
+
+    override fun isClockAvailable(): Boolean = false
+    override fun scheduleWakeIn(delaySeconds: Long) = Unit
 }
 
 internal interface SpecialServicePort {
@@ -71,6 +92,7 @@ internal data class DutyPorts(
     val hasPermission: (String) -> Boolean,
     val refreshClock: () -> Long,
     val clock: Clock,
+    val shuttleAlarms: ShuttleAlarmPort = NoShuttleAlarms,
 )
 
 internal object AppDutyPorts {
@@ -110,6 +132,27 @@ internal object AppDutyPorts {
             },
             refreshClock = SystemClock::elapsedRealtime,
             clock = clock,
+            shuttleAlarms = object : ShuttleAlarmPort {
+                override fun sync(
+                    visible: Boolean,
+                    reason: ShuttleAlarmReason,
+                    force: Boolean,
+                    onFinished: () -> Unit,
+                ) = ShuttleAlarmSync.sync(
+                    appContext,
+                    if (visible) ShuttleAlarmSync.Launch.VISIBLE else ShuttleAlarmSync.Launch.BACKGROUND,
+                    reason,
+                    force,
+                    onFinished,
+                )
+
+                override fun isClockAvailable(): Boolean = ShuttleAlarmClock(appContext).isAvailable()
+                override fun scheduleWakeIn(delaySeconds: Long) = ShuttleAlarmWake.schedule(
+                    appContext,
+                    LocalDateTime.now(clock).plusSeconds(delaySeconds),
+                    force = true,
+                )
+            },
         )
     }
 }

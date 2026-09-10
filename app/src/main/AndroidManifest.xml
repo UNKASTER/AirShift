@@ -7,6 +7,18 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 系统时钟的标准入口 Activity 要求调用方持有它（普通权限，安装即授予）。 -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!-- Android 11 起要声明才查得到哪个应用接收"设闹钟 / 看闹钟"。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -42,8 +54,22 @@
             </intent-filter>
         </service>
 
+        <!--
+            班车闹铃真正写时钟的地方：透明无界面，不进最近任务，用独立任务不打扰主界面。
+            不能加 noHistory——它启动时钟的入口 Activity 时会被当成"离开"而提前销毁，序列就写不完。
+        -->
+        <activity
+            android:name=".reminder.ShuttleAlarmSetActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.AirShift.Invisible" />
+
         <receiver
             android:name=".reminder.ReminderReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".reminder.ShuttleAlarmReceiver"
             android:exported="false" />
         <receiver
             android:name=".reminder.BootReceiver"
@@ -51,6 +77,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

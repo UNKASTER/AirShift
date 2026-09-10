@@ -22,6 +22,7 @@ import com.bradj.airshift.model.shift.ShiftTimeHistory
 import com.bradj.airshift.model.shift.ShiftTimeObserver
 import com.bradj.airshift.parser.ExcelRosterParser
 import com.bradj.airshift.parser.RosterParseResult
+import com.bradj.airshift.reminder.ShuttleAlarmReason
 import com.bradj.airshift.specialservice.SpecialServiceState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -78,6 +79,9 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
             manualShiftGroup = store.manualShiftGroup,
             shiftReportMarginMinutes = store.shiftReportMarginMinutes,
             shiftTimeHistory = store.shiftTimeHistory,
+            shuttleAlarmEnabled = store.shuttleAlarmEnabled,
+            shuttleAlarmState = store.shuttleAlarmState,
+            shuttleClockAvailable = ports.shuttleAlarms.isClockAvailable(),
         )
     }
 
@@ -90,9 +94,10 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
     fun saveUserName(name: String) {
         store.userName = name
         update { copy(userName = name.trim()) }
+        syncShuttleAlarms(ShuttleAlarmReason.SETTINGS)
     }
 
-    /** 冷启动、从后台回到前台：重读存储、重排提醒、重新匹配 MUC。 */
+    /** 冷启动、从后台回到前台：重读存储、重排提醒、重新匹配 MUC、补写班车闹铃。 */
     fun onForegrounded() {
         val restored = store.loadSnapshot()
         ports.specialServices.onRosterChanged(restored.assignments)
@@ -107,9 +112,50 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
                 notificationAccessGranted = ports.isNotificationAccessGranted(),
                 exactAlarmWarning = restored.assignments.isNotEmpty() && !exactAllowed,
                 isForeground = true,
+                shuttleAlarmEnabled = store.shuttleAlarmEnabled,
+                shuttleAlarmState = store.shuttleAlarmState,
             )
         }
+        syncShuttleAlarms(ShuttleAlarmReason.FOREGROUND)
         drainPendingRefresh()
+    }
+
+    // ---------- 班车闹铃 ----------
+
+    /**
+     * 让 [ShuttleAlarmPort] 按当前日历重算并写时钟；前台 / 后台语义取当前是否可见——导入协程可能在 ON_STOP 之后才结束，
+     * 那时按后台处理（被拦就发通知），与唤醒一致。完成后把落盘的记录读回状态。
+     */
+    private fun syncShuttleAlarms(reason: ShuttleAlarmReason, force: Boolean = false, onDone: () -> Unit = {}) {
+        ports.shuttleAlarms.sync(uiState.value.isForeground, reason, force) {
+            update { copy(shuttleAlarmState = store.shuttleAlarmState) }
+            onDone()
+        }
+    }
+
+    /** 关掉时，今明两天已写进时钟、还没到点的时刻都会转成"旧闹铃"提示——时钟里它们还会响。 */
+    fun setShuttleAlarmsEnabled(enabled: Boolean) {
+        store.shuttleAlarmEnabled = enabled
+        update { copy(shuttleAlarmEnabled = enabled) }
+        syncShuttleAlarms(ShuttleAlarmReason.TOGGLE)
+    }
+
+    /**
+     * 设置页「立即重设」：无视记录，把今明两天可写的全部重写一遍并核对。
+     * 真正的写入在蹦床 Activity 里完成（见 `ShuttleAlarmSync`），结果由它的 Toast 给出，
+     * 回到本界面时 [refreshShuttleAlarmState] 会把记录读回来。
+     */
+    fun resyncShuttleAlarmsNow() = syncShuttleAlarms(ShuttleAlarmReason.MANUAL, force = true)
+
+    /** 从蹦床或后台写入回到前台：只重读班车闹铃的两项存储，不动排班。 */
+    fun refreshShuttleAlarmState() {
+        update { copy(shuttleAlarmEnabled = store.shuttleAlarmEnabled, shuttleAlarmState = store.shuttleAlarmState) }
+    }
+
+    /** 调试包：把后台唤醒定到 60 秒后，用来验证后台写入路径。 */
+    fun scheduleShuttleTestWake() {
+        ports.shuttleAlarms.scheduleWakeIn(SHUTTLE_TEST_WAKE_SECONDS)
+        update { copy(statusMessage = "$SHUTTLE_TEST_WAKE_SECONDS 秒后在后台重设班车闹铃，请先离开应用") }
     }
 
     fun onBackgrounded() {
@@ -184,6 +230,8 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
         val importGeneration = store.replaceAssignments(result.assignments)
         pendingRefresh = null
         syncSavedRoster(importGeneration, previousAssignments)
+        // 只在导入后重算班车闹铃；实时刷新也走 syncSavedRoster，但不该让今天的序列随预计时间来回变。
+        syncShuttleAlarms(ShuttleAlarmReason.IMPORT)
         // The import is durable now. Retrying this event after recreation would reset duty progress.
         attempt?.onFinished?.invoke()
         val apiKey = store.variFlightApiKey
@@ -239,6 +287,7 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
     fun clearShiftTimeHistory() {
         store.shiftTimeHistory = ShiftTimeHistory.EMPTY
         update { copy(shiftTimeHistory = ShiftTimeHistory.EMPTY, statusMessage = "实测记录已清除") }
+        syncShuttleAlarms(ShuttleAlarmReason.SETTINGS)
     }
 
     /** 提前导入的排班要到排班日首个任务前 3 小时才开始自动跟踪（[RosterTracking]），把起点告诉用户。 */
@@ -555,19 +604,23 @@ internal class DutyViewModel(private val ports: DutyPorts) : ViewModel() {
     fun selectShiftGroup(group: ManualShiftGroup?) {
         store.manualShiftGroup = group
         update { copy(manualShiftGroup = group) }
+        syncShuttleAlarms(ShuttleAlarmReason.SETTINGS)
     }
 
     fun selectShiftTeam(team: ShiftTeam?) {
         store.manualShiftTeam = team
         update { copy(manualShiftTeam = team) }
+        syncShuttleAlarms(ShuttleAlarmReason.SETTINGS)
     }
 
     fun selectReportMargin(minutes: Int) {
         store.shiftReportMarginMinutes = minutes
         update { copy(shiftReportMarginMinutes = store.shiftReportMarginMinutes) }
+        syncShuttleAlarms(ShuttleAlarmReason.SETTINGS)
     }
 
     companion object {
+        private const val SHUTTLE_TEST_WAKE_SECONDS = 60L
         private val TRACKING_START_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("M/d HH:mm")
 
         fun factory(ports: DutyPorts): ViewModelProvider.Factory = viewModelFactory {

@@ -8,6 +8,7 @@ import com.bradj.airshift.model.shift.ShiftBusPlan
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.reminder.ShuttleAlarmState
 import java.time.LocalDateTime
 
 /** 四页界面共用的编排状态；页面只读取，不直接修改。 */
@@ -33,6 +34,10 @@ internal data class DutyUiState(
     val shiftReportMarginMinutes: Int = ShiftBusPlan.DEFAULT_REPORT_MARGIN_MINUTES,
     /** 本机积累的各槽位实测记录；界面按当前大组聚合后供日历与设置页使用。 */
     val shiftTimeHistory: ShiftTimeHistory = ShiftTimeHistory.EMPTY,
+    /** 班车闹铃：开关、写入记录 / 旧闹铃、系统时钟是否接标准设闹钟意图。 */
+    val shuttleAlarmEnabled: Boolean = false,
+    val shuttleAlarmState: ShuttleAlarmState = ShuttleAlarmState.EMPTY,
+    val shuttleClockAvailable: Boolean = true,
 ) {
     /** 当前未完成执勤的下标；全部完成时等于 assignments.size。 */
     val activeDutyIndex: Int

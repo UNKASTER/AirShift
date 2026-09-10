@@ -8,6 +8,7 @@ import com.bradj.airshift.model.shift.ManualShiftGroup
 import com.bradj.airshift.model.shift.ShiftCalibration
 import com.bradj.airshift.model.shift.ShiftTeam
 import com.bradj.airshift.model.shift.ShiftTimeHistory
+import com.bradj.airshift.reminder.ShuttleAlarmState
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -30,6 +31,10 @@ internal interface RosterRepository {
 
     /** 本机积累的各槽位实测首末任务；没有记录时为 [ShiftTimeHistory.EMPTY]。 */
     var shiftTimeHistory: ShiftTimeHistory
+
+    /** 班车闹铃开关；写入记录与旧闹铃见 [shuttleAlarmState]。 */
+    var shuttleAlarmEnabled: Boolean
+    var shuttleAlarmState: ShuttleAlarmState
 
     val currentDutyIndex: Int
     val rosterGeneration: Long

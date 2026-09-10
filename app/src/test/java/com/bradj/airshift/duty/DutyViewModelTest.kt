@@ -31,6 +31,11 @@ import com.bradj.airshift.model.shift.ShiftTier
 import com.bradj.airshift.model.shift.ShiftTimeHistory
 import com.bradj.airshift.parser.RosterParseResult
 import com.bradj.airshift.reminder.ScheduleSummary
+import com.bradj.airshift.reminder.ShuttleAlarm
+import com.bradj.airshift.reminder.ShuttleAlarmAttempt
+import com.bradj.airshift.reminder.ShuttleAlarmOutcome
+import com.bradj.airshift.reminder.ShuttleAlarmReason
+import com.bradj.airshift.reminder.ShuttleAlarmState
 import com.bradj.airshift.specialservice.SpecialServiceState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +57,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
@@ -544,10 +550,85 @@ class DutyViewModelTest {
 
     private fun runCurrent() = dispatcher.scheduler.runCurrent()
 
+    // ---------- 班车闹铃 ----------
+
+    /** 前台每次同步、导入、改日历相关设置都要让端口重算；开关本身落盘并同步。 */
+    @Test
+    fun shuttleAlarmsAreResyncedOnForegroundImportAndCalendarSettings() {
+        assertEquals(listOf(true to false), shuttleAlarms.calls.map { it.visible to it.force })
+        assertEquals(ShuttleAlarmReason.FOREGROUND, shuttleAlarms.calls.single().reason)
+
+        viewModel.setShuttleAlarmsEnabled(true)
+        assertTrue(store.shuttleAlarmEnabled)
+        assertTrue(viewModel.uiState.value.shuttleAlarmEnabled)
+        assertEquals(ShuttleAlarmReason.TOGGLE, shuttleAlarms.calls.last().reason)
+
+        store.variFlightApiKey = null
+        viewModel.importExcel(RosterSource { RosterParseResult(duties(2), baseTime.toLocalDate(), emptyList()) })
+        runCurrent()
+        assertEquals(ShuttleAlarmReason.IMPORT, shuttleAlarms.calls.last().reason)
+
+        viewModel.selectReportMargin(30)
+        viewModel.selectShiftTeam(ShiftTeam.SECOND)
+        viewModel.selectShiftGroup(ManualShiftGroup(ShiftTeam.SECOND, 1))
+        viewModel.clearShiftTimeHistory()
+        viewModel.saveUserName("测试乙")
+        assertEquals(5, shuttleAlarms.calls.count { it.reason == ShuttleAlarmReason.SETTINGS })
+        assertTrue(shuttleAlarms.calls.all { it.visible })
+    }
+
+    /** 同步结束后把端口落盘的记录读回状态；后台（ON_STOP 之后）触发的同步按不可见处理。 */
+    @Test
+    fun shuttleAlarmStateIsReadBackAfterEachSyncAndBackgroundSyncsAreNotVisible() {
+        val written = ShuttleAlarmState(
+            stale = listOf(ShuttleAlarm(baseTime.toLocalDate().plusDays(1), LocalTime.of(5, 0))),
+        )
+        shuttleAlarms.onSync = { store.shuttleAlarmState = written }
+
+        viewModel.setShuttleAlarmsEnabled(true)
+        assertEquals(written, viewModel.uiState.value.shuttleAlarmState)
+
+        viewModel.onBackgrounded()
+        viewModel.selectReportMargin(0)
+        assertFalse(shuttleAlarms.calls.last().visible)
+    }
+
+    /**
+     * 「立即重设」只负责强制重算并调度；真正的写入在蹦床 Activity 里，
+     * 回到界面时 [DutyViewModel.refreshShuttleAlarmState] 把它落盘的记录读回来。
+     */
+    @Test
+    fun manualResyncForcesAndPicksUpWhatTheTrampolineWrote() {
+        viewModel.resyncShuttleAlarmsNow()
+
+        assertTrue(shuttleAlarms.calls.last().force)
+        assertEquals(ShuttleAlarmReason.MANUAL, shuttleAlarms.calls.last().reason)
+
+        val written = ShuttleAlarmState(
+            lastAttempt = ShuttleAlarmAttempt(
+                reason = ShuttleAlarmReason.MANUAL,
+                at = baseTime,
+                outcome = ShuttleAlarmOutcome.CONFIRMED,
+                background = false,
+                summary = "明天 05:25–05:50 共 6 响",
+            ),
+        )
+        store.shuttleAlarmState = written
+        store.shuttleAlarmEnabled = true
+
+        viewModel.refreshShuttleAlarmState()
+
+        assertEquals(written, viewModel.uiState.value.shuttleAlarmState)
+        assertTrue(viewModel.uiState.value.shuttleAlarmEnabled)
+    }
+
+    private val shuttleAlarms = FakeShuttleAlarms()
+
     private fun ports() = DutyPorts(
         store = store,
         specialServices = FakeSpecialServices(),
         reminders = FakeReminders(),
+        shuttleAlarms = shuttleAlarms,
         flightRefresher = refresher,
         airportLocator = AirportLocatorPort { _, _ -> error("The fake response contains no airport candidates") },
         apiKeyTester = ApiKeyTester { _, _, _, _ -> error("Connection tests are not part of these scenarios") },
@@ -604,6 +685,8 @@ private class FakeRosterRepository(private val clock: Clock) : RosterRepository 
     override var manualShiftGroup: ManualShiftGroup? = null
     override var shiftCalibration: ShiftCalibration? = null
     override var shiftTimeHistory: ShiftTimeHistory = ShiftTimeHistory.EMPTY
+    override var shuttleAlarmEnabled: Boolean = false
+    override var shuttleAlarmState: ShuttleAlarmState = ShuttleAlarmState.EMPTY
 
     override val currentDutyIndex: Int get() = dutyIndex
     override val rosterGeneration: Long get() = generation
@@ -725,6 +808,27 @@ private class FakeReminders : ReminderPort {
     override fun scheduleAll(assignments: List<RosterAssignment>): ScheduleSummary =
         ScheduleSummary(scheduledCount = assignments.size, skippedPastCount = 0, exactAlarmsAllowed = true)
     override fun cancelAll(assignments: List<RosterAssignment>) = Unit
+}
+
+/** 记录每次同步的 (visible, reason, force)，同步本身由测试注入的 [onSync] 模拟，然后立刻回调。 */
+private class FakeShuttleAlarms : ShuttleAlarmPort {
+    class Call(val visible: Boolean, val reason: ShuttleAlarmReason, val force: Boolean)
+
+    val calls = mutableListOf<Call>()
+    var onSync: () -> Unit = {}
+    val wakes = mutableListOf<Long>()
+
+    override fun sync(visible: Boolean, reason: ShuttleAlarmReason, force: Boolean, onFinished: () -> Unit) {
+        calls += Call(visible, reason, force)
+        onSync()
+        onFinished()
+    }
+
+    override fun isClockAvailable(): Boolean = true
+
+    override fun scheduleWakeIn(delaySeconds: Long) {
+        wakes += delaySeconds
+    }
 }
 
 @Suppress("unused")
